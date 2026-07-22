@@ -1,0 +1,23 @@
+PHAN MEM QUAN LY CHI TIEU KPI
+============================
+
+1. Chay CAI_DAT.bat de cai thu vien Laravel.
+2. Mo phpMyAdmin -> Import -> chon DATABASE_KPI_MANAGER.sql.
+   Hoac chay IMPORT_DATABASE.bat.
+3. Chay CHAY_PHAN_MEM.bat.
+4. Mo http://127.0.0.1:8000
+
+TAI KHOAN ADMIN
+Email: admin@kpi.local
+Mat khau: 12345678
+
+LUU Y DATABASE
+- Database duoc import bang file SQL rieng.
+- Khong can chay php artisan migrate.
+- Neu MySQL co mat khau, sua DB_PASSWORD trong file .env.
+
+QUY DOI B1
+- 1 luot = 0 KPI
+- 2 luot = 1 KPI
+- 3 luot = 1 KPI
+- 4 luot = 2 KPI

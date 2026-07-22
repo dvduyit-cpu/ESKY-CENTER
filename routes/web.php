@@ -1,0 +1,168 @@
+<?php
+
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CourseController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ImportController;
+use App\Http\Controllers\KpiPlanController;
+use App\Http\Controllers\LogController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PersonnelController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RoleController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\LanguageLeadController;
+use App\Http\Controllers\LanguageStudentController;
+use App\Http\Controllers\LanguageProgramController;
+use App\Http\Controllers\LanguageClassController;
+use App\Http\Controllers\ThemeController;
+use App\Http\Controllers\LanguageDashboardController;
+use App\Http\Controllers\SystemDashboardController;
+use App\Http\Controllers\LanguageCollaboratorController;
+use App\Http\Controllers\LanguageCourseController;
+use App\Http\Controllers\LanguageDiscountController;
+use App\Http\Controllers\LanguageTuitionController;
+use App\Http\Controllers\LanguageTargetController;
+use App\Http\Controllers\LanguageTargetSubmissionController;
+use App\Http\Controllers\RealtimeController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
+});
+
+Route::middleware(['auth', 'active'])->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('/change-password', [ProfileController::class, 'password'])->name('profile.password');
+    Route::put('/change-password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+
+    Route::middleware('password.changed')->group(function () {
+        Route::get('/', [SystemDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/realtime/status', [RealtimeController::class, 'status'])->name('realtime.status');
+        Route::get('/system-dashboard-export', [SystemDashboardController::class, 'export'])->name('dashboard.export');
+        Route::get('/kpi-dashboard', [DashboardController::class, 'index'])->name('kpi-dashboard.index');
+        Route::get('/language-dashboard', [LanguageDashboardController::class, 'index'])->name('language-dashboard.index');
+        Route::get('/language-dashboard-export', [LanguageDashboardController::class, 'export'])->name('language-dashboard.export');
+        Route::get('/settings/theme', [ThemeController::class, 'edit'])->name('settings.theme.edit');
+        Route::put('/settings/theme', [ThemeController::class, 'update'])->name('settings.theme.update');
+
+        Route::get('/language-leads-export', [LanguageLeadController::class,'export'])->middleware('permission:language_leads,export')->name('language-leads.export');
+        Route::get('/language-consulting', [LanguageLeadController::class,'consulting'])->middleware('permission:language_consulting,view')->name('language-consulting.index');
+        Route::get('/language-target-submissions',[LanguageTargetSubmissionController::class,'index'])->middleware('permission:language_target_submissions,view')->name('language-target-submissions.index');
+        Route::post('/language-target-submissions',[LanguageTargetSubmissionController::class,'store'])->middleware('permission:language_target_submissions,create')->name('language-target-submissions.store');
+        Route::post('/language-leads/{languageLead}/convert', [LanguageLeadController::class,'convert'])->middleware('permission:language_leads,update')->name('language-leads.convert');
+        Route::resource('language-leads', LanguageLeadController::class)->middleware('permission:language_leads,view')->middlewareFor(['create','store'],'permission:language_leads,create')->middlewareFor(['edit','update'],'permission:language_leads,update')->middlewareFor('destroy','permission:language_leads,delete');
+        Route::resource('language-students', LanguageStudentController::class)->except('show')->middleware('permission:language_students,view')->middlewareFor(['create','store'],'permission:language_students,create')->middlewareFor(['edit','update'],'permission:language_students,update')->middlewareFor('destroy','permission:language_students,delete');
+        Route::resource('language-programs', LanguageProgramController::class)->except('show')->middleware('permission:language_programs,view')->middlewareFor(['create','store'],'permission:language_programs,create')->middlewareFor(['edit','update'],'permission:language_programs,update')->middlewareFor('destroy','permission:language_programs,delete');
+        Route::post('/language-programs/{languageProgram}/levels', [LanguageProgramController::class, 'storeLevel'])->middleware('permission:language_programs,create')->name('language-programs.levels.store');
+        Route::delete('/language-programs/{languageProgram}/levels/{level}', [LanguageProgramController::class, 'destroyLevel'])->middleware('permission:language_programs,delete')->name('language-programs.levels.destroy');
+        Route::resource('language-classes', LanguageClassController::class)->except('show')->middleware('permission:language_classes,view')->middlewareFor(['create','store'],'permission:language_classes,create')->middlewareFor(['edit','update'],'permission:language_classes,update')->middlewareFor('destroy','permission:language_classes,delete');
+        Route::post('/language-classes/{languageClass}/enrollments', [LanguageClassController::class, 'enroll'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.store');
+        Route::delete('/language-classes/{languageClass}/enrollments/{enrollment}', [LanguageClassController::class, 'unenroll'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.destroy');
+
+        Route::get('/language-collaborators-export',[LanguageCollaboratorController::class,'export'])->middleware('permission:language_collaborators,export')->name('language-collaborators.export');
+        Route::resource('language-collaborators',LanguageCollaboratorController::class)->except('show')->middleware('permission:language_collaborators,view')->middlewareFor(['create','store'],'permission:language_collaborators,create')->middlewareFor(['edit','update'],'permission:language_collaborators,update')->middlewareFor('destroy','permission:language_collaborators,delete');
+        Route::get('/language-center-courses-export',[LanguageCourseController::class,'export'])->middleware('permission:language_courses,export')->name('language-center-courses.export');
+        Route::resource('language-center-courses',LanguageCourseController::class)->except('show')->middleware('permission:language_courses,view')->middlewareFor(['create','store'],'permission:language_courses,create')->middlewareFor(['edit','update'],'permission:language_courses,update')->middlewareFor('destroy','permission:language_courses,delete');
+        Route::get('/language-discounts-export',[LanguageDiscountController::class,'export'])->middleware('permission:language_discounts,export')->name('language-discounts.export');
+        Route::resource('language-discounts',LanguageDiscountController::class)->except('show')->middleware('permission:language_discounts,view')->middlewareFor(['create','store'],'permission:language_discounts,create')->middlewareFor(['edit','update'],'permission:language_discounts,update')->middlewareFor('destroy','permission:language_discounts,delete');
+        Route::get('/language-tuition-export',[LanguageTuitionController::class,'export'])->middleware('permission:language_tuition,export')->name('language-tuition.export');
+        Route::get('/language-tuition',[LanguageTuitionController::class,'index'])->middleware('permission:language_tuition,view')->name('language-tuition.index');
+        Route::get('/language-tuition/create',[LanguageTuitionController::class,'create'])->middleware('permission:language_tuition,create')->name('language-tuition.create');
+        Route::get('/language-tuition/{languageTuition}',[LanguageTuitionController::class,'show'])->middleware('permission:language_tuition,view')->name('language-tuition.show');
+        Route::post('/language-tuition',[LanguageTuitionController::class,'store'])->middleware('permission:language_tuition,create')->name('language-tuition.store');
+        Route::post('/language-tuition/{languageTuition}/pay',[LanguageTuitionController::class,'pay'])->middleware('permission:language_tuition,update')->name('language-tuition.pay');
+        Route::post('/language-tuition-payments/{languageTuitionPayment}/confirm-receipt',[LanguageTuitionController::class,'confirmReceipt'])->middleware('permission:language_tuition,update')->name('language-tuition.confirm-receipt');
+        Route::get('/language-tuition/{languageTuition}/qr-download',[LanguageTuitionController::class,'downloadQr'])->middleware('permission:language_tuition,view')->name('language-tuition.qr-download');
+        Route::get('/language-targets-export',[LanguageTargetController::class,'export'])->middleware('permission:language_targets,export')->name('language-targets.export');
+        Route::get('/language-targets',[LanguageTargetController::class,'index'])->middleware('permission:language_targets,view')->name('language-targets.index');
+
+        Route::get('/personnels', [PersonnelController::class, 'index'])->middleware('permission:personnel,view')->name('personnels.index');
+        Route::get('/personnels/create', [PersonnelController::class, 'create'])->middleware('permission:personnel,create')->name('personnels.create');
+        Route::post('/personnels', [PersonnelController::class, 'store'])->middleware('permission:personnel,create')->name('personnels.store');
+        Route::get('/personnels/{personnel}/edit', [PersonnelController::class, 'edit'])->middleware('permission:personnel,update')->name('personnels.edit');
+        Route::put('/personnels/{personnel}', [PersonnelController::class, 'update'])->middleware('permission:personnel,update')->name('personnels.update');
+        Route::patch('/personnels/{personnel}/toggle', [PersonnelController::class, 'toggle'])->middleware('permission:personnel,update')->name('personnels.toggle');
+        Route::delete('/personnels/{personnel}', [PersonnelController::class, 'destroy'])->middleware('permission:personnel,delete')->name('personnels.destroy');
+        Route::delete('/personnels', [PersonnelController::class, 'bulkDestroy'])->middleware('permission:personnel,delete')->name('personnels.bulk-destroy');
+        Route::patch('/personnels/{id}/restore', [PersonnelController::class, 'restore'])->middleware('permission:personnel,delete')->name('personnels.restore');
+        Route::delete('/personnels/{id}/force', [PersonnelController::class, 'forceDestroy'])->name('personnels.force-destroy');
+
+        Route::get('/users', [UserController::class, 'index'])->middleware('permission:users,view')->name('users.index');
+        Route::get('/users/create', [UserController::class, 'create'])->middleware('permission:users,create')->name('users.create');
+        Route::post('/users', [UserController::class, 'store'])->middleware('permission:users,create')->name('users.store');
+        Route::get('/users/{user}/edit', [UserController::class, 'edit'])->middleware('permission:users,update')->name('users.edit');
+        Route::put('/users/{user}', [UserController::class, 'update'])->middleware('permission:users,update')->name('users.update');
+        Route::patch('/users/{user}/toggle', [UserController::class, 'toggle'])->middleware('permission:users,update')->name('users.toggle');
+        Route::post('/users/{user}/reset-password', [UserController::class, 'resetPassword'])->middleware('permission:users,update')->name('users.reset-password');
+        Route::get('/users/{user}/permissions', [UserController::class, 'permissions'])->middleware('permission:users,update')->name('users.permissions');
+        Route::put('/users/{user}/permissions', [UserController::class, 'updatePermissions'])->middleware('permission:users,update')->name('users.permissions.update');
+        Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('permission:users,delete')->name('users.destroy');
+        Route::delete('/users', [UserController::class, 'bulkDestroy'])->middleware('permission:users,delete')->name('users.bulk-destroy');
+        Route::patch('/users/{id}/restore', [UserController::class, 'restore'])->middleware('permission:users,delete')->name('users.restore');
+
+        Route::get('/roles', [RoleController::class, 'index'])->middleware('permission:roles,view')->name('roles.index');
+        Route::get('/roles/create', [RoleController::class, 'create'])->middleware('permission:roles,create')->name('roles.create');
+        Route::post('/roles', [RoleController::class, 'store'])->middleware('permission:roles,create')->name('roles.store');
+        Route::get('/roles/{role}/edit', [RoleController::class, 'edit'])->middleware('permission:roles,update')->name('roles.edit');
+        Route::put('/roles/{role}', [RoleController::class, 'update'])->middleware('permission:roles,update')->name('roles.update');
+        Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->middleware('permission:roles,delete')->name('roles.destroy');
+        Route::delete('/roles', [RoleController::class, 'bulkDestroy'])->middleware('permission:roles,delete')->name('roles.bulk-destroy');
+
+        Route::get('/courses', [CourseController::class, 'index'])->middleware('permission:courses,view')->name('courses.index');
+        Route::get('/courses/create', [CourseController::class, 'create'])->middleware('permission:courses,create')->name('courses.create');
+        Route::post('/courses', [CourseController::class, 'store'])->middleware('permission:courses,create')->name('courses.store');
+        Route::get('/courses/{course}/edit', [CourseController::class, 'edit'])->middleware('permission:courses,update')->name('courses.edit');
+        Route::put('/courses/{course}', [CourseController::class, 'update'])->middleware('permission:courses,update')->name('courses.update');
+        Route::patch('/courses/{course}/toggle', [CourseController::class, 'toggle'])->middleware('permission:courses,update')->name('courses.toggle');
+        Route::delete('/courses/{course}', [CourseController::class, 'destroy'])->middleware('permission:courses,delete')->name('courses.destroy');
+        Route::delete('/courses', [CourseController::class, 'bulkDestroy'])->middleware('permission:courses,delete')->name('courses.bulk-destroy');
+        Route::patch('/courses/{id}/restore', [CourseController::class, 'restore'])->middleware('permission:courses,delete')->name('courses.restore');
+        Route::delete('/courses/{id}/force', [CourseController::class, 'forceDestroy'])->name('courses.force-destroy');
+
+        Route::get('/kpis', [KpiPlanController::class, 'index'])->middleware('permission:kpis,view')->name('kpis.index');
+        Route::get('/kpis/create', [KpiPlanController::class, 'create'])->middleware('permission:kpis,create')->name('kpis.create');
+        Route::post('/kpis', [KpiPlanController::class, 'store'])->middleware('permission:kpis,create')->name('kpis.store');
+        Route::get('/kpis/{plan}', [KpiPlanController::class, 'show'])->middleware('permission:kpis,view')->name('kpis.show');
+        Route::get('/kpis/{plan}/edit', [KpiPlanController::class, 'edit'])->middleware('permission:kpis,update')->name('kpis.edit');
+        Route::put('/kpis/{plan}', [KpiPlanController::class, 'update'])->middleware('permission:kpis,update')->name('kpis.update');
+        Route::delete('/kpis', [KpiPlanController::class, 'bulkDestroyPlans'])->middleware('permission:kpis,delete')->name('kpis.bulk-destroy');
+        Route::delete('/kpis/{plan}', [KpiPlanController::class, 'destroyPlan'])->middleware('permission:kpis,delete')->name('kpis.destroy');
+        Route::get('/kpis/{plan}/targets/create', [KpiPlanController::class, 'createTarget'])->middleware('permission:kpis,create')->name('kpis.targets.create');
+        Route::post('/kpis/{plan}/targets', [KpiPlanController::class, 'storeTarget'])->middleware('permission:kpis,create')->name('kpis.targets.store');
+        Route::get('/kpis/{plan}/targets/{target}/edit', [KpiPlanController::class, 'editTarget'])->middleware('permission:kpis,update')->name('kpis.targets.edit');
+        Route::put('/kpis/{plan}/targets/{target}', [KpiPlanController::class, 'updateTarget'])->middleware('permission:kpis,update')->name('kpis.targets.update');
+        Route::delete('/kpis/{plan}/targets/{target}', [KpiPlanController::class, 'destroyTarget'])->middleware('permission:kpis,delete')->name('kpis.targets.destroy');
+        Route::delete('/kpis/{plan}/targets', [KpiPlanController::class, 'bulkDestroyTargets'])->middleware('permission:kpis,delete')->name('kpis.targets.bulk-destroy');
+        Route::get('/kpis/{plan}/import', [KpiPlanController::class, 'importForm'])->middleware('permission:kpis,create')->name('kpis.import');
+        Route::post('/kpis/{plan}/import', [KpiPlanController::class, 'import'])->middleware('permission:kpis,create')->name('kpis.import.store');
+        Route::get('/kpis-template', [KpiPlanController::class, 'template'])->middleware('permission:kpis,view')->name('kpis.template');
+
+        Route::get('/imports', [ImportController::class, 'index'])->middleware('permission:imports,view')->name('imports.index');
+        Route::get('/imports/records', [ImportController::class, 'records'])->middleware('permission:imports,view')->name('imports.records');
+        Route::get('/imports/records/create', [ImportController::class, 'createRecord'])->middleware('permission:imports,create')->name('imports.records.create');
+        Route::post('/imports/records', [ImportController::class, 'storeRecord'])->middleware('permission:imports,create')->name('imports.records.store');
+        Route::get('/imports/records/{record}/edit', [ImportController::class, 'editRecord'])->middleware('permission:imports,update')->name('imports.records.edit');
+        Route::put('/imports/records/{record}', [ImportController::class, 'updateRecord'])->middleware('permission:imports,update')->name('imports.records.update');
+        Route::delete('/imports/records/{record}', [ImportController::class, 'destroyRecord'])->middleware('permission:imports,delete')->name('imports.records.destroy');
+        Route::delete('/imports/records', [ImportController::class, 'bulkDestroyRecords'])->middleware('permission:imports,delete')->name('imports.records.bulk-destroy');
+        Route::get('/imports/create', [ImportController::class, 'create'])->middleware('permission:imports,create')->name('imports.create');
+        Route::post('/imports', [ImportController::class, 'store'])->middleware('permission:imports,create')->name('imports.store');
+        Route::get('/imports-template', [ImportController::class, 'template'])->middleware('permission:imports,view')->name('imports.template');
+
+        Route::get('/reports', [ReportController::class, 'index'])->middleware('permission:reports,view')->name('reports.index');
+        Route::get('/reports/export', [ReportController::class, 'export'])->middleware('permission:reports,export')->name('reports.export');
+
+        Route::get('/payments', [PaymentController::class, 'index'])->middleware('permission:payments,view')->name('payments.index');
+        Route::post('/payments/calculate', [PaymentController::class, 'calculate'])->middleware('permission:payments,create')->name('payments.calculate');
+        Route::patch('/payments/{payment}/approve', [PaymentController::class, 'approve'])->middleware('permission:payments,update')->name('payments.approve');
+        Route::patch('/payments/{payment}/paid', [PaymentController::class, 'paid'])->middleware('permission:payments,update')->name('payments.paid');
+        Route::patch('/payments/{payment}/cancel', [PaymentController::class, 'cancel'])->middleware('permission:payments,update')->name('payments.cancel');
+
+        Route::get('/logs', [LogController::class, 'index'])->middleware('permission:logs,view')->name('logs.index');
+    });
+});

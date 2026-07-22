@@ -1,0 +1,4 @@
+<?php
+namespace App\Models;
+use Illuminate\Database\Eloquent\Model; use Illuminate\Database\Eloquent\SoftDeletes;
+class LanguageLead extends Model { use SoftDeletes; protected $guarded=[]; protected $casts=['date_of_birth'=>'date','received_at'=>'date','appointment_at'=>'datetime','last_consulted_at'=>'datetime']; public function program(){return $this->belongsTo(LanguageProgram::class,'language_program_id');} public function consultant(){return $this->belongsTo(User::class,'consultant_user_id');} public function collaborator(){return $this->belongsTo(LanguageCollaborator::class,'language_collaborator_id');} public function course(){return $this->belongsTo(LanguageCourse::class,'language_course_id');} public function convertedStudent(){return $this->belongsTo(LanguageStudent::class,'converted_student_id');} public function targetSubmissions(){return $this->hasMany(LanguageTargetSubmission::class,'language_lead_id');} }

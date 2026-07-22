@@ -1,0 +1,4 @@
+<?php
+namespace App\Support;
+use PhpOffice\PhpSpreadsheet\Spreadsheet; use PhpOffice\PhpSpreadsheet\Writer\Xlsx; use Symfony\Component\HttpFoundation\StreamedResponse;
+class ExcelExporter { public static function download(string $filename,array $headers,iterable $rows):StreamedResponse { return response()->streamDownload(function()use($headers,$rows){$sheet=(new Spreadsheet)->getActiveSheet();$sheet->fromArray($headers,null,'A1');$r=2;foreach($rows as $row)$sheet->fromArray(array_values($row),null,'A'.$r++);$sheet->getStyle('A1:'.$sheet->getHighestColumn().'1')->getFont()->setBold(true);foreach(range('A',$sheet->getHighestColumn()) as $c)$sheet->getColumnDimension($c)->setAutoSize(true);(new Xlsx($sheet->getParent()))->save('php://output');},$filename,['Content-Type'=>'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']); } }

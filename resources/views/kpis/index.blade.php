@@ -1,0 +1,15 @@
+@extends('layouts.app')
+@section('title','Kế hoạch chỉ tiêu') @section('header','Kế hoạch chỉ tiêu')
+@section('content')
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4"><div><h1 class="page-title">Kế hoạch chỉ tiêu theo năm</h1><div class="page-subtitle">Mỗi năm gồm 4 quý và 12 tháng; hệ thống ưu tiên chỉ tiêu tháng khi tính quý và năm.</div></div>@if(auth()->user()->allowed('kpis','create'))<a href="{{ route('kpis.create') }}" class="btn btn-primary"><i class="bi bi-calendar-plus me-2"></i>Tạo kế hoạch năm</a>@endif</div>
+@if(auth()->user()->allowed('kpis','delete'))<form id="bulk-plans" method="POST" action="{{ route('kpis.bulk-destroy') }}" data-bulk-form="plans" data-bulk-confirm="Xóa các kế hoạch đã chọn và toàn bộ dòng chỉ tiêu liên quan?" class="mb-3">@csrf @method('DELETE')<label class="me-3"><input class="form-check-input me-1" type="checkbox" data-bulk-all="plans"> Chọn tất cả</label><button class="btn btn-sm btn-outline-danger" data-bulk-submit disabled><i class="bi bi-trash me-1"></i>Xóa đã chọn (<span data-bulk-count>0</span>)</button></form>@endif
+<div class="row g-4">@forelse($plans as $p)
+<div class="col-md-6 col-xl-4"><div class="card card-soft h-100"><div class="card-body p-4">
+<div class="d-flex justify-content-between align-items-start"><div>@if(auth()->user()->allowed('kpis','delete'))<input class="form-check-input me-2" type="checkbox" name="ids[]" value="{{ $p->id }}" form="bulk-plans" data-bulk-item="plans">@endif<span class="stat-icon bg-primary-subtle text-primary"><i class="bi bi-calendar3"></i></span></div>@if($p->status==='active')<span class="badge-soft badge-success">Đang áp dụng</span>@elseif($p->status==='closed')<span class="badge-soft badge-gray">Đã chốt</span>@else<span class="badge-soft badge-warning">Bản nháp</span>@endif</div>
+<h2 class="mt-4 mb-1">Năm {{ $p->year }}</h2><div class="text-muted">{{ $p->name }}</div>
+<div class="period-tree mt-4">@for($q=1;$q<=4;$q++)<div class="quarter-box"><strong>Quý {{ $q }}</strong>@for($m=(($q-1)*3+1);$m<=$q*3;$m++)<span class="month-chip">T{{ $m }}</span>@endfor</div>@endfor</div>
+<div class="d-flex justify-content-between align-items-center mt-4"><span><strong>{{ $p->targets_count }}</strong> dòng chỉ tiêu</span><div><a class="btn btn-sm btn-primary" href="{{ route('kpis.show',$p) }}">Mở kế hoạch</a>@if(auth()->user()->allowed('kpis','update'))<a class="btn btn-sm btn-outline-primary" href="{{ route('kpis.edit',$p) }}"><i class="bi bi-pencil"></i></a>@endif @if(auth()->user()->allowed('kpis','delete'))<form class="d-inline" method="POST" action="{{ route('kpis.destroy',$p) }}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" data-confirm="Xóa kế hoạch và toàn bộ dòng chỉ tiêu liên quan?"><i class="bi bi-trash"></i></button></form>@endif</div></div>
+</div></div></div>
+@empty<div class="col-12"><div class="card card-soft"><div class="empty-state"><i class="bi bi-calendar-x fs-1"></i><p class="mt-2">Chưa có kế hoạch chỉ tiêu.</p></div></div></div>@endforelse</div>
+@if($plans->hasPages())<div class="mt-4">{{ $plans->links() }}</div>@endif
+@endsection

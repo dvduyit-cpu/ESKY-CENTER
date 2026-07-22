@@ -1,0 +1,3 @@
+<?php
+namespace App\Models; use Illuminate\Database\Eloquent\Model;
+class LanguageMonthlyTargetRecord extends Model { protected $guarded=[]; protected $casts=['quantity'=>'decimal:2','revenue'=>'decimal:2']; public function student(){return $this->belongsTo(LanguageStudent::class,'language_student_id');} public function lead(){return $this->belongsTo(LanguageLead::class,'language_lead_id');} public function collaborator(){return $this->belongsTo(LanguageCollaborator::class,'language_collaborator_id');} public function course(){return $this->belongsTo(LanguageCourse::class,'language_course_id');} public function payment(){return $this->belongsTo(LanguageTuitionPayment::class,'language_tuition_payment_id');} }
