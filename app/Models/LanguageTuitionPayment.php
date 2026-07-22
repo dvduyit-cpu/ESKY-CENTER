@@ -1,3 +1,3 @@
 <?php
 namespace App\Models; use Illuminate\Database\Eloquent\Model;
-class LanguageTuitionPayment extends Model { protected $guarded=[]; protected $casts=['paid_at'=>'datetime','confirmed_at'=>'datetime','amount'=>'decimal:2']; public function charge(){return $this->belongsTo(LanguageTuitionCharge::class,'language_tuition_charge_id');} public function collector(){return $this->belongsTo(User::class,'collected_by');} }
+class LanguageTuitionPayment extends Model { protected $guarded=[]; protected $casts=['paid_at'=>'datetime','confirmed_at'=>'datetime','amount'=>'decimal:2','book_amount'=>'decimal:2']; public function charge(){return $this->belongsTo(LanguageTuitionCharge::class,'language_tuition_charge_id');} public function collector(){return $this->belongsTo(User::class,'collected_by');} }

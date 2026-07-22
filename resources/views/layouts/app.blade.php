@@ -19,6 +19,9 @@
         </div>
         <div class="sidebar-label">Tổng quan</div>
         <nav class="sidebar-nav nav flex-column">
+            <a class="nav-link {{ request()->routeIs('welcome') ? 'active' : '' }}" href="{{ route('welcome') }}"><i class="bi bi-house-door-fill"></i> Chào mừng</a>
+            <a class="nav-link {{ request()->routeIs('plans.*') ? 'active' : '' }}" href="{{ route('plans.index') }}"><i class="bi bi-calendar2-week-fill"></i> Kế hoạch & lịch</a>
+            @if(auth()->user()->isLeader())<a class="nav-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}" href="{{ route('tasks.index') }}"><i class="bi bi-person-check-fill"></i> Giao task</a>@endif
             <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> {{ auth()->user()->isAdmin() || auth()->user()->allowed('system_dashboard') ? 'Tổng quan toàn hệ thống' : 'Tổng quan cá nhân' }}</a>
         </nav>
         @php
@@ -71,6 +74,10 @@
             @if($me->allowed('logs'))<a class="nav-link {{ request()->routeIs('logs.*') ? 'active' : '' }}" href="{{ route('logs.index') }}"><i class="bi bi-clock-history"></i> Nhật ký hệ thống</a>@endif
         </nav>
         @endif
+        <div class="sidebar-label">Trợ giúp</div>
+        <nav class="sidebar-nav nav flex-column pb-4 sidebar-help">
+            <a class="nav-link {{ request()->routeIs('guide') ? 'active' : '' }}" href="{{ route('guide') }}"><i class="bi bi-question-circle-fill"></i> Hướng dẫn sử dụng</a>
+        </nav>
     </aside>
     <div class="main-wrap">
         @php
@@ -103,6 +110,13 @@
                 default => '',
             };
             $pageAction = match (true) {
+                $routeName === 'welcome' => 'Trang chủ',
+                $routeName === 'plans.index' => 'Lịch cá nhân',
+                $routeName === 'tasks.index' => 'Lịch sử & bộ lọc',
+                $routeName === 'guide' => 'Nội dung hướng dẫn',
+                str_ends_with($routeName, '.export') => 'Xuất dữ liệu',
+                str_ends_with($routeName, '.template') => 'Tải tệp mẫu',
+                str_contains($routeName, 'receipt') => 'Phiếu thu',
                 str_contains($routeName, 'dashboard') => 'Tổng hợp',
                 str_ends_with($routeName, '.create') => 'Thêm mới',
                 str_ends_with($routeName, '.edit') => 'Chỉnh sửa',
@@ -114,6 +128,10 @@
                 default => 'Danh sách',
             };
             $generalSection = match (true) {
+                $routeName === 'welcome' => 'Tổng quan',
+                str_starts_with($routeName, 'plans.') => 'Công việc cá nhân',
+                str_starts_with($routeName, 'tasks.') => 'Quản lý công việc',
+                $routeName === 'guide' => 'Trợ giúp',
                 $routeName === 'dashboard' => 'Tổng quan',
                 str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'Chỉ tiêu & dữ liệu',
                 str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
@@ -121,6 +139,10 @@
                 default => 'Hệ thống',
             };
             $generalPage = match (true) {
+                $routeName === 'welcome' => 'Chào mừng',
+                str_starts_with($routeName, 'plans.') => 'Kế hoạch & lịch',
+                str_starts_with($routeName, 'tasks.') => 'Giao task',
+                $routeName === 'guide' => 'Hướng dẫn sử dụng',
                 $routeName === 'dashboard' => 'Tổng quan hệ thống',
                 str_starts_with($routeName, 'kpi-dashboard') => 'Tổng quan chỉ tiêu',
                 str_starts_with($routeName, 'kpis') => 'Kế hoạch chỉ tiêu',
@@ -141,7 +163,22 @@
         @endphp
         <header class="topbar">
             <div class="d-flex align-items-center gap-3"><button class="btn topbar-menu d-lg-none" data-sidebar-toggle><i class="bi bi-list fs-5"></i></button><div><div class="topbar-title">@yield('header', $systemName)</div><div class="topbar-path">@if($isLanguageCenter)<i class="bi bi-house-door me-1"></i> {{ $languageSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $languagePage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@else<i class="bi bi-house-door me-1"></i> {{ $generalSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $generalPage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@endif</div></div></div>
-            <div class="dropdown">
+            <div class="dropdown topbar-reminders" data-realtime-notifications>
+    <button class="btn border-0 reminder-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Thông báo" aria-label="Thông báo">
+        <i class="bi bi-bell fs-5"></i>
+        <span class="reminder-count {{ $planReminders->isEmpty() ? 'd-none' : '' }}" data-notification-count>{{ $planReminders->count() }}</span>
+    </button>
+    <div class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-0 reminder-menu">
+        <div class="d-flex align-items-center justify-content-between px-3 py-3 border-bottom"><strong>Thông báo</strong><a class="small text-decoration-none" href="{{ route('profile.edit') }}">Cài đặt</a></div>
+        <div data-notification-items>
+            @forelse($planReminders as $reminder)
+            <a class="reminder-item text-decoration-none text-dark" href="{{ route('plans.index',['month'=>$reminder->scheduled_for->format('Y-m')]) }}"><i class="bi {{ $reminder->scheduled_for->isPast() ? 'bi-exclamation-circle-fill text-danger' : 'bi-bell-fill' }}"></i><span><strong>{{ $reminder->title }}</strong><small>{{ $reminder->scheduled_for->format('H:i d/m/Y') }}</small></span></a>
+            @empty<div class="empty-state py-4"><i class="bi bi-bell-slash"></i><div class="small mt-2">Không có việc cần nhắc.</div></div>@endforelse
+        </div>
+        <div class="px-3 py-2 border-top small text-muted">Tự cập nhật mỗi 15 giây</div>
+    </div>
+</div>
+<div class="dropdown">
                 <button class="btn border-0 d-flex align-items-center gap-2" data-bs-toggle="dropdown"><span class="avatar">{{ mb_strtoupper(mb_substr($me->name,0,1)) }}</span><span class="d-none d-md-block text-start"><strong class="d-block small">{{ $me->name }}</strong><small class="text-muted">{{ $me->role?->name }}</small></span><i class="bi bi-chevron-down small"></i></button>
                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
                     <li><a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-person me-2"></i> Hồ sơ cá nhân</a></li>
@@ -161,6 +198,22 @@
         <footer class="app-footer">{!! $systemCopyright !!}</footer>
     </div>
 </div>
+<div class="modal fade app-confirm-modal" id="appConfirmModal" tabindex="-1" aria-labelledby="appConfirmTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-body text-center p-4">
+                <span class="app-confirm-icon"><i class="bi bi-exclamation-triangle-fill"></i></span>
+                <h5 id="appConfirmTitle" class="mt-3 mb-2">Xác nhận thao tác</h5>
+                <p class="text-muted mb-0" data-confirm-message>Bạn có chắc chắn muốn tiếp tục?</p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center gap-2 pt-0 pb-4">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-danger px-4" data-confirm-accept><i class="bi bi-check2-circle me-1"></i>Tiếp tục</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="page-loading-overlay" data-page-loading aria-hidden="true" aria-live="polite"><div class="page-loading-card"><span class="page-loading-spinner" aria-hidden="true"></span><span>Đang tải dữ liệu...</span></div></div>
 <script src="{{ asset('vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ asset('js/app.js') }}"></script>
@@ -172,6 +225,7 @@
 <script src="{{ asset('js/permissions.js') }}"></script>
 <script src="{{ asset('js/searchable-select.js') }}"></script>
 <script src="{{ asset('js/table-serial-numbers.js') }}"></script>
+<script src="{{ asset('js/icon-buttons.js') }}?v={{ filemtime(public_path('js/icon-buttons.js')) }}"></script>
 @stack('scripts')
 </body>
 </html>

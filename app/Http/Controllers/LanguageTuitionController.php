@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -40,7 +41,10 @@ class LanguageTuitionController extends Controller
 
     public function show(LanguageTuitionCharge $languageTuition): View
     {
-        return view('language.tuition.show',['item'=>$languageTuition->load(['student','course','languageClass.program','languageClass.level','discount','payments'])]);
+        return view('language.tuition.show', [
+            'item' => $languageTuition->load(['student','course','languageClass.program','languageClass.level','discount','payments']),
+            'bank' => self::bankSettings(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -58,7 +62,11 @@ class LanguageTuitionController extends Controller
 
     public function pay(Request $request, LanguageTuitionCharge $languageTuition): RedirectResponse
     {
-        $data=$request->validate(['receipt_code'=>'nullable|string|max:30|unique:language_tuition_payments,receipt_code','amount'=>'required|numeric|gt:0','paid_at'=>'required|date','payment_method'=>['required',Rule::in(['cash','transfer','card','other'])],'reference'=>'nullable|max:255','note'=>'nullable'],['receipt_code.unique'=>'Số phiếu thu đã tồn tại.']);
+        $data=$request->validate(['receipt_code'=>'nullable|string|max:30|unique:language_tuition_payments,receipt_code','amount'=>'required|numeric|gt:0','book_amount'=>'nullable|numeric|min:0','paid_at'=>'required|date','payment_method'=>['required',Rule::in(['cash','transfer','card','other'])],'reference'=>'nullable|max:255','note'=>'nullable'],['receipt_code.unique'=>'Số phiếu thu đã tồn tại.']);
+        $data['book_amount'] = (float) ($data['book_amount'] ?? 0);
+        if ($data['payment_method'] === 'transfer' && ! self::bankSettings()['enabled']) {
+            throw ValidationException::withMessages(['payment_method' => 'Chưa cấu hình tài khoản ngân hàng nhận học phí.']);
+        }
         $isPending=blank($data['receipt_code'] ?? null);
         $data['receipt_code']=$data['receipt_code'] ?: null;
         $data['receipt_status']=$isPending?'pending':'confirmed';
@@ -110,7 +118,7 @@ class LanguageTuitionController extends Controller
         $payment->load(['collector','charge.student','charge.course','charge.languageClass']);
         $logoPath=SystemSetting::valueOf('logo_path'); $logoData=null;
         if($logoPath&&str_starts_with($logoPath,'uploads/branding/')){$fullPath=public_path($logoPath);if(is_file($fullPath))$logoData='data:'.(mime_content_type($fullPath)?:'image/png').';base64,'.base64_encode(file_get_contents($fullPath));}
-        return ['payment'=>$payment,'charge'=>$payment->charge,'student'=>$payment->charge->student,'softwareName'=>SystemSetting::valueOf('software_name','E-SKY CENTER'),'logoData'=>$logoData,'amountInWords'=>$this->amountInVietnameseWords((int)round((float)$payment->amount))];
+        return ['payment'=>$payment,'charge'=>$payment->charge,'student'=>$payment->charge->student,'softwareName'=>SystemSetting::valueOf('software_name','E-SKY CENTER'),'logoData'=>$logoData,'totalAmount'=>(float)$payment->amount+(float)$payment->book_amount,'amountInWords'=>$this->amountInVietnameseWords((int)round((float)$payment->amount+(float)$payment->book_amount))];
     }
 
     private function amountInVietnameseWords(int $number): string
@@ -129,59 +137,99 @@ class LanguageTuitionController extends Controller
     public function downloadQr(Request $request, LanguageTuitionCharge $languageTuition)
     {
         $languageTuition->load(['student','languageClass']);
-        $remaining=max(0,(float)$languageTuition->payable_amount-(float)$languageTuition->paid_amount);
-        $amount=$request->filled('amount') ? min($remaining,max(1,$request->integer('amount'))) : $remaining;
-        $response = Http::timeout(15)->get($this->qrUrl($languageTuition,$amount));
+        abort_unless(self::bankSettings()['enabled'], 422, 'Chưa cấu hình tài khoản ngân hàng nhận học phí.');
+        $remaining = max(0, (float) $languageTuition->payable_amount - (float) $languageTuition->paid_amount);
+        $tuitionAmount = $request->filled('amount') ? min($remaining, max(1, $request->integer('amount'))) : $remaining;
+        $bookAmount = max(0, $request->integer('book_amount'));
+        $totalAmount = $tuitionAmount + $bookAmount;
+        $content = trim(Str::limit(Str::ascii($languageTuition->student->name.' '.($languageTuition->languageClass?->code ?? 'CHUA XEP LOP')), 50, ''));
+        $response = Http::timeout(15)->get(self::qrUrl($totalAmount, $content));
         abort_unless($response->successful(), 502, 'Không thể tải ảnh VietQR. Vui lòng thử lại.');
         return response($response->body(), 200, [
-            'Content-Type'=>$response->header('Content-Type','image/png'),
-            'Content-Disposition'=>'attachment; filename="vietqr-'.$languageTuition->code.'.png"',
+            'Content-Type' => $response->header('Content-Type', 'image/png'),
+            'Content-Disposition' => 'attachment; filename="vietqr-'.$languageTuition->code.'.png"',
+        ]);
+    }
+    public static function qrUrl(float $amount, string $content): string
+    {
+        $bank = self::bankSettings();
+        abort_unless($bank['enabled'], 422, 'Chưa cấu hình tài khoản ngân hàng nhận học phí.');
+        return 'https://img.vietqr.io/image/'.$bank['bin'].'-'.$bank['account_number'].'-compact2.png?'.http_build_query([
+            'amount' => (int) round($amount),
+            'addInfo' => $content,
+            'accountName' => $bank['account_name'],
         ]);
     }
 
-    public static function qrUrl(LanguageTuitionCharge $charge, float|int|null $requestedAmount=null): string
+    public static function bankSettings(): array
     {
-        $amount=(int)round($requestedAmount ?? max(0,(float)$charge->payable_amount-(float)$charge->paid_amount));
-        $description=Str::limit(trim(Str::ascii($charge->student->name.' '.($charge->languageClass?->code ?? 'CHUA XEP LOP'))),50,'');
-        return 'https://img.vietqr.io/image/970428-683939339-compact2.png?'.http_build_query([
-            'amount'=>$amount,
-            'addInfo'=>$description,
-            'accountName'=>'PHAN HIEU TRUONG DAI HOC BINH DUONG TAI CA MAU',
-        ],'', '&', PHP_QUERY_RFC3986);
+        $enabled = SystemSetting::valueOf('bank_enabled', '0') === '1';
+        $bank = [
+            'enabled' => $enabled,
+            'bin' => trim((string) SystemSetting::valueOf('bank_bin', '')),
+            'name' => trim((string) SystemSetting::valueOf('bank_name', '')),
+            'account_number' => trim((string) SystemSetting::valueOf('bank_account_number', '')),
+            'account_name' => trim((string) SystemSetting::valueOf('bank_account_name', '')),
+            'branch' => trim((string) SystemSetting::valueOf('bank_branch', '')),
+        ];
+        $bank['enabled'] = $bank['enabled'] && $bank['bin'] !== '' && $bank['account_number'] !== '' && $bank['account_name'] !== '';
+        return $bank;
     }
 
-    private function refreshCharge(LanguageTuitionCharge $charge, LanguageTuitionPayment $triggerPayment): void
+    private function applyPeriod($query, Request $request): void
     {
-        $paid=(float)$charge->payments()->sum('amount');
-        $hasPending=$charge->payments()->where('receipt_status','pending')->exists();
-        $status=$hasPending?'pending_receipt':($paid+0.001>=(float)$charge->payable_amount?'paid':'partial');
-        $charge->update(['paid_amount'=>$paid,'status'=>$status]);
-        if ($status!=='paid') return;
-        if (! $charge->language_lead_id) {
-            $charge->update(['language_lead_id'=>$this->resolveLeadId($charge->language_student_id,$charge->language_course_id)]);
-            $charge->refresh();
+        $year = max(2020, min(2100, $request->integer('year', now()->year)));
+        $query->whereYear('created_at', $year);
+
+        if ($request->filled('month')) {
+            $query->whereMonth('created_at', max(1, min(12, $request->integer('month'))));
+            return;
         }
-        $lead=$charge->lead;
-        if ($lead) $lead->update(['status'=>'registered','converted_student_id'=>$charge->language_student_id]);
-        LanguageMonthlyTargetRecord::firstOrCreate(['language_tuition_payment_id'=>$triggerPayment->id],['record_year'=>$triggerPayment->paid_at->year,'record_month'=>$triggerPayment->paid_at->month,'language_student_id'=>$charge->language_student_id,'language_lead_id'=>$charge->language_lead_id,'language_collaborator_id'=>$lead?->language_collaborator_id,'language_course_id'=>$charge->language_course_id,'quantity'=>1,'revenue'=>$charge->payable_amount,'note'=>'Tự động ghi nhận khi hoàn tất học phí '.$charge->code]);
+
+        if ($request->filled('quarter')) {
+            $quarter = max(1, min(4, $request->integer('quarter')));
+            $firstMonth = (($quarter - 1) * 3) + 1;
+            $query->whereMonth('created_at', '>=', $firstMonth)
+                ->whereMonth('created_at', '<=', $firstMonth + 2);
+        }
     }
 
-    private function resolveLeadId(int $studentId,int $courseId): ?int
+    private function resolveLeadId(int $studentId, int $courseId): ?int
     {
-        $lead=LanguageLead::where('converted_student_id',$studentId)
-            ->orderByRaw('language_course_id = ? desc',[$courseId])->latest()->first();
-        if ($lead) return $lead->id;
-        $student=LanguageStudent::find($studentId);
-        if (! $student?->phone) return null;
-        $phone=preg_replace('/\D+/','',$student->phone);
-        return LanguageLead::where('language_course_id',$courseId)->latest()->get()
-            ->first(fn($item)=>preg_replace('/\D+/','',$item->phone)===$phone)?->id;
+        return LanguageLead::where('converted_student_id', $studentId)
+            ->orderByRaw('language_course_id = ? desc', [$courseId])
+            ->latest('id')
+            ->value('id');
     }
 
-    private function applyPeriod($query,Request $request): void
+    private function refreshCharge(LanguageTuitionCharge $charge, LanguageTuitionPayment $payment): void
     {
-        $year=max(2020,min(2100,$request->integer('year',now()->year))); $query->whereYear('created_at',$year);
-        if ($request->filled('month')) $query->whereMonth('created_at',$request->integer('month'));
-        elseif ($request->filled('quarter')) { $quarter=max(1,min(4,$request->integer('quarter'))); $query->whereMonth('created_at','>=',($quarter-1)*3+1)->whereMonth('created_at','<=',$quarter*3); }
+        $paidAmount = (float) $charge->payments()->sum('amount');
+        $hasPendingReceipt = $charge->payments()->where('receipt_status', 'pending')->exists();
+        $status = $hasPendingReceipt
+            ? 'pending_receipt'
+            : ($paidAmount >= (float) $charge->payable_amount ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'));
+
+        $charge->update(['paid_amount' => $paidAmount, 'status' => $status]);
+
+        if ($payment->receipt_status !== 'confirmed') {
+            return;
+        }
+
+        $charge->loadMissing('lead');
+        LanguageMonthlyTargetRecord::updateOrCreate(
+            ['language_tuition_payment_id' => $payment->id],
+            [
+                'record_year' => $payment->paid_at->year,
+                'record_month' => $payment->paid_at->month,
+                'language_student_id' => $charge->language_student_id,
+                'language_lead_id' => $charge->language_lead_id,
+                'language_collaborator_id' => $charge->lead?->language_collaborator_id,
+                'language_course_id' => $charge->language_course_id,
+                'quantity' => 1,
+                'revenue' => (float) $payment->amount + (float) $payment->book_amount,
+                'note' => 'Thu học phí '.$charge->code,
+            ]
+        );
     }
 }

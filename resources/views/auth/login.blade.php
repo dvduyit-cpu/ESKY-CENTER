@@ -15,7 +15,6 @@
 <div class="intro-features"><div><i class="bi bi-people-fill"></i><span><strong>Quản lý học viên</strong><small>Thông tin rõ ràng, dễ tra cứu</small></span></div><div><i class="bi bi-graph-up-arrow"></i><span><strong>Theo dõi chỉ tiêu</strong><small>Số liệu cập nhật và trực quan</small></span></div><div><i class="bi bi-shield-check"></i><span><strong>Phân quyền an toàn</strong><small>Kiểm soát quyền theo vai trò</small></span></div></div></div>
 <p class="intro-footer">{!! $systemCopyright !!}</p></div>
 <div class="login-form-panel"><div class="login-form-wrap">
-<div class="mobile-brand"><span class="login-logo @if($systemLogo) has-logo @endif">@if($systemLogo)<img src="{{ asset($systemLogo) }}" alt="Logo">@else<i class="bi bi-mortarboard-fill"></i>@endif</span><span><strong>{{ $systemName }}</strong><small>Hệ thống quản lý trung tâm</small></span></div>
 <header class="form-heading"><span>Chào mừng trở lại</span><h2 id="login-title">Đăng nhập hệ thống</h2><p>Nhập thông tin tài khoản được quản trị viên cấp.</p></header>
 @if($errors->any())<div class="login-alert" role="alert" data-auto-dismiss="5000"><i class="bi bi-exclamation-circle-fill"></i><span>{{ $errors->first() }}</span></div>@endif
 <form method="POST" action="{{ route('login.submit') }}" class="login-form">@csrf

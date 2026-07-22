@@ -51,7 +51,7 @@ class AuthController extends Controller
             'created_at' => now(),
         ]);
 
-        return redirect()->intended(route('dashboard'));
+        return redirect()->intended(route('welcome'));
     }
 
     public function logout(Request $request): RedirectResponse

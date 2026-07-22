@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{LanguageLead,LanguageMonthlyTargetRecord,LanguageTargetSubmission,LanguageTuitionPayment};
+use App\Models\{LanguageLead,LanguageMonthlyTargetRecord,LanguageTargetSubmission,LanguageTuitionPayment,UpcomingPlan};
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -10,35 +10,30 @@ class RealtimeController extends Controller
 {
     public function status(Request $request): JsonResponse
     {
-        $user=$request->user();
-        $since=$request->date('since')?->utc();
-        $canViewAll=$user->isAdmin()||$user->allowed('language_dashboard_all');
+        $user = $request->user();
+        $since = $request->date('since')?->utc();
+        if (! $user->notifications_enabled) return response()->json(['server_time'=>now()->utc()->toIso8601String(),'enabled'=>false,'changed'=>false,'total'=>0,'items'=>[],'reminders'=>[]]);
 
-        $consulting=($user->isAdmin()||$user->allowed('language_consulting'))?LanguageLead::whereNotIn('status',['registered','not_interested'])
-            ->when(! $canViewAll,fn($query)=>$query->where('consultant_user_id',$user->id))
-            ->where(fn($query)=>$query->whereNull('last_consulted_at')->where('created_at','<=',now()->subDays(3))->orWhere('last_consulted_at','<=',now()->subDays(3)))
-            ->count():0;
+        $canViewAll = $user->isAdmin() || $user->allowed('language_dashboard_all');
+        $consulting = ($user->isAdmin() || $user->allowed('language_consulting')) ? LanguageLead::whereNotIn('status',['registered','not_interested'])->when(! $canViewAll,fn($q)=>$q->where('consultant_user_id',$user->id))->where(fn($q)=>$q->whereNull('last_consulted_at')->where('created_at','<=',now()->subDays(3))->orWhere('last_consulted_at','<=',now()->subDays(3)))->count() : 0;
+        $submissionUpdates = $since && ($user->isAdmin() || $user->allowed('language_target_submissions')) ? LanguageTargetSubmission::where('submitted_by',$user->id)->whereHas('lead',fn($q)=>$q->where('updated_at','>',$since))->count() : 0;
+        $pendingReceipts = $user->isAdmin() || $user->allowed('language_tuition') ? LanguageTuitionPayment::where('receipt_status','pending')->count() : 0;
+        $newTargets = $since && ($user->isAdmin() || $user->allowed('language_targets')) ? LanguageMonthlyTargetRecord::where('updated_at','>',$since)->count() : 0;
 
-        $submissionUpdates=$since&&($user->isAdmin()||$user->allowed('language_target_submissions'))?LanguageTargetSubmission::where('submitted_by',$user->id)
-            ->whereHas('lead',fn($query)=>$query->where(fn($q)=>$q->whereNotNull('last_consulted_at')->orWhere('status','!=','new')))
-            ->whereHas('lead',fn($lead)=>$lead->where('updated_at','>',$since))
-            ->count():0;
-
-        $pendingReceipts=$user->isAdmin()||$user->allowed('language_tuition')
-            ? LanguageTuitionPayment::where('receipt_status','pending')->count() : 0;
-        $newTargets=$since&&($user->isAdmin()||$user->allowed('language_targets'))
-            ? LanguageMonthlyTargetRecord::where('updated_at','>',$since)->count() : 0;
+        $reminders = UpcomingPlan::query()->where('user_id',$user->id)->whereNull('completed_at')->where('scheduled_for','<=',now()->addDays(30)->endOfDay())->orderBy('scheduled_for')->get()->filter->is_due_for_reminder->take(10)->values();
+        $newPlans = $since ? UpcomingPlan::query()->where('user_id',$user->id)->where('created_at','>',$since)->count() : 0;
+        $items = collect([
+            ['key'=>'consulting','label'=>'Công việc tư vấn quá hạn','count'=>$consulting,'url'=>route('language-consulting.index')],
+            ['key'=>'submissions','label'=>'Chỉ tiêu gửi đã được cập nhật','count'=>$submissionUpdates,'url'=>route('language-target-submissions.index')],
+            ['key'=>'receipts','label'=>'Phiếu thu chờ bổ sung','count'=>$pendingReceipts,'url'=>route('language-tuition.index',['status'=>'pending_receipt'])],
+            ['key'=>'targets','label'=>'Chỉ tiêu trung tâm mới','count'=>$newTargets,'url'=>route('language-targets.index')],
+        ])->filter(fn($item)=>$item['count']>0)->values();
 
         return response()->json([
-            'server_time'=>now()->utc()->toIso8601String(),
-            'changed'=>$since&&($submissionUpdates>0||$newTargets>0),
-            'total'=>$consulting+$submissionUpdates+$pendingReceipts+$newTargets,
-            'items'=>[
-                ['key'=>'consulting','label'=>'Công việc tư vấn quá hạn','count'=>$consulting,'url'=>route('language-consulting.index')],
-                ['key'=>'submissions','label'=>'Chỉ tiêu gửi đã được cập nhật','count'=>$submissionUpdates,'url'=>route('language-target-submissions.index')],
-                ['key'=>'receipts','label'=>'Phiếu thu chờ bổ sung','count'=>$pendingReceipts,'url'=>route('language-tuition.index',['status'=>'pending_receipt'])],
-                ['key'=>'targets','label'=>'Chỉ tiêu trung tâm mới','count'=>$newTargets,'url'=>route('language-targets.index')],
-            ],
+            'server_time'=>now()->utc()->toIso8601String(),'enabled'=>true,
+            'changed'=>(bool)($since && ($submissionUpdates+$newTargets+$newPlans>0)),
+            'total'=>$items->sum('count')+$reminders->count(),'items'=>$items,
+            'reminders'=>$reminders->map(fn(UpcomingPlan $plan)=>['id'=>$plan->id,'title'=>$plan->title,'time'=>$plan->scheduled_for->format('H:i d/m/Y'),'overdue'=>$plan->scheduled_for->isPast(),'url'=>route('plans.index',['month'=>$plan->scheduled_for->format('Y-m')])])->values(),
         ]);
     }
 }

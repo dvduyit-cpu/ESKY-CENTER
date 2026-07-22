@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Http\Controllers\ThemeController;
 use App\Models\SystemSetting;
+use App\Models\UpcomingPlan;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -29,5 +31,21 @@ class AppServiceProvider extends ServiceProvider
             'systemLoadingStyle' => in_array($settings->get('loading_style'), ['center', 'top'], true) ? $settings->get('loading_style') : 'center',
             'systemCopyright' => '© 2026 <strong>E-sky center</strong> v1.0.0 | Phát triển bởi Đặng Việt Duy',
         ]);
+
+        View::composer('layouts.app', function ($view): void {
+            $reminders = collect();
+            if (Auth::check() && (bool) Auth::user()->notifications_enabled && Schema::hasTable('upcoming_plans')) {
+                $reminders = UpcomingPlan::query()
+                    ->where('user_id', Auth::id())
+                    ->whereNull('completed_at')
+                    ->where('scheduled_for', '<=', now()->addDays(30)->endOfDay())
+                    ->orderBy('scheduled_for')
+                    ->get()
+                    ->filter->is_due_for_reminder
+                    ->take(10)
+                    ->values();
+            }
+            $view->with('planReminders', $reminders);
+        });
     }
 }

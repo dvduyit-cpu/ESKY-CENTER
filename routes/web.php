@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ImportController;
@@ -41,6 +42,14 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::put('/change-password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 
     Route::middleware('password.changed')->group(function () {
+        Route::get('/welcome', [WelcomeController::class, 'index'])->name('welcome');
+        Route::get('/plans', [WelcomeController::class, 'plans'])->name('plans.index');
+        Route::get('/tasks', [WelcomeController::class, 'tasks'])->name('tasks.index');
+        Route::post('/tasks', [WelcomeController::class, 'storeTask'])->name('tasks.store');
+        Route::get('/guide', [WelcomeController::class, 'guide'])->name('guide');
+        Route::post('/plans', [WelcomeController::class, 'store'])->name('plans.store');
+        Route::patch('/plans/{plan}/toggle', [WelcomeController::class, 'toggle'])->name('plans.toggle');
+        Route::delete('/plans/{plan}', [WelcomeController::class, 'destroy'])->name('plans.destroy');
         Route::get('/', [SystemDashboardController::class, 'index'])->name('dashboard');
         Route::get('/realtime/status', [RealtimeController::class, 'status'])->name('realtime.status');
         Route::get('/system-dashboard-export', [SystemDashboardController::class, 'export'])->name('dashboard.export');
