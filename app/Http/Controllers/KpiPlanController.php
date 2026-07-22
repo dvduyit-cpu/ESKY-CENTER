@@ -26,7 +26,7 @@ class KpiPlanController extends Controller
     public function index(): View
     {
         return view('kpis.index', [
-            'plans' => KpiPlan::withCount('targets')->orderByDesc('year')->paginate(20)->withQueryString(),
+            'plans' => KpiPlan::withCount('targets')->orderByDesc('year')->paginate(\App\Support\Pagination::perPage())->withQueryString(),
         ]);
     }
 
@@ -100,7 +100,7 @@ class KpiPlanController extends Controller
 
         return view('kpis.show', [
             'plan' => $plan,
-            'targets' => $query->paginate(25)->withQueryString(),
+            'targets' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'personnels' => Personnel::where('active', true)->where('type', '!=', 'collaborator')->orderBy('name')->get(),
             'courses' => Course::where('active', true)->orderBy('name')->get(),
         ]);

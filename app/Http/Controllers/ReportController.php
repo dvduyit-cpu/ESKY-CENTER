@@ -28,7 +28,7 @@ class ReportController extends Controller
         if ($request->filled('status')) $rows = $rows->where('status', $request->string('status')->toString())->values();
         $totals = $this->totals($rows);
         $page = LengthAwarePaginator::resolveCurrentPage();
-        $perPage = 20;
+        $perPage = \App\Support\Pagination::perPage();
         $rows = new LengthAwarePaginator(
             $rows->forPage($page, $perPage)->values(),
             $rows->count(),

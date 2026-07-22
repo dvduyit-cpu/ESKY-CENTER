@@ -1,0 +1,10 @@
+.task-list-head{align-items:flex-start}
+.task-list-head>div:first-child{min-width:0;flex:1 1 auto}
+.task-list-head h5{margin-bottom:.4rem;overflow-wrap:anywhere}
+.task-list-head>.badge-soft{align-self:flex-start;flex:0 0 auto;white-space:nowrap;padding:5px 9px;line-height:1.2}
+@media(max-width:575.98px){
+    .task-list-card .card-body{padding:1rem!important}
+    .task-list-head{flex-direction:column;gap:.6rem!important}
+    .task-list-head>.badge-soft{font-size:11px;border-radius:8px}
+    .task-list-card .badge.rounded-pill{border-radius:8px!important;white-space:normal;text-align:left}
+}

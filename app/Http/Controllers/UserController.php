@@ -36,7 +36,7 @@ class UserController extends Controller
             };
         }
         return view('users.index', [
-            'users' => $query->paginate(20)->withQueryString(),
+            'users' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'roles' => Role::orderBy('name')->get(),
         ]);
     }

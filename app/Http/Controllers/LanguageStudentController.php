@@ -20,7 +20,7 @@ class LanguageStudentController extends Controller
         }
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('course')) $query->where('language_course_id', $request->integer('course'));
-        return view('language.students.index', ['items'=>$query->paginate(20)->withQueryString(),'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get()]);
+        return view('language.students.index', ['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get()]);
     }
 
     public function create(): View { return $this->form(new LanguageStudent); }

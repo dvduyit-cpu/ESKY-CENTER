@@ -32,7 +32,7 @@ class CourseController extends Controller
                 default => null,
             };
         }
-        return view('courses.index', ['courses' => $query->paginate(20)->withQueryString()]);
+        return view('courses.index', ['courses' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
     }
 
     public function create(): View { return view('courses.form', ['course' => new Course()]); }

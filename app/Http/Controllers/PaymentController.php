@@ -24,7 +24,7 @@ class PaymentController extends Controller
         if ($request->filled('period_type')) $query->where('period_type', $request->string('period_type'));
         if ($request->filled('status')) $query->where('status', $request->string('status'));
         if ($request->filled('payment_kind')) $query->where('payment_kind', $request->string('payment_kind'));
-        return view('payments.index', ['payments' => $query->paginate(25)->withQueryString()]);
+        return view('payments.index', ['payments' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
     }
 
     public function calculate(Request $request): RedirectResponse

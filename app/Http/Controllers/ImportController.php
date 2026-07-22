@@ -29,7 +29,7 @@ class ImportController extends Controller
         $query = ImportBatch::with('user')->where('import_type', 'result')->latest();
         if ($request->filled('year')) $query->where('year', $request->integer('year'));
         if ($request->filled('period_type')) $query->where('period_type', $request->string('period_type'));
-        return view('imports.index', ['batches' => $query->paginate(20)->withQueryString()]);
+        return view('imports.index', ['batches' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
     }
 
     public function records(Request $request): View
@@ -51,7 +51,7 @@ class ImportController extends Controller
         if ($request->filled('course_id')) $query->where('course_id', $request->integer('course_id'));
 
         return view('imports.records', [
-            'records' => $query->paginate(50)->withQueryString(),
+            'records' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'personnels' => Personnel::where('type', '!=', 'collaborator')->orderBy('name')->get(),
             'courses' => Course::orderBy('name')->get(),
         ]);

@@ -11,5 +11,5 @@
 <div class="d-flex justify-content-between align-items-center mt-4"><span><strong>{{ $p->targets_count }}</strong> dòng chỉ tiêu</span><div><a class="btn btn-sm btn-primary" href="{{ route('kpis.show',$p) }}">Mở kế hoạch</a>@if(auth()->user()->allowed('kpis','update'))<a class="btn btn-sm btn-outline-primary" href="{{ route('kpis.edit',$p) }}"><i class="bi bi-pencil"></i></a>@endif @if(auth()->user()->allowed('kpis','delete'))<form class="d-inline" method="POST" action="{{ route('kpis.destroy',$p) }}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" data-confirm="Xóa kế hoạch và toàn bộ dòng chỉ tiêu liên quan?"><i class="bi bi-trash"></i></button></form>@endif</div></div>
 </div></div></div>
 @empty<div class="col-12"><div class="card card-soft"><div class="empty-state"><i class="bi bi-calendar-x fs-1"></i><p class="mt-2">Chưa có kế hoạch chỉ tiêu.</p></div></div></div>@endforelse</div>
-@if($plans->hasPages())<div class="mt-4">{{ $plans->links() }}</div>@endif
+<div class="mt-4">{{ $plans->links() }}</div>
 @endsection

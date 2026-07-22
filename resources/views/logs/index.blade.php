@@ -23,7 +23,7 @@
     <div class="col-xl-2 col-md-3 col-6"><label class="form-label">Tháng</label><select class="form-select" name="month"><option value="">Cả năm</option>@for($itemMonth=1;$itemMonth<=12;$itemMonth++)<option value="{{$itemMonth}}" @selected($month===$itemMonth)>Tháng {{$itemMonth}}</option>@endfor</select></div>
     <div class="col-xl-2 col-md-4"><label class="form-label">Phân hệ</label><select class="form-select" name="module"><option value="">Tất cả phân hệ</option>@foreach($modules as $module)<option value="{{$module}}" @selected(request('module')===$module)>{{$moduleLabels[$module]??str_replace('_',' ',$module)}}</option>@endforeach</select></div>
     <div class="col-xl-2 col-md-4"><label class="form-label">Hành động</label><select class="form-select" name="action"><option value="">Tất cả hành động</option>@foreach($actions as $action)<option value="{{$action}}" @selected(request('action')===$action)>{{$actionLabels[$action]??str_replace('_',' ',$action)}}</option>@endforeach</select></div>
-    <div class="col-xl-1 col-md-4"><label class="form-label">Số dòng</label><select class="form-select" name="per_page">@foreach([15,30,50] as $size)<option value="{{$size}}" @selected($perPage===$size)>{{$size}}</option>@endforeach</select></div>
+    
     <div class="col-12 d-flex flex-wrap justify-content-end gap-2"><a class="btn btn-light" href="{{route('logs.index')}}"><i class="bi bi-arrow-counterclockwise me-1"></i>Đặt lại</a><button class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Áp dụng bộ lọc</button></div>
 </form>
 

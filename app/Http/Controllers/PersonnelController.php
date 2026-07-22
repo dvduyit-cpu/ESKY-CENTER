@@ -31,7 +31,7 @@ class PersonnelController extends Controller
                 ->orWhere('code', 'like', "%{$q}%")
                 ->orWhere('email', 'like', "%{$q}%"));
         }
-        return view('personnels.index', ['personnels' => $query->paginate(20)->withQueryString()]);
+        return view('personnels.index', ['personnels' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
     }
 
     public function create(): View

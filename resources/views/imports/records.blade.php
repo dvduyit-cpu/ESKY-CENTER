@@ -38,5 +38,5 @@
         <td class="text-wrap" style="min-width:220px">{{ $record->note ?: '—' }}</td>
         <td class="text-end">@if(auth()->user()->allowed('imports','update'))<a class="btn btn-sm btn-outline-primary" href="{{ route('imports.records.edit',$record) }}"><i class="bi bi-pencil"></i></a>@endif @if(auth()->user()->allowed('imports','delete'))<form class="d-inline" method="POST" action="{{ route('imports.records.destroy',$record) }}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" data-confirm="Xóa dòng dữ liệu KPI này?"><i class="bi bi-trash"></i></button></form>@endif</td>
     </tr>@empty<tr><td colspan="12"><div class="empty-state">Chưa có dữ liệu chỉ tiêu phù hợp.</div></td></tr>@endforelse</tbody>
-</table></div>@if($records->hasPages())<div class="card-footer bg-white border-0 p-3">{{ $records->links() }}</div>@endif</div>
+</table></div><div class="card-footer bg-white border-0 p-3">{{ $records->links() }}</div></div>
 @endsection

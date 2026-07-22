@@ -13,7 +13,7 @@ class LogController extends Controller
     {
         $year = max(2020, min(2100, $request->integer('year', now()->year)));
         $month = $request->filled('month') ? max(1, min(12, $request->integer('month'))) : null;
-        $perPage = in_array($request->integer('per_page'), [15, 30, 50], true) ? $request->integer('per_page') : 15;
+        $perPage = \App\Support\Pagination::perPage();
         $activeTab = $request->input('tab', $request->filled('login_page') ? 'login' : 'activity');
 
         $activity = ActivityLog::with('user')->latest('created_at');
@@ -49,8 +49,8 @@ class LogController extends Controller
         $loginSuccess = (clone $login)->where('success', true)->count();
 
         return view('logs.index', [
-            'activities' => $activity->paginate($perPage, ['*'], 'activity_page')->withQueryString(),
-            'logins' => $login->paginate($perPage, ['*'], 'login_page')->withQueryString(),
+            'activities' => $activity->paginate(\App\Support\Pagination::perPage(), ['*'], 'activity_page')->withQueryString(),
+            'logins' => $login->paginate(\App\Support\Pagination::perPage(), ['*'], 'login_page')->withQueryString(),
             'modules' => ActivityLog::query()->whereNotNull('module')->distinct()->orderBy('module')->pluck('module'),
             'actions' => ActivityLog::query()->whereNotNull('action')->distinct()->orderBy('action')->pluck('action'),
             'year' => $year,

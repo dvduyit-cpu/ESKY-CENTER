@@ -2,7 +2,7 @@
 namespace App\Http\Controllers;
 use App\Models\{LanguageClass,LanguageProgram,LanguageLevel,LanguageStudent,LanguageEnrollment,User}; use Illuminate\Http\{Request,RedirectResponse}; use Illuminate\Validation\Rule; use Illuminate\View\View;
 class LanguageClassController extends Controller {
- public function index(Request $r):View{$q=LanguageClass::with(['program','level','teacher'])->withCount('enrollments')->latest();if($r->filled('q')){$s=$r->string('q');$q->where(fn($b)=>$b->where('name','like',"%$s%")->orWhere('code','like',"%$s%"));}if($r->filled('status'))$q->where('status',$r->status);return view('language.classes.index',['items'=>$q->paginate(20)->withQueryString()]);}
+ public function index(Request $r):View{$q=LanguageClass::with(['program','level','teacher'])->withCount('enrollments')->latest();if($r->filled('q')){$s=$r->string('q');$q->where(fn($b)=>$b->where('name','like',"%$s%")->orWhere('code','like',"%$s%"));}if($r->filled('status'))$q->where('status',$r->status);return view('language.classes.index',['items'=>$q->paginate(\App\Support\Pagination::perPage())->withQueryString()]);}
  public function create():View{return $this->form(new LanguageClass);}
  public function store(Request $r):RedirectResponse{LanguageClass::create($this->data($r));return redirect()->route('language-classes.index')->with('success','Đã tạo lớp học.');}
  public function edit(LanguageClass $languageClass):View{return $this->form($languageClass->load('enrollments.student'));}

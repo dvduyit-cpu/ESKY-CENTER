@@ -1,0 +1,4 @@
+.list-selection-toolbar{background:#f8fafc;border-radius:14px 14px 0 0}
+.list-selection-toolbar .form-check-input{margin-top:0}
+.list-selection-toolbar+.table-responsive{border-top-left-radius:0!important;border-top-right-radius:0!important}
+@media(max-width:575.98px){.list-selection-toolbar>*{flex:1 1 auto}.list-selection-toolbar label{min-width:100%}.list-selection-toolbar .btn{justify-content:center}}

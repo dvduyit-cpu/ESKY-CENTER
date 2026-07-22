@@ -19,7 +19,7 @@ class LanguageLeadController extends Controller
         }
         if ($request->filled('status')) $query->where('status', $request->status);
         $this->applyReceivedFilter($query, $request);
-        return view('language.leads.index', ['items' => $query->paginate(20)->withQueryString()]);
+        return view('language.leads.index', ['items' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
     }
 
     public function create(): View { return $this->form(new LanguageLead); }
@@ -35,7 +35,7 @@ class LanguageLeadController extends Controller
             ->orderByDesc('created_at')->orderByDesc('id');
         if ($request->filled('status')) $query->where('status', $request->status);
         $this->applyReceivedFilter($query, $request);
-        return view('language.leads.consulting', ['items'=>$query->paginate(20)->withQueryString(),'canViewAll'=>$canViewAll]);
+        return view('language.leads.consulting', ['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'canViewAll'=>$canViewAll]);
     }
 
     public function store(Request $request): RedirectResponse

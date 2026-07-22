@@ -18,6 +18,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Paginator::useBootstrapFive();
+        Paginator::defaultView('pagination.app');
 
         $settings = Schema::hasTable('system_settings')
             ? SystemSetting::query()->whereIn('key', ['theme_color', 'software_name', 'logo_path', 'loading_style'])->pluck('value', 'key')

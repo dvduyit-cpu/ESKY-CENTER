@@ -13,6 +13,10 @@
     <link href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ asset('vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/pagination.css') }}?v={{ filemtime(public_path('css/pagination.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/responsive-actions.css') }}?v={{ filemtime(public_path('css/responsive-actions.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/work-tasks.css') }}?v={{ filemtime(public_path('css/work-tasks.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/list-selection.css') }}?v={{ filemtime(public_path('css/list-selection.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
 </head>
 <body data-theme="{{ $systemTheme ?? 'blue' }}" data-loading-style="{{ $systemLoadingStyle ?? 'center' }}">
@@ -26,7 +30,7 @@
         <nav class="sidebar-nav nav flex-column">
             <a class="nav-link {{ request()->routeIs('welcome') ? 'active' : '' }}" href="{{ route('welcome') }}"><i class="bi bi-house-door-fill"></i> Chào mừng</a>
             <a class="nav-link {{ request()->routeIs('plans.*') ? 'active' : '' }}" href="{{ route('plans.index') }}"><i class="bi bi-calendar2-week-fill"></i> Kế hoạch & lịch</a>
-            @if(auth()->user()->isLeader())<a class="nav-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}" href="{{ route('tasks.index') }}"><i class="bi bi-person-check-fill"></i> Giao task</a>@endif
+            @if(auth()->user()->allowed('work_tasks'))<a class="nav-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}" href="{{ route('tasks.index') }}"><i class="bi bi-list-check"></i> Công việc</a>@endif
             <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> {{ auth()->user()->isAdmin() || auth()->user()->allowed('system_dashboard') ? 'Tổng quan toàn hệ thống' : 'Tổng quan cá nhân' }}</a>
         </nav>
         @php
@@ -222,6 +226,7 @@
 <div class="page-loading-overlay" data-page-loading aria-hidden="true" aria-live="polite"><div class="page-loading-card"><span class="page-loading-spinner" aria-hidden="true"></span><span>Đang tải dữ liệu...</span></div></div>
 <script src="{{ asset('vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ asset('js/app.js') }}"></script>
+<script src="{{ asset('js/list-selection.js') }}?v={{ filemtime(public_path('js/list-selection.js')) }}"></script>
 <script src="{{ asset('js/page-loading.js') }}?v={{ filemtime(public_path('js/page-loading.js')) }}"></script>
 <script src="{{ asset('js/sidebar-scroll.js') }}"></script>
 <script src="{{ asset('js/sidebar-mobile.js') }}"></script>

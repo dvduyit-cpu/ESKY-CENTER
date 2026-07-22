@@ -18,7 +18,7 @@ class LanguageCollaboratorController extends Controller
             $search=$request->string('q');
             $query->where(fn($builder)=>$builder->where('name','like',"%{$search}%")->orWhere('phone','like',"%{$search}%"));
         }
-        return view('language.collaborators.index',['items'=>$query->paginate(20)->withQueryString()]);
+        return view('language.collaborators.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
     }
 
     public function create(): View { return $this->form(new LanguageCollaborator); }

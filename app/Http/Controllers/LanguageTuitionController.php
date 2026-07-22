@@ -26,7 +26,7 @@ class LanguageTuitionController extends Controller
         }
         if ($request->filled('status')) $query->where('status',$request->status);
         $this->applyPeriod($query,$request);
-        return view('language.tuition.index',['items'=>$query->paginate(20)->withQueryString(),'filterYear'=>$request->integer('year',now()->year)]);
+        return view('language.tuition.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'filterYear'=>$request->integer('year',now()->year)]);
     }
 
     public function create(Request $request): View

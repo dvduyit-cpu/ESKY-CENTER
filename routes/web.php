@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\WelcomeController;
+use App\Http\Controllers\WorkTaskController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ImportController;
@@ -44,8 +45,14 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::middleware('password.changed')->group(function () {
         Route::get('/welcome', [WelcomeController::class, 'index'])->name('welcome');
         Route::get('/plans', [WelcomeController::class, 'plans'])->name('plans.index');
-        Route::get('/tasks', [WelcomeController::class, 'tasks'])->name('tasks.index');
-        Route::post('/tasks', [WelcomeController::class, 'storeTask'])->name('tasks.store');
+        Route::get('/tasks', [WorkTaskController::class, 'index'])->middleware('permission:work_tasks,view')->name('tasks.index');
+        Route::post('/tasks', [WorkTaskController::class, 'store'])->middleware('permission:work_tasks,create')->name('tasks.store');
+        Route::get('/tasks/{task}', [WorkTaskController::class, 'show'])->middleware('permission:work_tasks,view')->name('tasks.show');
+        Route::patch('/tasks/{task}/acknowledge', [WorkTaskController::class, 'acknowledge'])->middleware('permission:work_tasks,update')->name('tasks.acknowledge');
+        Route::patch('/tasks/{task}/complete', [WorkTaskController::class, 'complete'])->middleware('permission:work_tasks,update')->name('tasks.complete');
+        Route::patch('/tasks/{task}/close', [WorkTaskController::class, 'close'])->middleware('permission:work_tasks,update')->name('tasks.close');
+        Route::post('/tasks/{task}/comments', [WorkTaskController::class, 'comment'])->middleware('permission:work_tasks,update')->name('tasks.comments.store');
+        Route::delete('/tasks/{task}', [WorkTaskController::class, 'destroy'])->middleware('permission:work_tasks,delete')->name('tasks.destroy');
         Route::get('/guide', [WelcomeController::class, 'guide'])->name('guide');
         Route::post('/plans', [WelcomeController::class, 'store'])->name('plans.store');
         Route::patch('/plans/{plan}/toggle', [WelcomeController::class, 'toggle'])->name('plans.toggle');

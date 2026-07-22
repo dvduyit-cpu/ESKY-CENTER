@@ -16,7 +16,7 @@ class RoleController extends Controller
 {
     public function index(): View
     {
-        return view('roles.index', ['roles' => Role::withCount('users')->orderBy('name')->paginate(20)->withQueryString()]);
+        return view('roles.index', ['roles' => Role::withCount('users')->orderBy('name')->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
     }
 
     public function create(): View

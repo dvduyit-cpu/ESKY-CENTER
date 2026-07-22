@@ -1,0 +1,8 @@
+.app-pagination{direction:ltr;background:#fff;border-radius:0 0 16px 16px}
+.app-pagination>div,.app-pagination form{direction:ltr}
+.app-pagination .pagination{direction:ltr;justify-content:center;flex-wrap:wrap}
+.app-pagination .page-link{min-width:34px;text-align:center}
+.card-footer:has(>.app-pagination){display:block!important;padding:0!important;border:0!important}
+.card-footer:has(>.app-pagination)>small{display:none!important}
+.mt-3:has(>.app-pagination),.mt-4:has(>.app-pagination){margin-top:1rem!important}
+@media(max-width:767.98px){.app-pagination{text-align:center}.app-pagination form{flex-wrap:wrap;justify-content:center}.app-pagination .pagination{max-width:100%}}

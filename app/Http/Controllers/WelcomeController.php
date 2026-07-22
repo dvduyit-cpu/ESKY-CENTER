@@ -66,7 +66,7 @@ class WelcomeController extends Controller
             'pending' => $query->whereNull('completed_at')->where('scheduled_for', '>=', now()),
             default => null,
         };
-        $tasks = $query->latest('scheduled_for')->paginate(20)->withQueryString();
+        $tasks = $query->latest('scheduled_for')->paginate(\App\Support\Pagination::perPage())->withQueryString();
         $taskStats = [
             'total' => (clone $base)->count(),
             'pending' => (clone $base)->whereNull('completed_at')->where('scheduled_for', '>=', now())->count(),

@@ -61,7 +61,7 @@
             </tbody>
         </table>
     </div>
-    @if($users->hasPages())<div class="card-footer bg-white border-0 p-3">{{ $users->links() }}</div>@endif
+    <div class="card-footer bg-white border-0 p-3">{{ $users->links() }}</div>
 </div>
 
 @foreach($users as $u)

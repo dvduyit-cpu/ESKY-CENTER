@@ -1,0 +1,15 @@
+.content .btn{max-width:100%;overflow-wrap:anywhere}
+.content .d-flex.gap-2,.content .d-flex.gap-3,.content .modal-footer{flex-wrap:wrap}
+.content .btn-group{max-width:100%;flex-wrap:wrap}
+.content .table .btn-sm,.content .text-nowrap .btn{white-space:nowrap;overflow-wrap:normal}
+.content .table td.text-end{min-width:max-content}
+@media(max-width:767.98px){
+    .content .d-flex.justify-content-between{flex-wrap:wrap;gap:.75rem}
+    .content .card-header.d-flex{align-items:flex-start!important}
+    .content .filter-panel .btn{min-height:42px}
+    .content .modal-footer .btn{flex:1 1 auto}
+}
+@media(max-width:575.98px){
+    .content .page-title{overflow-wrap:anywhere}
+    .content .d-flex>.btn:not(.btn-sm),.content .d-flex>a.btn:not(.btn-sm){flex:1 1 auto}
+}

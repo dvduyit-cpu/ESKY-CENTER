@@ -14,7 +14,7 @@ class LanguageTargetController extends Controller
         [$year,$month,$query]=$this->filteredQuery($request);
         return view('language.targets.index',[
             'year'=>$year,'month'=>$month,
-            'items'=>(clone $query)->latest()->paginate(20)->withQueryString(),
+            'items'=>(clone $query)->latest()->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'totalQuantity'=>(clone $query)->sum('quantity'),
             'totalRevenue'=>(clone $query)->sum('revenue'),
         ]);

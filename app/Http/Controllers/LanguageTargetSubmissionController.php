@@ -16,7 +16,7 @@ class LanguageTargetSubmissionController extends Controller
     public function index(Request $request): View
     {
         $query=LanguageTargetSubmission::with(['course','submitter','lead.consultant'])->where('submitted_by',$request->user()->id)->latest();
-        return view('language.target-submissions.index',['items'=>$query->paginate(20)->withQueryString(),'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get()]);
+        return view('language.target-submissions.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get()]);
     }
 
     public function store(Request $request): RedirectResponse

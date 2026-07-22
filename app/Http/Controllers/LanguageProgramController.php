@@ -2,7 +2,7 @@
 namespace App\Http\Controllers;
 use App\Models\{LanguageProgram,LanguageLevel}; use Illuminate\Http\{Request,RedirectResponse}; use Illuminate\Validation\Rule; use Illuminate\View\View;
 class LanguageProgramController extends Controller {
- public function index(Request $r):View{$q=LanguageProgram::with('levels')->withCount(['classes as filtered_classes_count'=>fn($b)=>$r->filled('class_status')?$b->where('status',$r->class_status):$b]);if($r->filled('class_status'))$q->whereHas('classes',fn($b)=>$b->where('status',$r->class_status));if($r->filled('q')){$s=$r->string('q');$q->where(fn($b)=>$b->where('name','like',"%$s%")->orWhere('code','like',"%$s%"));}return view('language.programs.index',['items'=>$q->orderBy('name')->paginate(20)->withQueryString()]);}
+ public function index(Request $r):View{$q=LanguageProgram::with('levels')->withCount(['classes as filtered_classes_count'=>fn($b)=>$r->filled('class_status')?$b->where('status',$r->class_status):$b]);if($r->filled('class_status'))$q->whereHas('classes',fn($b)=>$b->where('status',$r->class_status));if($r->filled('q')){$s=$r->string('q');$q->where(fn($b)=>$b->where('name','like',"%$s%")->orWhere('code','like',"%$s%"));}return view('language.programs.index',['items'=>$q->orderBy('name')->paginate(\App\Support\Pagination::perPage())->withQueryString()]);}
  public function create():View{return view('language.programs.form',['item'=>new LanguageProgram]);}
  public function store(Request $r):RedirectResponse{LanguageProgram::create($this->data($r));return redirect()->route('language-programs.index')->with('success','Đã tạo chương trình.');}
  public function edit(LanguageProgram $languageProgram):View{return view('language.programs.form',['item'=>$languageProgram]);}
