@@ -10,11 +10,11 @@
     <link href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
 </head>
-<body data-theme="{{ $systemTheme ?? 'blue' }}">
+<body data-theme="{{ $systemTheme ?? 'blue' }}" data-loading-style="{{ $systemLoadingStyle ?? 'center' }}">
 <div class="app-shell">
     <aside class="sidebar">
         <div class="brand">
-            <div class="brand-mark">@if($systemLogo)<img src="{{ asset($systemLogo) }}" alt="Logo">@else<i class="bi bi-graph-up-arrow"></i>@endif</div>
+            <div class="brand-mark @if($systemLogo) has-logo @endif">@if($systemLogo)<img src="{{ asset($systemLogo) }}" alt="Logo">@else<i class="bi bi-graph-up-arrow"></i>@endif</div>
             <div><strong>{{ $systemName }}</strong><small>HỆ THỐNG QUẢN LÝ</small></div>
         </div>
         <div class="sidebar-label">Tổng quan</div>
@@ -103,14 +103,44 @@
                 default => '',
             };
             $pageAction = match (true) {
-                str_starts_with($routeName, 'language-dashboard') => 'Tổng hợp',
+                str_contains($routeName, 'dashboard') => 'Tổng hợp',
                 str_ends_with($routeName, '.create') => 'Thêm mới',
                 str_ends_with($routeName, '.edit') => 'Chỉnh sửa',
+                str_ends_with($routeName, '.show') => 'Chi tiết',
+                str_contains($routeName, 'permissions') => 'Phân quyền',
+                str_contains($routeName, 'import') => 'Nhập dữ liệu',
+                str_starts_with($routeName, 'profile.') => 'Cập nhật',
+                str_starts_with($routeName, 'settings.') => 'Thiết lập',
                 default => 'Danh sách',
+            };
+            $generalSection = match (true) {
+                $routeName === 'dashboard' => 'Tổng quan',
+                str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'Chỉ tiêu & dữ liệu',
+                str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
+                str_starts_with($routeName, 'profile') => 'Tài khoản cá nhân',
+                default => 'Hệ thống',
+            };
+            $generalPage = match (true) {
+                $routeName === 'dashboard' => 'Tổng quan hệ thống',
+                str_starts_with($routeName, 'kpi-dashboard') => 'Tổng quan chỉ tiêu',
+                str_starts_with($routeName, 'kpis') => 'Kế hoạch chỉ tiêu',
+                str_starts_with($routeName, 'courses') => 'Khóa học & quy đổi',
+                str_starts_with($routeName, 'imports.records') => 'Dữ liệu đã nhập',
+                str_starts_with($routeName, 'imports') => 'Nhập kết quả Excel',
+                str_starts_with($routeName, 'reports') => 'Báo cáo chỉ tiêu',
+                str_starts_with($routeName, 'payments') => 'Thanh toán vượt chỉ tiêu',
+                str_starts_with($routeName, 'personnels') => 'Nhân sự & cộng tác viên',
+                str_starts_with($routeName, 'users') => 'Tài khoản',
+                str_starts_with($routeName, 'roles') => 'Vai trò & quyền',
+                str_starts_with($routeName, 'logs') => 'Nhật ký hệ thống',
+                str_starts_with($routeName, 'settings') => 'Cấu hình phần mềm',
+                $routeName === 'profile.password' => 'Đổi mật khẩu',
+                str_starts_with($routeName, 'profile') => 'Hồ sơ cá nhân',
+                default => 'Trang hiện tại',
             };
         @endphp
         <header class="topbar">
-            <div class="d-flex align-items-center gap-3"><button class="btn topbar-menu d-lg-none" data-sidebar-toggle><i class="bi bi-list fs-5"></i></button><div><div class="topbar-title">@yield('header', $systemName)</div><div class="topbar-path">@if($isLanguageCenter)<i class="bi bi-house-door me-1"></i> {{ $languageSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $languagePage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@else Năm → Quý → Tháng · Cộng dồn tự động @endif</div></div></div>
+            <div class="d-flex align-items-center gap-3"><button class="btn topbar-menu d-lg-none" data-sidebar-toggle><i class="bi bi-list fs-5"></i></button><div><div class="topbar-title">@yield('header', $systemName)</div><div class="topbar-path">@if($isLanguageCenter)<i class="bi bi-house-door me-1"></i> {{ $languageSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $languagePage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@else<i class="bi bi-house-door me-1"></i> {{ $generalSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $generalPage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@endif</div></div></div>
             <div class="dropdown">
                 <button class="btn border-0 d-flex align-items-center gap-2" data-bs-toggle="dropdown"><span class="avatar">{{ mb_strtoupper(mb_substr($me->name,0,1)) }}</span><span class="d-none d-md-block text-start"><strong class="d-block small">{{ $me->name }}</strong><small class="text-muted">{{ $me->role?->name }}</small></span><i class="bi bi-chevron-down small"></i></button>
                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
@@ -128,11 +158,13 @@
             @if($errors->any())<div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm" data-auto-dismiss="5000" role="alert"><strong><i class="bi bi-x-circle-fill me-2"></i>Vui lòng kiểm tra:</strong><ul class="mb-0 mt-1">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul><button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button></div>@endif
             @yield('content')
         </main>
-        <footer class="app-footer">{{ $systemCopyright }}</footer>
+        <footer class="app-footer">{!! $systemCopyright !!}</footer>
     </div>
 </div>
+<div class="page-loading-overlay" data-page-loading aria-hidden="true" aria-live="polite"><div class="page-loading-card"><span class="page-loading-spinner" aria-hidden="true"></span><span>Đang tải dữ liệu...</span></div></div>
 <script src="{{ asset('vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ asset('js/app.js') }}"></script>
+<script src="{{ asset('js/page-loading.js') }}?v={{ filemtime(public_path('js/page-loading.js')) }}"></script>
 <script src="{{ asset('js/sidebar-scroll.js') }}"></script>
 <script src="{{ asset('js/sidebar-mobile.js') }}"></script>
 <script src="{{ asset('js/realtime.js') }}"></script>

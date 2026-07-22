@@ -12,7 +12,7 @@ use Illuminate\View\View;
 
 class ThemeController extends Controller
 {
-    public const THEMES = ['blue', 'yellow', 'red', 'green', 'pink', 'purple', 'orange', 'teal', 'indigo', 'slate'];
+    public const THEMES = ['blue', 'navy', 'indigo', 'purple', 'pink', 'rose', 'red', 'orange', 'yellow', 'lime', 'green', 'teal', 'cyan', 'brown', 'slate'];
 
     public function edit(Request $request): View
     {
@@ -22,6 +22,7 @@ class ThemeController extends Controller
             'theme' => SystemSetting::valueOf('theme_color', 'blue'),
             'softwareName' => SystemSetting::valueOf('software_name', 'E-SKY CENTER'),
             'logoPath' => SystemSetting::valueOf('logo_path'),
+            'loadingStyle' => SystemSetting::valueOf('loading_style', 'center'),
         ]);
     }
 
@@ -32,12 +33,13 @@ class ThemeController extends Controller
         $data = $request->validate([
             'software_name' => ['required', 'string', 'max:80'],
             'theme_color' => ['required', Rule::in(self::THEMES)],
-            'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp,svg', 'max:2048'],
+            'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'remove_logo' => ['nullable', 'boolean'],
+            'loading_style' => ['required', Rule::in(['center', 'top'])],
         ], [
             'software_name.required' => 'Vui lòng nhập tên phần mềm.',
             'logo.image' => 'Logo phải là một tệp hình ảnh.',
-            'logo.mimes' => 'Logo chỉ hỗ trợ PNG, JPG, WEBP hoặc SVG.',
+            'logo.mimes' => 'Logo chỉ hỗ trợ PNG, JPG hoặc WEBP.',
             'logo.max' => 'Logo không được lớn hơn 2 MB.',
         ]);
 
@@ -59,6 +61,7 @@ class ThemeController extends Controller
         SystemSetting::updateOrCreate(['key' => 'software_name'], ['value' => trim($data['software_name'])]);
         SystemSetting::updateOrCreate(['key' => 'theme_color'], ['value' => $data['theme_color']]);
         SystemSetting::updateOrCreate(['key' => 'logo_path'], ['value' => $logoPath]);
+        SystemSetting::updateOrCreate(['key' => 'loading_style'], ['value' => $data['loading_style']]);
         ActivityLogger::log('settings', 'update_branding', 'Cập nhật nhận diện và giao diện phần mềm');
 
         return back()->with('success', 'Đã cập nhật cấu hình phần mềm.');

@@ -77,6 +77,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/language-tuition',[LanguageTuitionController::class,'store'])->middleware('permission:language_tuition,create')->name('language-tuition.store');
         Route::post('/language-tuition/{languageTuition}/pay',[LanguageTuitionController::class,'pay'])->middleware('permission:language_tuition,update')->name('language-tuition.pay');
         Route::post('/language-tuition-payments/{languageTuitionPayment}/confirm-receipt',[LanguageTuitionController::class,'confirmReceipt'])->middleware('permission:language_tuition,update')->name('language-tuition.confirm-receipt');
+        Route::get('/language-tuition-payments/{languageTuitionPayment}/receipt/pdf',[LanguageTuitionController::class,'receiptPdf'])->middleware('permission:language_tuition,view')->name('language-tuition.receipt.pdf');
+        Route::get('/language-tuition-payments/{languageTuitionPayment}/receipt/print',[LanguageTuitionController::class,'receiptPrint'])->middleware('permission:language_tuition,view')->name('language-tuition.receipt.print');
         Route::get('/language-tuition/{languageTuition}/qr-download',[LanguageTuitionController::class,'downloadQr'])->middleware('permission:language_tuition,view')->name('language-tuition.qr-download');
         Route::get('/language-targets-export',[LanguageTargetController::class,'export'])->middleware('permission:language_targets,export')->name('language-targets.export');
         Route::get('/language-targets',[LanguageTargetController::class,'index'])->middleware('permission:language_targets,view')->name('language-targets.index');

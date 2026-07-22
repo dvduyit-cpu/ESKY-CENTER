@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Dompdf\Dompdf;
+use Dompdf\Options;
+use App\Models\SystemSetting;
 
 class LanguageTuitionController extends Controller
 {
@@ -60,14 +63,19 @@ class LanguageTuitionController extends Controller
         $data['receipt_code']=$data['receipt_code'] ?: null;
         $data['receipt_status']=$isPending?'pending':'confirmed';
         $data['confirmed_at']=$isPending?null:now();
-        DB::transaction(function () use ($data,$request,$languageTuition) {
+        $paymentId=null;
+        DB::transaction(function () use ($data,$request,$languageTuition,&$paymentId) {
             $charge=LanguageTuitionCharge::lockForUpdate()->findOrFail($languageTuition->id);
             $remaining=(float)$charge->payable_amount-(float)$charge->paid_amount;
             if ($data['amount']>$remaining+0.001) throw \Illuminate\Validation\ValidationException::withMessages(['amount'=>'Số tiền thu vượt quá công nợ còn lại '.number_format($remaining).'đ.']);
             $payment=$charge->payments()->create($data+['collected_by'=>$request->user()->id]);
+            $paymentId=$payment->id;
             $this->refreshCharge($charge,$payment);
         });
-        return back()->with('success',$isPending?'Đã ghi nhận tiền ở trạng thái chờ bổ sung phiếu thu.':'Đã ghi nhận phiếu thu học phí.');
+        $redirect=redirect()->route('language-tuition.show',$languageTuition)
+            ->with('success',$isPending?'Đã ghi nhận tiền ở trạng thái chờ bổ sung phiếu thu.':'Đã ghi nhận phiếu thu học phí.');
+        $redirect->with('receipt_ready',$paymentId);
+        return $redirect;
     }
 
     public function confirmReceipt(Request $request, LanguageTuitionPayment $languageTuitionPayment): RedirectResponse
@@ -79,9 +87,39 @@ class LanguageTuitionController extends Controller
             $payment->update(['receipt_code'=>$data['receipt_code'],'receipt_status'=>'confirmed','confirmed_at'=>now()]);
             $this->refreshCharge(LanguageTuitionCharge::lockForUpdate()->findOrFail($payment->language_tuition_charge_id),$payment);
         });
-        return back()->with('success','Đã bổ sung và xác nhận số phiếu thu.');
+        return redirect()->route('language-tuition.show',$languageTuitionPayment->language_tuition_charge_id)->with('success','Đã bổ sung và xác nhận số phiếu thu.')->with('receipt_ready',$languageTuitionPayment->id);
     }
 
+    public function receiptPrint(Request $request, LanguageTuitionPayment $languageTuitionPayment): View
+    {
+        return view('language.tuition.receipt',$this->receiptData($languageTuitionPayment)+['pdfMode'=>false,'autoPrint'=>!$request->boolean('preview')]);
+    }
+
+    public function receiptPdf(LanguageTuitionPayment $languageTuitionPayment)
+    {
+        $data=$this->receiptData($languageTuitionPayment)+['pdfMode'=>true,'autoPrint'=>false];
+        $options=new Options(); $options->set('defaultFont','DejaVu Sans'); $options->set('isRemoteEnabled',false); $options->setChroot(public_path());
+        $dompdf=new Dompdf($options); $dompdf->loadHtml(view('language.tuition.receipt',$data)->render(),'UTF-8'); $dompdf->setPaper('A5','landscape'); $dompdf->render();
+        $receiptLabel=$languageTuitionPayment->receipt_code ?: 'tam-'.$languageTuitionPayment->id;
+        $filename='phieu-thu-'.preg_replace('/[^A-Za-z0-9_-]/','-',$receiptLabel).'.pdf';
+        return response($dompdf->output(),200,['Content-Type'=>'application/pdf','Content-Disposition'=>'attachment; filename="'.$filename.'"']);
+    }
+
+    private function receiptData(LanguageTuitionPayment $payment): array
+    {
+        $payment->load(['collector','charge.student','charge.course','charge.languageClass']);
+        $logoPath=SystemSetting::valueOf('logo_path'); $logoData=null;
+        if($logoPath&&str_starts_with($logoPath,'uploads/branding/')){$fullPath=public_path($logoPath);if(is_file($fullPath))$logoData='data:'.(mime_content_type($fullPath)?:'image/png').';base64,'.base64_encode(file_get_contents($fullPath));}
+        return ['payment'=>$payment,'charge'=>$payment->charge,'student'=>$payment->charge->student,'softwareName'=>SystemSetting::valueOf('software_name','E-SKY CENTER'),'logoData'=>$logoData,'amountInWords'=>$this->amountInVietnameseWords((int)round((float)$payment->amount))];
+    }
+
+    private function amountInVietnameseWords(int $number): string
+    {
+        if($number===0)return 'Không đồng'; $digits=['không','một','hai','ba','bốn','năm','sáu','bảy','tám','chín'];$units=['','nghìn','triệu','tỷ','nghìn tỷ','triệu tỷ'];$groups=[];
+        for($n=$number;$n>0;$n=intdiv($n,1000))$groups[]=$n%1000;$parts=[];
+        for($i=count($groups)-1;$i>=0;$i--){$g=$groups[$i];if($g===0)continue;$hundreds=intdiv($g,100);$tens=intdiv($g%100,10);$ones=$g%10;$words=[];$full=$i<count($groups)-1;if($hundreds>0||$full){$words[]=$digits[$hundreds];$words[]='trăm';}if($tens>1){$words[]=$digits[$tens];$words[]='mươi';}elseif($tens===1)$words[]='mười';elseif($ones>0&&($hundreds>0||$full))$words[]='lẻ';if($ones>0)$words[]=$ones===1&&$tens>1?'mốt':($ones===5&&$tens>0?'lăm':$digits[$ones]);if($units[$i]!=='')$words[]=$units[$i];$parts[]=implode(' ',$words);}
+        return ucfirst(implode(' ',$parts)).' đồng';
+    }
     public function export(Request $request)
     {
         $query=LanguageTuitionCharge::with(['student','course']); $this->applyPeriod($query,$request);
