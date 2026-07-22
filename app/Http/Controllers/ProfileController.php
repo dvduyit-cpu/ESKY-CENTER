@@ -40,6 +40,6 @@ class ProfileController extends Controller
         $user=$request->user();
         $user->update(['password'=>Hash::make($data['password']),'must_change_password'=>false]);
         ActivityLogger::log('profile','change_password','Đổi mật khẩu cá nhân',$user);
-        return redirect()->route('dashboard')->with('success','Đã đổi mật khẩu.');
+        return redirect()->route('welcome')->with('success','Đã đổi mật khẩu.');
     }
 }

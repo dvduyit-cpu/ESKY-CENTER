@@ -33,8 +33,8 @@
 
 <div class="system-section-title"><span><i class="bi bi-ui-checks-grid"></i></span><div><h5>Trạng thái tổng hợp</h5><small>Nắm nhanh tình trạng từng nhóm nghiệp vụ</small></div></div>
 <div class="row g-4 mb-4">
-@foreach([['Trạng thái tư vấn',$leadLabels,$leadStatuses,'bi-headset'],['Trạng thái học viên',$studentLabels,$studentStatuses,'bi-mortarboard'],['Trạng thái lớp học',$classLabels,$classStatuses,'bi-easel2'],['Trạng thái học phí',$tuitionLabels,$tuitionStatuses,'bi-receipt']] as [$title,$labels,$values,$icon])
-<div class="col-md-6 col-xl-3"><div class="card card-soft h-100"><div class="card-header bg-white p-4"><h6 class="mb-0 fw-bold"><i class="bi {{$icon}} text-primary me-2"></i>{{$title}}</h6></div><div class="card-body p-4">@foreach($labels as $key=>$label)@php($count=(int)($values[$key]??0))<div class="d-flex justify-content-between align-items-center border-bottom py-2"><span class="small text-muted">{{$label}}</span><span class="badge-soft {{$count?'badge-info':'badge-gray'}}">{{$count}}</span></div>@endforeach</div></div></div>
+@foreach([['Trạng thái tư vấn',$leadLabels,$leadStatuses,'bi-headset','violet'],['Trạng thái học viên',$studentLabels,$studentStatuses,'bi-mortarboard','green'],['Trạng thái lớp học',$classLabels,$classStatuses,'bi-easel2','orange'],['Trạng thái học phí',$tuitionLabels,$tuitionStatuses,'bi-receipt','rose']] as [$title,$labels,$values,$icon,$tone])
+<div class="col-md-6 col-xl-3"><div class="card card-soft h-100 status-summary-card status-card-{{$tone}}"><div class="card-header p-4"><h6 class="mb-0 fw-bold"><span class="status-summary-icon"><i class="bi {{$icon}}"></i></span>{{$title}}</h6></div><div class="card-body p-3">@foreach($labels as $key=>$label)@php($count=(int)($values[$key]??0))<div class="status-summary-row status-tone-{{($loop->index%8)+1}}"><span>{{$label}}</span><strong class="{{$count===0?'is-empty':''}}">{{$count}}</strong></div>@endforeach</div></div></div>
 @endforeach
 </div>
 

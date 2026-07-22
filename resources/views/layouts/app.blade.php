@@ -3,6 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    @php
+    $faviconPath = $systemLogo ?: 'logo-20260722101948.png';
+@endphp
+    <link rel="icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
+    <link rel="apple-touch-icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', $systemName) · {{ $systemName }}</title>
     <link href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
@@ -69,7 +74,7 @@
         <div class="sidebar-label">Quản trị hệ thống</div>
         <nav class="sidebar-nav nav flex-column pb-4">
             @if($me->allowed('personnel'))<a class="nav-link {{ request()->routeIs('personnels.*') ? 'active' : '' }}" href="{{ route('personnels.index') }}"><i class="bi bi-people-fill"></i> Nhân sự & CTV</a>@endif
-            @if($me->allowed('users'))<a class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}"><i class="bi bi-person-lock"></i> Tài khoản</a>@endif
+            @if($me->allowed('users'))<a class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}"><i class="bi bi-person-circle"></i> Tài khoản</a>@endif
             @if($me->allowed('roles'))<a class="nav-link {{ request()->routeIs('roles.*') ? 'active' : '' }}" href="{{ route('roles.index') }}"><i class="bi bi-shield-check"></i> Vai trò & quyền</a>@endif
             @if($me->allowed('logs'))<a class="nav-link {{ request()->routeIs('logs.*') ? 'active' : '' }}" href="{{ route('logs.index') }}"><i class="bi bi-clock-history"></i> Nhật ký hệ thống</a>@endif
         </nav>
@@ -162,7 +167,7 @@
             };
         @endphp
         <header class="topbar">
-            <div class="d-flex align-items-center gap-3"><button class="btn topbar-menu d-lg-none" data-sidebar-toggle><i class="bi bi-list fs-5"></i></button><div><div class="topbar-title">@yield('header', $systemName)</div><div class="topbar-path">@if($isLanguageCenter)<i class="bi bi-house-door me-1"></i> {{ $languageSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $languagePage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@else<i class="bi bi-house-door me-1"></i> {{ $generalSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $generalPage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@endif</div></div></div>
+            <div class="d-flex align-items-center gap-3"><button class="btn topbar-menu" data-sidebar-toggle title="Ẩn/hiện menu" aria-label="Ẩn hoặc hiện menu"><i class="bi bi-list fs-5"></i></button><div><div class="topbar-title">@yield('header', $systemName)</div><div class="topbar-path">@if($isLanguageCenter)<i class="bi bi-house-door me-1"></i> {{ $languageSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $languagePage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@else<i class="bi bi-house-door me-1"></i> {{ $generalSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $generalPage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@endif</div></div></div>
             <div class="dropdown topbar-reminders" data-realtime-notifications>
     <button class="btn border-0 reminder-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Thông báo" aria-label="Thông báo">
         <i class="bi bi-bell fs-5"></i>
