@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{LanguageClass, LanguageCourse, LanguageDiscountPolicy, LanguageLead, LanguageMonthlyTargetRecord, LanguageStudent, LanguageTuitionCharge, LanguageTuitionPayment};
+use App\Models\{LanguageClass, LanguageCourse, LanguageDiscountPolicy, LanguageEnrollment, LanguageLead, LanguageMonthlyTargetRecord, LanguageStudent, LanguageTuitionCharge, LanguageTuitionPayment};
 use App\Support\{CenterCode, ExcelExporter};
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
@@ -36,7 +36,8 @@ class LanguageTuitionController extends Controller
             $query->whereIn('status',['recruiting','upcoming','active']);
             if ($selectedClass) $query->orWhere('id',$selectedClass);
         })->orderBy('name')->get();
-        return view('language.tuition.form',['item'=>new LanguageTuitionCharge,'students'=>LanguageStudent::orderBy('name')->get(),'leads'=>LanguageLead::whereNotNull('converted_student_id')->orderBy('name')->get(),'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get(),'classes'=>$classes,'discounts'=>LanguageDiscountPolicy::where('active',1)->orderBy('name')->get(),'selectedStudent'=>$request->integer('student'),'selectedLead'=>$request->integer('lead'),'selectedCourse'=>$request->integer('course'),'selectedClass'=>$selectedClass]);
+        $enrollments=LanguageEnrollment::with(['student','languageClass.course'])->whereIn('status',['studying','paused','reserved'])->whereHas('languageClass',fn($q)=>$q->whereNotNull('language_course_id'))->whereDoesntHave('student.tuitionCharges',fn($q)=>$q->whereColumn('language_tuition_charges.language_class_id','language_enrollments.language_class_id'))->orderByDesc('enrolled_at')->get();
+        return view('language.tuition.form',['item'=>new LanguageTuitionCharge,'enrollments'=>$enrollments,'leads'=>LanguageLead::whereNotNull('converted_student_id')->orderBy('name')->get(),'discounts'=>LanguageDiscountPolicy::where('active',1)->orderBy('name')->get(),'selectedStudent'=>$request->integer('student'),'selectedLead'=>$request->integer('lead'),'selectedClass'=>$selectedClass]);
     }
 
     public function show(LanguageTuitionCharge $languageTuition): View
@@ -49,7 +50,13 @@ class LanguageTuitionController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $data=$request->validate(['language_student_id'=>'required|exists:language_students,id','language_lead_id'=>'nullable|exists:language_leads,id','language_course_id'=>'required|exists:language_courses,id','language_class_id'=>'nullable|exists:language_classes,id','language_discount_policy_id'=>'nullable|exists:language_discount_policies,id','due_date'=>'nullable|date','note'=>'nullable']);
+        $data=$request->validate(['language_student_id'=>'required|exists:language_students,id','language_lead_id'=>'nullable|exists:language_leads,id','language_course_id'=>'required|exists:language_courses,id','language_class_id'=>'required|exists:language_classes,id','language_discount_policy_id'=>'nullable|exists:language_discount_policies,id','due_date'=>'nullable|date','note'=>'nullable']);
+        $enrolled=DB::table('language_enrollments')->where('language_student_id',$data['language_student_id'])->where('language_class_id',$data['language_class_id'])->whereIn('status',['studying','paused','reserved'])->exists();
+        if(! $enrolled) throw ValidationException::withMessages(['language_class_id'=>'Học viên chưa được xếp vào lớp này nên không thể tạo phiếu thu.']);
+        if(LanguageTuitionCharge::where('language_student_id',$data['language_student_id'])->where('language_class_id',$data['language_class_id'])->exists()) throw ValidationException::withMessages(['language_class_id'=>'Học viên này đã có phiếu thu cho lớp đã chọn. Mỗi học viên trong một lớp chỉ tạo một lần.']);
+        $class=LanguageClass::findOrFail($data['language_class_id']);
+        if(! $class->language_course_id) throw ValidationException::withMessages(['language_class_id'=>'Lớp chưa được liên kết với khóa học.']);
+        $data['language_course_id']=$class->language_course_id;
         $course=LanguageCourse::findOrFail($data['language_course_id']);
         if (empty($data['language_lead_id'])) $data['language_lead_id']=$this->resolveLeadId((int)$data['language_student_id'],(int)$data['language_course_id']);
         $discount=!empty($data['language_discount_policy_id'])?LanguageDiscountPolicy::find($data['language_discount_policy_id']):null;

@@ -13,6 +13,10 @@
     <link href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ asset('vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/dashboard-links.css') }}?v={{ filemtime(public_path('css/dashboard-links.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/student-history.css') }}?v={{ filemtime(public_path('css/student-history.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/teacher-gradebook.css') }}?v={{ filemtime(public_path('css/teacher-gradebook.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/student-tuition.css') }}?v={{ filemtime(public_path('css/student-tuition.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/pagination.css') }}?v={{ filemtime(public_path('css/pagination.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/responsive-actions.css') }}?v={{ filemtime(public_path('css/responsive-actions.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/work-tasks.css') }}?v={{ filemtime(public_path('css/work-tasks.css')) }}" rel="stylesheet">
@@ -48,6 +52,7 @@
         @if($me->allowed('language_students') || $me->allowed('language_classes') || $me->allowed('language_tuition') || $me->allowed('language_targets'))
         <div class="sidebar-label">Quản lý học viên</div>
         <nav class="sidebar-nav nav flex-column">
+            <a class="nav-link {{ request()->routeIs('teacher-classes.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>
             @if($me->allowed('language_students'))<a class="nav-link {{ request()->routeIs('language-students.*') ? 'active' : '' }}" href="{{ route('language-students.index') }}"><i class="bi bi-mortarboard-fill"></i> Học viên</a>@endif
             @if($me->allowed('language_classes'))<a class="nav-link {{ request()->routeIs('language-classes.*') ? 'active' : '' }}" href="{{ route('language-classes.index') }}"><i class="bi bi-easel2-fill"></i> Lớp học</a>@endif
             @if($me->allowed('language_tuition'))<a class="nav-link {{ request()->routeIs('language-tuition.*') ? 'active' : '' }}" href="{{ route('language-tuition.index') }}"><i class="bi bi-cash-coin"></i> Thu học phí</a>@endif

@@ -1,0 +1,23 @@
+.dashboard-card-link {
+    display: block;
+    height: 100%;
+    color: inherit;
+    text-decoration: none;
+}
+
+.dashboard-card-link .card {
+    cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.dashboard-card-link:hover .card {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 34px rgba(26, 44, 86, .14);
+    border-color: #bfdbfe;
+}
+
+.dashboard-card-link:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, .3);
+    outline-offset: 3px;
+    border-radius: 18px;
+}

@@ -13,7 +13,7 @@ class LanguageStudentController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = LanguageStudent::with(['guardians','course','discountPolicy','enrollments.languageClass.program','enrollments.languageClass.level'])->latest();
+        $query = LanguageStudent::with(['guardians','course','discountPolicy','enrollments.languageClass.program','enrollments.languageClass.level'])->withSum('tuitionCharges','payable_amount')->withSum('tuitionCharges','paid_amount')->latest();
         if ($request->filled('q')) {
             $search = $request->string('q');
             $query->where(fn ($builder) => $builder->where('name','like',"%{$search}%")->orWhere('code','like',"%{$search}%")->orWhere('phone','like',"%{$search}%"));
@@ -24,6 +24,20 @@ class LanguageStudentController extends Controller
     }
 
     public function create(): View { return $this->form(new LanguageStudent); }
+
+    public function show(LanguageStudent $languageStudent): View
+    {
+        $languageStudent->load([
+            'guardians', 'course', 'discountPolicy',
+            'enrollments'=>fn($query)=>$query->with([
+                'languageClass.program', 'languageClass.level', 'languageClass.teacher',
+                'monthlyProgress'=>fn($progress)=>$progress->with('teacher')->orderByDesc('month'),
+                'scores'=>fn($scores)=>$scores->with('teacher')->orderByDesc('test_date'),
+            ])->orderByDesc('enrolled_at'),
+            'tuitionCharges'=>fn($query)=>$query->with(['course','languageClass','payments.collector'])->orderByDesc('created_at'),
+        ]);
+        return view('language.students.show',['item'=>$languageStudent]);
+    }
 
     public function store(Request $request): RedirectResponse
     {
@@ -37,7 +51,7 @@ class LanguageStudentController extends Controller
         return redirect()->route('language-students.index')->with('success','Đã thêm học viên.');
     }
 
-    public function edit(LanguageStudent $languageStudent): View { return $this->form($languageStudent->load(['guardians','enrollments.languageClass.program','enrollments.languageClass.level'])); }
+    public function edit(LanguageStudent $languageStudent): View { return $this->form($languageStudent->load(['guardians','enrollments.languageClass.program','enrollments.languageClass.level','enrollments.monthlyProgress','enrollments.scores'])); }
 
     public function update(Request $request, LanguageStudent $languageStudent): RedirectResponse
     {
@@ -63,7 +77,7 @@ class LanguageStudentController extends Controller
     private function data(Request $request, ?LanguageStudent $student = null): array
     {
         return $request->validate([
-            'code'=>['required','max:30',Rule::unique('language_students')->ignore($student)], 'name'=>'required|max:255',
+            'code'=>['nullable','max:30',Rule::unique('language_students')->ignore($student)], 'name'=>'required|max:255',
             'gender'=>'nullable|in:male,female,other', 'date_of_birth'=>'nullable|date', 'school'=>'nullable|max:255',
             'school_class'=>'nullable|max:100', 'phone'=>'nullable|max:30', 'email'=>'nullable|email|max:255', 'address'=>'nullable|max:255',
             'registered_at'=>'required|date', 'official_enrollment_date'=>'nullable|date|after_or_equal:registered_at',

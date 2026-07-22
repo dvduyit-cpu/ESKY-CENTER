@@ -27,7 +27,7 @@
 <div class="card card-soft student-list-card">
     <div class="table-responsive d-none d-lg-block">
         <table class="table table-modern align-middle mb-0">
-            <thead><tr><th>Học viên</th><th>Khóa học / miễn giảm</th><th>Lớp hiện tại</th><th>Ngày nhập học</th><th>Phụ huynh</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead>
+            <thead><tr><th>Học viên</th><th>Khóa học / miễn giảm</th><th>Lớp hiện tại</th><th>Ngày nhập học</th><th>Phụ huynh</th><th>Học phí</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead>
             <tbody>
             @forelse($items as $item)
                 @php($current=$item->enrollments->where('status','studying')->sortByDesc('enrolled_at')->first() ?: $item->enrollments->sortByDesc('enrolled_at')->first())
@@ -37,15 +37,18 @@
                     <td><strong>{{$current?->languageClass?->code?:'Chưa xếp lớp'}}</strong><div class="small text-muted">{{trim(($current?->languageClass?->program?->name ?? '').' '.($current?->languageClass?->level?->name ?? '')) ?: '—'}}</div></td>
                     <td class="text-nowrap">{{$item->official_enrollment_date?->format('d/m/Y')?:'—'}}</td>
                     <td>@forelse($item->guardians->take(2) as $guardian)<div class="guardian-line">{{$guardian->name}}<small>{{$guardian->phone}}</small></div>@empty<span class="text-muted">Chưa cập nhật</span>@endforelse</td>
+                    @php($tuitionDue=max(0,(float)$item->tuition_charges_sum_payable_amount-(float)$item->tuition_charges_sum_paid_amount))
+                    <td>@if((float)$item->tuition_charges_sum_payable_amount<=0)<span class="badge-soft badge-gray">Chưa lập</span>@elseif($tuitionDue<=0)<span class="badge-soft badge-success">Đã đóng đủ</span><div class="small text-success mt-1">{{number_format($item->tuition_charges_sum_paid_amount)}}đ</div>@else<span class="badge-soft badge-warning">Còn {{number_format($tuitionDue)}}đ</span><div class="small text-muted mt-1">Đã đóng {{number_format($item->tuition_charges_sum_paid_amount)}}đ</div>@endif</td>
                     <td><span class="badge-soft badge-info">{{$labels[$item->status]??$item->status}}</span></td>
                     <td class="text-end text-nowrap student-actions">
+                        <a class="btn btn-sm btn-outline-dark" href="{{route('language-students.show',$item)}}" title="Xem hồ sơ và điểm" aria-label="Xem hồ sơ và điểm"><i class="bi bi-eye"></i></a>
                         @if(auth()->user()->allowed('language_tuition','create'))<a class="btn btn-sm btn-outline-success" href="{{route('language-tuition.create',['student'=>$item->id,'course'=>$item->language_course_id,'class'=>$current?->language_class_id])}}" title="Lập phiếu thu" aria-label="Lập phiếu thu"><i class="bi bi-receipt"></i></a>@endif
                         <a class="btn btn-sm btn-outline-primary" href="{{route('language-students.edit',$item)}}" title="Sửa học viên" aria-label="Sửa học viên"><i class="bi bi-pencil"></i></a>
                         <form class="d-inline" method="POST" action="{{route('language-students.destroy',$item)}}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" title="Xóa học viên" aria-label="Xóa học viên" data-confirm="Xóa học viên này?"><i class="bi bi-trash"></i></button></form>
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="7"><div class="empty-state">Chưa có học viên phù hợp với bộ lọc.</div></td></tr>
+                <tr><td colspan="8"><div class="empty-state">Chưa có học viên phù hợp với bộ lọc.</div></td></tr>
             @endforelse
             </tbody>
         </table>
@@ -56,8 +59,10 @@
             @php($current=$item->enrollments->where('status','studying')->sortByDesc('enrolled_at')->first() ?: $item->enrollments->sortByDesc('enrolled_at')->first())
             <article class="student-mobile-card">
                 <div class="student-mobile-head"><div class="student-identity"><span class="student-avatar">{{mb_strtoupper(mb_substr($item->name,0,1))}}</span><div><strong>{{$item->name}}</strong><div class="small text-muted">{{$item->code}} · {{$item->phone?:'Chưa có SĐT'}}</div></div></div><span class="badge-soft badge-info">{{$labels[$item->status]??$item->status}}</span></div>
-                <div class="student-mobile-grid"><div><span>Khóa học</span><strong>{{$item->course?->name?:'Chưa chọn'}}</strong></div><div><span>Lớp hiện tại</span><strong>{{$current?->languageClass?->code?:'Chưa xếp lớp'}}</strong></div><div><span>Ngày nhập học</span><strong>{{$item->official_enrollment_date?->format('d/m/Y')?:'—'}}</strong></div><div><span>Phụ huynh</span><strong>{{$item->guardians->first()?->name?:'Chưa cập nhật'}}</strong></div></div>
+                @php($tuitionDue=max(0,(float)$item->tuition_charges_sum_payable_amount-(float)$item->tuition_charges_sum_paid_amount))
+                <div class="student-mobile-grid"><div><span>Khóa học</span><strong>{{$item->course?->name?:'Chưa chọn'}}</strong></div><div><span>Lớp hiện tại</span><strong>{{$current?->languageClass?->code?:'Chưa xếp lớp'}}</strong></div><div><span>Ngày nhập học</span><strong>{{$item->official_enrollment_date?->format('d/m/Y')?:'—'}}</strong></div><div><span>Học phí</span><strong>{{(float)$item->tuition_charges_sum_payable_amount<=0?'Chưa lập':($tuitionDue<=0?'Đã đóng đủ':'Còn '.number_format($tuitionDue).'đ')}}</strong></div></div>
                 <div class="student-mobile-actions">
+                    <a class="btn btn-outline-dark" href="{{route('language-students.show',$item)}}" title="Xem hồ sơ và điểm"><i class="bi bi-eye"></i></a>
                     @if(auth()->user()->allowed('language_tuition','create'))<a class="btn btn-outline-success" href="{{route('language-tuition.create',['student'=>$item->id,'course'=>$item->language_course_id,'class'=>$current?->language_class_id])}}" title="Lập phiếu thu"><i class="bi bi-receipt"></i></a>@endif
                     <a class="btn btn-outline-primary" href="{{route('language-students.edit',$item)}}" title="Sửa học viên"><i class="bi bi-pencil"></i></a>
                     <form method="POST" action="{{route('language-students.destroy',$item)}}">@csrf @method('DELETE')<button class="btn btn-outline-danger" title="Xóa học viên" data-confirm="Xóa học viên này?"><i class="bi bi-trash"></i></button></form>

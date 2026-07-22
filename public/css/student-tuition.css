@@ -1,0 +1,58 @@
+.tuition-student-summary {
+    padding: 18px;
+    border: 1px solid #e5eaf2;
+    border-radius: 14px;
+    background: #f8fafc;
+}
+
+.tuition-student-summary span {
+    display: block;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.tuition-student-summary strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 22px;
+}
+
+.tuition-student-summary.paid {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+}
+
+.tuition-student-summary.paid strong,
+.tuition-student-summary.complete strong {
+    color: #15803d;
+}
+
+.tuition-student-summary.due {
+    border-color: #fed7aa;
+    background: #fff7ed;
+}
+
+.tuition-student-summary.due strong {
+    color: #c2410c;
+}
+
+.student-class-tuition {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    width: fit-content;
+    padding: 5px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.student-class-tuition.is-paid {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.student-class-tuition.is-due {
+    color: #9a3412;
+    background: #ffedd5;
+}
