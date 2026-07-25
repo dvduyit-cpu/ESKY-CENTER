@@ -70,7 +70,7 @@
         <div class="modal-dialog"><div class="modal-content border-0 rounded-4">
             <form method="POST" action="{{ route('users.reset-password',$u) }}">@csrf
                 <div class="modal-header"><h5 class="modal-title">Đặt lại mật khẩu</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                <div class="modal-body"><p>Đặt mật khẩu mới cho <strong>{{ $u->email }}</strong>.</p><label class="form-label">Mật khẩu mới</label><input class="form-control mb-3" type="password" name="password" minlength="8" required><label class="form-label">Nhập lại mật khẩu</label><input class="form-control" type="password" name="password_confirmation" minlength="8" required></div>
+                <div class="modal-body"><p>Đặt mật khẩu mới cho <strong>{{ $u->email }}</strong>.</p><label class="form-label">Mật khẩu mới</label><input class="form-control mb-1" type="password" name="password" value="Esky123@" minlength="8" required><div class="form-text mb-3">Mật khẩu mặc định: Esky123@</div><label class="form-label">Nhập lại mật khẩu</label><input class="form-control" type="password" name="password_confirmation" value="Esky123@" minlength="8" required></div>
                 <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button><button class="btn btn-primary">Đặt lại</button></div>
             </form>
         </div></div>

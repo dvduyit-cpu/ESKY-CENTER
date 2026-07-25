@@ -32,16 +32,19 @@
         </div>
         <div class="sidebar-label">Tổng quan</div>
         <nav class="sidebar-nav nav flex-column">
-            <a class="nav-link {{ request()->routeIs('welcome') ? 'active' : '' }}" href="{{ route('welcome') }}"><i class="bi bi-house-door-fill"></i> Chào mừng</a>
-            <a class="nav-link {{ request()->routeIs('plans.*') ? 'active' : '' }}" href="{{ route('plans.index') }}"><i class="bi bi-calendar2-week-fill"></i> Kế hoạch & lịch</a>
-            @if(auth()->user()->allowed('work_tasks'))<a class="nav-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}" href="{{ route('tasks.index') }}"><i class="bi bi-list-check"></i> Công việc</a>@endif
+            <a class="nav-link {{ request()->routeIs('welcome') ? 'active' : '' }}" href="{{ route('welcome') }}"><i class="bi bi-house-door-fill"></i> Trang chủ</a>
             <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> {{ auth()->user()->isAdmin() || auth()->user()->allowed('system_dashboard') ? 'Tổng quan toàn hệ thống' : 'Tổng quan cá nhân' }}</a>
         </nav>
         @php
             $me = auth()->user();
         @endphp
+        <div class="sidebar-label">Công việc</div>
+        <nav class="sidebar-nav nav flex-column">
+            <a class="nav-link {{ request()->routeIs('plans.*') ? 'active' : '' }}" href="{{ route('plans.index') }}"><i class="bi bi-calendar2-week-fill"></i> Kế hoạch & lịch cá nhân</a>
+            @if($me->allowed('work_tasks'))<a class="nav-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}" href="{{ route('tasks.index') }}"><i class="bi bi-list-check"></i> Giao & theo dõi công việc</a>@endif
+        </nav>
         @if($me->allowed('language_consulting') || $me->allowed('language_target_submissions') || $me->allowed('language_leads') || $me->allowed('language_collaborators'))
-        <div class="sidebar-label">Tư vấn</div>
+        <div class="sidebar-label">Tư vấn & tuyển sinh</div>
         <nav class="sidebar-nav nav flex-column">
             @if($me->allowed('language_consulting'))<a class="nav-link {{ request()->routeIs('language-consulting.*') ? 'active' : '' }}" href="{{ route('language-consulting.index') }}"><i class="bi bi-headset"></i> Công việc tư vấn</a>@endif
             @if($me->allowed('language_target_submissions'))<a class="nav-link {{ request()->routeIs('language-target-submissions.*') ? 'active' : '' }}" href="{{ route('language-target-submissions.index') }}"><i class="bi bi-send-fill"></i> Gửi chỉ tiêu</a>@endif
@@ -49,27 +52,32 @@
             @if($me->allowed('language_collaborators'))<a class="nav-link {{ request()->routeIs('language-collaborators.*') ? 'active' : '' }}" href="{{ route('language-collaborators.index') }}"><i class="bi bi-people-fill"></i> Cộng tác viên</a>@endif
         </nav>
         @endif
-        @if($me->allowed('language_students') || $me->allowed('language_classes') || $me->allowed('language_tuition') || $me->allowed('language_targets'))
-        <div class="sidebar-label">Quản lý học viên</div>
+        @if($me->allowed('language_students') || $me->allowed('language_tuition'))
+        <div class="sidebar-label">Học viên</div>
         <nav class="sidebar-nav nav flex-column">
-            <a class="nav-link {{ request()->routeIs('teacher-classes.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>
             @if($me->allowed('language_students'))<a class="nav-link {{ request()->routeIs('language-students.*') ? 'active' : '' }}" href="{{ route('language-students.index') }}"><i class="bi bi-mortarboard-fill"></i> Học viên</a>@endif
-            @if($me->allowed('language_classes'))<a class="nav-link {{ request()->routeIs('language-classes.*') ? 'active' : '' }}" href="{{ route('language-classes.index') }}"><i class="bi bi-easel2-fill"></i> Lớp học</a>@endif
             @if($me->allowed('language_tuition'))<a class="nav-link {{ request()->routeIs('language-tuition.*') ? 'active' : '' }}" href="{{ route('language-tuition.index') }}"><i class="bi bi-cash-coin"></i> Thu học phí</a>@endif
-            @if($me->allowed('language_targets'))<a class="nav-link {{ request()->routeIs('language-targets.*') ? 'active' : '' }}" href="{{ route('language-targets.index') }}"><i class="bi bi-clipboard-data"></i> Chỉ tiêu trung tâm</a>@endif
         </nav>
         @endif
-        @if($me->isAdmin() || $me->allowed('language_programs') || $me->allowed('language_courses') || $me->allowed('language_discounts') || $me->allowed('language_dashboard_all'))
-        <div class="sidebar-label">Quản lý trung tâm</div>
+        @if($me->allowed('language_classes') || $me->allowed('language_programs') || $me->allowed('language_courses'))
+        <div class="sidebar-label">Đào tạo</div>
         <nav class="sidebar-nav nav flex-column">
-            <a class="nav-link {{ request()->routeIs('language-dashboard.*') ? 'active' : '' }}" href="{{ route('language-dashboard.index') }}"><i class="bi bi-speedometer2"></i> Tổng quan trung tâm</a>
+            <a class="nav-link {{ request()->routeIs('teacher-classes.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>
+            @if($me->allowed('language_classes'))<a class="nav-link {{ request()->routeIs('language-classes.*') ? 'active' : '' }}" href="{{ route('language-classes.index') }}"><i class="bi bi-easel2-fill"></i> Quản lý lớp học</a>@endif
             @if($me->allowed('language_programs'))<a class="nav-link {{ request()->routeIs('language-programs.*') ? 'active' : '' }}" href="{{ route('language-programs.index') }}"><i class="bi bi-journal-richtext"></i> Chương trình & cấp độ</a>@endif
             @if($me->allowed('language_courses'))<a class="nav-link {{ request()->routeIs('language-center-courses.*') ? 'active' : '' }}" href="{{ route('language-center-courses.index') }}"><i class="bi bi-book-fill"></i> Khóa học trung tâm</a>@endif
+        </nav>
+        @endif
+        @if($me->isAdmin() || $me->allowed('language_discounts') || $me->allowed('language_targets') || $me->allowed('language_dashboard_all'))
+        <div class="sidebar-label">Điều hành trung tâm</div>
+        <nav class="sidebar-nav nav flex-column">
+            <a class="nav-link {{ request()->routeIs('language-dashboard.*') ? 'active' : '' }}" href="{{ route('language-dashboard.index') }}"><i class="bi bi-speedometer2"></i> Tổng quan trung tâm</a>
+            @if($me->allowed('language_targets'))<a class="nav-link {{ request()->routeIs('language-targets.*') ? 'active' : '' }}" href="{{ route('language-targets.index') }}"><i class="bi bi-clipboard-data"></i> Chỉ tiêu trung tâm</a>@endif
             @if($me->allowed('language_discounts'))<a class="nav-link {{ request()->routeIs('language-discounts.*') ? 'active' : '' }}" href="{{ route('language-discounts.index') }}"><i class="bi bi-percent"></i> Chế độ miễn giảm</a>@endif
         </nav>
         @endif
-        @if($me->allowed('kpis') || $me->allowed('courses') || $me->allowed('imports') || $me->allowed('reports'))
-        <div class="sidebar-label">Chỉ tiêu & dữ liệu</div>
+        @if($me->allowed('kpis') || $me->allowed('courses') || $me->allowed('imports') || $me->allowed('reports') || $me->allowed('payments'))
+        <div class="sidebar-label">KPI & báo cáo</div>
         <nav class="sidebar-nav nav flex-column">
             <a class="nav-link {{ request()->routeIs('kpi-dashboard.*') ? 'active' : '' }}" href="{{ route('kpi-dashboard.index') }}"><i class="bi bi-speedometer"></i> Tổng quan chỉ tiêu & dữ liệu</a>
             @if($me->allowed('kpis'))<a class="nav-link {{ request()->routeIs('kpis.*') ? 'active' : '' }}" href="{{ route('kpis.index') }}"><i class="bi bi-bullseye"></i> Kế hoạch chỉ tiêu</a>@endif
@@ -86,6 +94,7 @@
             @if($me->allowed('users'))<a class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}"><i class="bi bi-person-circle"></i> Tài khoản</a>@endif
             @if($me->allowed('roles'))<a class="nav-link {{ request()->routeIs('roles.*') ? 'active' : '' }}" href="{{ route('roles.index') }}"><i class="bi bi-shield-check"></i> Vai trò & quyền</a>@endif
             @if($me->allowed('logs'))<a class="nav-link {{ request()->routeIs('logs.*') ? 'active' : '' }}" href="{{ route('logs.index') }}"><i class="bi bi-clock-history"></i> Nhật ký hệ thống</a>@endif
+            @if($me->isAdmin())<a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.edit','general') }}"><i class="bi bi-sliders"></i> Cấu hình phần mềm</a>@endif
         </nav>
         @endif
         <div class="sidebar-label">Trợ giúp</div>
@@ -96,17 +105,19 @@
     <div class="main-wrap">
         @php
             $routeName = request()->route()?->getName() ?? '';
-            $isLanguageCenter = str_starts_with($routeName, 'language-');
+            $isLanguageCenter = str_starts_with($routeName, 'language-') || str_starts_with($routeName, 'teacher-classes');
             $languageSection = match (true) {
                 str_starts_with($routeName, 'language-leads'),
                 str_starts_with($routeName, 'language-consulting'),
                 str_starts_with($routeName, 'language-target-submissions'),
-                str_starts_with($routeName, 'language-collaborators') => 'Tư vấn',
+                str_starts_with($routeName, 'language-collaborators') => 'Tư vấn & tuyển sinh',
                 str_starts_with($routeName, 'language-students'),
+                str_starts_with($routeName, 'language-tuition') => 'Học viên',
+                str_starts_with($routeName, 'teacher-classes'),
                 str_starts_with($routeName, 'language-classes'),
-                str_starts_with($routeName, 'language-tuition'),
-                str_starts_with($routeName, 'language-targets') => 'Quản lý học viên',
-                default => 'Quản lý trung tâm',
+                str_starts_with($routeName, 'language-programs'),
+                str_starts_with($routeName, 'language-center-courses') => 'Đào tạo',
+                default => 'Điều hành trung tâm',
             };
             $languagePage = match (true) {
                 str_starts_with($routeName, 'language-target-submissions') => 'Gửi chỉ tiêu',
@@ -121,6 +132,7 @@
                 str_starts_with($routeName, 'language-students') => 'Học viên',
                 str_starts_with($routeName, 'language-programs') => 'Chương trình & cấp độ',
                 str_starts_with($routeName, 'language-classes') => 'Lớp học',
+                str_starts_with($routeName, 'teacher-classes') => 'Lớp giảng dạy & điểm',
                 default => '',
             };
             $pageAction = match (true) {
@@ -143,17 +155,16 @@
             };
             $generalSection = match (true) {
                 $routeName === 'welcome' => 'Tổng quan',
-                str_starts_with($routeName, 'plans.') => 'Công việc cá nhân',
-                str_starts_with($routeName, 'tasks.') => 'Quản lý công việc',
+                str_starts_with($routeName, 'plans.'), str_starts_with($routeName, 'tasks.') => 'Công việc',
                 $routeName === 'guide' => 'Trợ giúp',
                 $routeName === 'dashboard' => 'Tổng quan',
-                str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'Chỉ tiêu & dữ liệu',
+                str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'KPI & báo cáo',
                 str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'profile') => 'Tài khoản cá nhân',
                 default => 'Hệ thống',
             };
             $generalPage = match (true) {
-                $routeName === 'welcome' => 'Chào mừng',
+                $routeName === 'welcome' => 'Trang chủ',
                 str_starts_with($routeName, 'plans.') => 'Kế hoạch & lịch',
                 str_starts_with($routeName, 'tasks.') => 'Giao task',
                 $routeName === 'guide' => 'Hướng dẫn sử dụng',
@@ -197,7 +208,6 @@
                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
                     <li><a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-person me-2"></i> Hồ sơ cá nhân</a></li>
                     <li><a class="dropdown-item" href="{{ route('profile.password') }}"><i class="bi bi-key me-2"></i> Đổi mật khẩu</a></li>
-                    @if($me->isAdmin())<li><a class="dropdown-item" href="{{ route('settings.theme.edit') }}"><i class="bi bi-palette me-2"></i> Cấu hình phần mềm</a></li>@endif
                     <li><hr class="dropdown-divider"></li>
                     <li><form method="POST" action="{{ route('logout') }}">@csrf<button class="dropdown-item text-danger"><i class="bi bi-box-arrow-right me-2"></i> Đăng xuất</button></form></li>
                 </ul>

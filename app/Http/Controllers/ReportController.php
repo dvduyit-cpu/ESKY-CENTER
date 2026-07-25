@@ -9,7 +9,6 @@ use App\Support\ActivityLogger;
 use App\Support\KpiCalculator;
 use App\Support\Period;
 use Illuminate\Http\Request;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -27,15 +26,7 @@ class ReportController extends Controller
         $rows = $report['rows'];
         if ($request->filled('status')) $rows = $rows->where('status', $request->string('status')->toString())->values();
         $totals = $this->totals($rows);
-        $page = LengthAwarePaginator::resolveCurrentPage();
-        $perPage = \App\Support\Pagination::perPage();
-        $rows = new LengthAwarePaginator(
-            $rows->forPage($page, $perPage)->values(),
-            $rows->count(),
-            $perPage,
-            $page,
-            ['path' => $request->url(), 'query' => $request->query()]
-        );
+        $rows = $rows->values();
 
         return view('reports.index', [
             'filters' => $filters,

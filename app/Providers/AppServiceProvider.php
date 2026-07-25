@@ -21,7 +21,7 @@ class AppServiceProvider extends ServiceProvider
         Paginator::defaultView('pagination.app');
 
         $settings = Schema::hasTable('system_settings')
-            ? SystemSetting::query()->whereIn('key', ['theme_color', 'software_name', 'logo_path', 'loading_style'])->pluck('value', 'key')
+            ? SystemSetting::query()->whereIn('key', ['theme_color', 'software_name', 'logo_path', 'loading_style', 'footer_text'])->pluck('value', 'key')
             : collect();
         $theme = $settings->get('theme_color', 'blue');
 
@@ -30,7 +30,7 @@ class AppServiceProvider extends ServiceProvider
             'systemName' => $settings->get('software_name') ?: 'E-SKY CENTER',
             'systemLogo' => $settings->get('logo_path') ?: null,
             'systemLoadingStyle' => in_array($settings->get('loading_style'), ['center', 'top'], true) ? $settings->get('loading_style') : 'center',
-            'systemCopyright' => '© 2026 <strong>E-sky center</strong> v1.0.0 | Phát triển bởi Đặng Việt Duy',
+            'systemCopyright' => e($settings->get('footer_text') ?: '© 2026 E-sky center v1.0.0 | Phát triển bởi Đặng Việt Duy'),
         ]);
 
         View::composer('layouts.app', function ($view): void {

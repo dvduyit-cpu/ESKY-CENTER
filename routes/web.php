@@ -48,6 +48,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/tasks', [WorkTaskController::class, 'index'])->middleware('permission:work_tasks,view')->name('tasks.index');
         Route::post('/tasks', [WorkTaskController::class, 'store'])->middleware('permission:work_tasks,create')->name('tasks.store');
         Route::get('/tasks/{task}', [WorkTaskController::class, 'show'])->middleware('permission:work_tasks,view')->name('tasks.show');
+        Route::put('/tasks/{task}', [WorkTaskController::class, 'update'])->middleware('permission:work_tasks,update')->name('tasks.update');
         Route::patch('/tasks/{task}/acknowledge', [WorkTaskController::class, 'acknowledge'])->middleware('permission:work_tasks,update')->name('tasks.acknowledge');
         Route::patch('/tasks/{task}/complete', [WorkTaskController::class, 'complete'])->middleware('permission:work_tasks,update')->name('tasks.complete');
         Route::patch('/tasks/{task}/close', [WorkTaskController::class, 'close'])->middleware('permission:work_tasks,update')->name('tasks.close');
@@ -55,6 +56,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/tasks/{task}', [WorkTaskController::class, 'destroy'])->middleware('permission:work_tasks,delete')->name('tasks.destroy');
         Route::get('/guide', [WelcomeController::class, 'guide'])->name('guide');
         Route::post('/plans', [WelcomeController::class, 'store'])->name('plans.store');
+        Route::put('/plans/{plan}', [WelcomeController::class, 'update'])->name('plans.update');
         Route::patch('/plans/{plan}/toggle', [WelcomeController::class, 'toggle'])->name('plans.toggle');
         Route::delete('/plans/{plan}', [WelcomeController::class, 'destroy'])->name('plans.destroy');
         Route::get('/', [SystemDashboardController::class, 'index'])->name('dashboard');
@@ -63,8 +65,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/kpi-dashboard', [DashboardController::class, 'index'])->name('kpi-dashboard.index');
         Route::get('/language-dashboard', [LanguageDashboardController::class, 'index'])->name('language-dashboard.index');
         Route::get('/language-dashboard-export', [LanguageDashboardController::class, 'export'])->name('language-dashboard.export');
-        Route::get('/settings/theme', [ThemeController::class, 'edit'])->name('settings.theme.edit');
-        Route::put('/settings/theme', [ThemeController::class, 'update'])->name('settings.theme.update');
+        Route::redirect('/settings/theme', '/settings/appearance');
+        Route::get('/settings/{section}', [ThemeController::class, 'section'])->whereIn('section', ['general','appearance','payment'])->name('settings.edit');
+        Route::put('/settings/{section}', [ThemeController::class, 'updateSection'])->whereIn('section', ['general','appearance','payment'])->name('settings.update');
 
         Route::get('/language-leads-export', [LanguageLeadController::class,'export'])->middleware('permission:language_leads,export')->name('language-leads.export');
         Route::get('/language-consulting', [LanguageLeadController::class,'consulting'])->middleware('permission:language_consulting,view')->name('language-consulting.index');

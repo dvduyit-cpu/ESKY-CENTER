@@ -18,6 +18,7 @@
 <div><label class="form-label">Thời hạn</label><input class="form-control" type="datetime-local" name="scheduled_for" value="{{old('scheduled_for',now()->addDay()->format('Y-m-d\TH:i'))}}" required></div>
 <div><label class="form-label">Ưu tiên</label><select class="form-select" name="priority"><option value="normal">Bình thường</option><option value="high">Quan trọng</option><option value="low">Thấp</option></select></div>
 <div><label class="form-label">Nhắc trước</label><select class="form-select" name="reminder_days">@foreach([0,1,2,3,7,14,30] as $days)<option value="{{$days}}" @selected($days==1)>{{$days===0?'Đúng ngày':$days.' ngày'}}</option>@endforeach</select></div>
+<div class="row g-2"><div class="col-7"><label class="form-label">Lặp lại</label><select class="form-select" name="repeat_type"><option value="none">Không lặp</option><option value="weekly">Hàng tuần</option><option value="monthly">Hàng tháng</option></select></div><div class="col-5"><label class="form-label">Số kỳ</label><input class="form-control" type="number" name="repeat_count" value="12" min="1" max="60"></div></div>
 <div class="task-note-field"><label class="form-label">Nội dung task</label><textarea class="form-control" name="note" rows="3" maxlength="2000" placeholder="Yêu cầu, tài liệu và kết quả cần hoàn thành...">{{old('note')}}</textarea></div>
 <div class="task-submit"><button class="btn btn-primary" type="submit"><i class="bi bi-send-fill me-2"></i>Giao task</button></div>
 </form>

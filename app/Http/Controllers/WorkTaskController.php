@@ -73,6 +73,7 @@ class WorkTaskController extends Controller
             'priority'=>'required|in:low,normal,high', 'assignee_ids'=>'required|array|min:1',
             'assignee_ids.*'=>['integer', Rule::exists('users','id')->where('active',true)],
             'lead_id'=>'required|integer',
+            'repeat_months'=>'nullable|integer|min:1|max:60',
         ]);
         $ids = collect($data['assignee_ids'])->map(fn ($id)=>(int)$id)->unique();
         if (! $ids->contains((int) $data['lead_id'])) {
@@ -80,20 +81,55 @@ class WorkTaskController extends Controller
                 'lead_id' => 'Vui lòng chọn người chủ trì trong danh sách người nhận đã tích.',
             ]);
         }
-        $task = DB::transaction(function () use ($request, $data, $ids) {
-            $task = WorkTask::create(['created_by_id'=>$request->user()->id, 'title'=>$data['title'], 'description'=>$data['description'] ?? null, 'due_at'=>$data['due_at'], 'priority'=>$data['priority']]);
-            foreach ($ids as $id) $task->assignees()->create(['user_id'=>$id, 'is_lead'=>$id===(int)$data['lead_id']]);
-            $task->activities()->create(['user_id'=>$request->user()->id, 'action'=>'created', 'description'=>'Đã tạo và giao công việc cho '.$ids->count().' người.']);
-            return $task;
+        $repeatMonths = (int) ($data['repeat_months'] ?? 1);
+        $firstDueAt = \Carbon\Carbon::parse($data['due_at']);
+        DB::transaction(function () use ($request, $data, $ids, $repeatMonths, $firstDueAt) {
+            for ($index = 0; $index < $repeatMonths; $index++) {
+                $task = WorkTask::create(['created_by_id'=>$request->user()->id, 'title'=>$data['title'], 'description'=>$data['description'] ?? null, 'due_at'=>$firstDueAt->copy()->addMonthsNoOverflow($index), 'priority'=>$data['priority']]);
+                foreach ($ids as $id) $task->assignees()->create(['user_id'=>$id, 'is_lead'=>$id===(int)$data['lead_id']]);
+                $task->activities()->create(['user_id'=>$request->user()->id, 'action'=>'created', 'description'=>'Đã tạo và giao công việc cho '.$ids->count().' người.']);
+            }
         });
-        return redirect()->route('tasks.index')->with('success','Đã giao công việc.');
+        return redirect()->route('tasks.index')->with('success', $repeatMonths > 1 ? 'Đã giao '.$repeatMonths.' kỳ công việc hàng tháng.' : 'Đã giao công việc.');
     }
 
     public function show(Request $request, WorkTask $task): View
     {
         $this->ensureParticipant($request,$task);
         $task->load(['creator','assignees.user','comments.user','activities.user']);
-        return view('work-tasks.show', compact('task'));
+        $canEdit = $task->created_by_id === $request->user()->id
+            && $request->user()->allowed('work_tasks', 'update');
+        $users = $canEdit
+            ? User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email'])
+            : collect();
+        return view('work-tasks.show', compact('task', 'users', 'canEdit'));
+    }
+
+    public function update(Request $request, WorkTask $task): RedirectResponse
+    {
+        abort_unless($task->created_by_id === $request->user()->id, 403, 'Chỉ người giao mới được chỉnh sửa công việc.');
+        abort_if($task->closed_at, 422, 'Task đã đóng, hãy mở lại trước khi chỉnh sửa.');
+        $data = $request->validate([
+            'title' => 'required|string|max:180', 'description' => 'nullable|string|max:5000',
+            'due_at' => 'required|date', 'priority' => 'required|in:low,normal,high',
+            'assignee_ids' => 'required|array|min:1',
+            'assignee_ids.*' => ['integer', Rule::exists('users', 'id')->where('active', true)],
+            'lead_id' => 'required|integer',
+        ]);
+        $ids = collect($data['assignee_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        if (! $ids->contains((int) $data['lead_id'])) {
+            throw ValidationException::withMessages(['lead_id' => 'Vui lòng chọn người chủ trì trong danh sách người nhận đã tích.']);
+        }
+        DB::transaction(function () use ($request, $task, $data, $ids) {
+            $task->update(['title' => $data['title'], 'description' => $data['description'] ?? null,
+                'due_at' => $data['due_at'], 'priority' => $data['priority']]);
+            $task->assignees()->whereNotIn('user_id', $ids)->delete();
+            foreach ($ids as $id) {
+                $task->assignees()->updateOrCreate(['user_id' => $id], ['is_lead' => $id === (int) $data['lead_id']]);
+            }
+            $this->log($task, $request, 'Đã chỉnh sửa nội dung và phân công công việc.', 'updated');
+        });
+        return redirect()->route('tasks.show', $task)->with('success', 'Đã cập nhật công việc.');
     }
 
     public function acknowledge(Request $request, WorkTask $task): RedirectResponse
