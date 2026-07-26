@@ -23,13 +23,12 @@ class ProfileController extends Controller
             'name' => ['required','string','max:150'],
             'email' => ['required','email','max:150', Rule::unique('users')->ignore($user->id)],
             'phone' => ['nullable','string','max:30'],
-            'notifications_enabled' => ['nullable','boolean'],
         ]);
-        $before = $user->only(['name','email','notifications_enabled']);
-        $user->update(['name'=>$data['name'],'email'=>$data['email'],'notifications_enabled'=>$request->boolean('notifications_enabled')]);
+        $before = $user->only(['name','email']);
+        $user->update(['name'=>$data['name'],'email'=>$data['email']]);
         if ($user->personnel) $user->personnel->update(['name'=>$data['name'],'email'=>$data['email'],'phone'=>$data['phone']]);
-        ActivityLogger::log('profile','update','Cập nhật hồ sơ cá nhân',$user,$before,$user->only(['name','email','notifications_enabled']));
-        return back()->with('success','Đã cập nhật hồ sơ và cài đặt thông báo.');
+        ActivityLogger::log('profile','update','Cập nhật hồ sơ cá nhân',$user,$before,$user->only(['name','email']));
+        return back()->with('success','Đã cập nhật hồ sơ cá nhân.');
     }
 
     public function password(): View { return view('profile.password'); }

@@ -15,7 +15,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'personnel_id', 'language_collaborator_id', 'role_id', 'name', 'email', 'password', 'active',
-        'must_change_password', 'notifications_enabled', 'last_login_at', 'last_login_ip',
+        'must_change_password', 'notifications_enabled', 'theme_color', 'last_login_at', 'last_login_ip',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -32,6 +32,7 @@ class User extends Authenticatable
     public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class); }
     public function languageCollaborator(): BelongsTo { return $this->belongsTo(LanguageCollaborator::class)->withTrashed(); }
     public function upcomingPlans(): HasMany { return $this->hasMany(UpcomingPlan::class); }
+    public function preferences(): HasMany { return $this->hasMany(UserPreference::class); }
     public function permissions(): HasMany { return $this->hasMany(UserPermission::class); }
 
     public function isAdmin(): bool

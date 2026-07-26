@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
+use App\Support\UserPreferences;
 
 class AuthController extends Controller
 {
@@ -51,7 +52,7 @@ class AuthController extends Controller
             'created_at' => now(),
         ]);
 
-        return redirect()->route('welcome');
+        return redirect()->route(UserPreferences::landingRoute($user));
     }
 
     public function logout(Request $request): RedirectResponse

@@ -23,7 +23,7 @@
     <link href="{{ asset('css/list-selection.css') }}?v={{ filemtime(public_path('css/list-selection.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
 </head>
-<body data-theme="{{ $systemTheme ?? 'blue' }}" data-loading-style="{{ $systemLoadingStyle ?? 'center' }}">
+<body data-theme="{{ $systemTheme ?? 'blue' }}" data-loading-style="{{ $systemLoadingStyle ?? 'center' }}" data-sidebar-mode="{{ $personalSidebarMode ?? 'remember' }}" data-visual-effect="{{ $personalVisualEffect ?? $systemVisualEffect ?? 'standard' }}">
 <div class="app-shell">
     <aside class="sidebar">
         <div class="brand">
@@ -62,7 +62,7 @@
         @if($me->allowed('language_classes') || $me->allowed('language_programs') || $me->allowed('language_courses'))
         <div class="sidebar-label">Đào tạo</div>
         <nav class="sidebar-nav nav flex-column">
-            <a class="nav-link {{ request()->routeIs('teacher-classes.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>
+            @if($me->allowed('teacher_classes'))<a class="nav-link {{ request()->routeIs('teacher-classes.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>@endif
             @if($me->allowed('language_classes'))<a class="nav-link {{ request()->routeIs('language-classes.*') ? 'active' : '' }}" href="{{ route('language-classes.index') }}"><i class="bi bi-easel2-fill"></i> Quản lý lớp học</a>@endif
             @if($me->allowed('language_programs'))<a class="nav-link {{ request()->routeIs('language-programs.*') ? 'active' : '' }}" href="{{ route('language-programs.index') }}"><i class="bi bi-journal-richtext"></i> Chương trình & cấp độ</a>@endif
             @if($me->allowed('language_courses'))<a class="nav-link {{ request()->routeIs('language-center-courses.*') ? 'active' : '' }}" href="{{ route('language-center-courses.index') }}"><i class="bi bi-book-fill"></i> Khóa học trung tâm</a>@endif
@@ -94,7 +94,7 @@
             @if($me->allowed('users'))<a class="nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}"><i class="bi bi-person-circle"></i> Tài khoản</a>@endif
             @if($me->allowed('roles'))<a class="nav-link {{ request()->routeIs('roles.*') ? 'active' : '' }}" href="{{ route('roles.index') }}"><i class="bi bi-shield-check"></i> Vai trò & quyền</a>@endif
             @if($me->allowed('logs'))<a class="nav-link {{ request()->routeIs('logs.*') ? 'active' : '' }}" href="{{ route('logs.index') }}"><i class="bi bi-clock-history"></i> Nhật ký hệ thống</a>@endif
-            @if($me->isAdmin())<a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.edit','general') }}"><i class="bi bi-sliders"></i> Cấu hình phần mềm</a>@endif
+            @if($me->allowed('software_settings'))<a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.edit','general') }}"><i class="bi bi-sliders"></i> Cấu hình phần mềm</a>@endif
         </nav>
         @endif
         <div class="sidebar-label">Trợ giúp</div>
@@ -150,6 +150,7 @@
                 str_contains($routeName, 'permissions') => 'Phân quyền',
                 str_contains($routeName, 'import') => 'Nhập dữ liệu',
                 str_starts_with($routeName, 'profile.') => 'Cập nhật',
+                str_starts_with($routeName, 'personal-settings.') => 'Thiết lập',
                 str_starts_with($routeName, 'settings.') => 'Thiết lập',
                 default => 'Danh sách',
             };
@@ -160,7 +161,7 @@
                 $routeName === 'dashboard' => 'Tổng quan',
                 str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'KPI & báo cáo',
                 str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
-                str_starts_with($routeName, 'profile') => 'Tài khoản cá nhân',
+                str_starts_with($routeName, 'profile'), str_starts_with($routeName, 'personal-settings') => 'Tài khoản cá nhân',
                 default => 'Hệ thống',
             };
             $generalPage = match (true) {
@@ -183,30 +184,32 @@
                 str_starts_with($routeName, 'settings') => 'Cấu hình phần mềm',
                 $routeName === 'profile.password' => 'Đổi mật khẩu',
                 str_starts_with($routeName, 'profile') => 'Hồ sơ cá nhân',
+                str_starts_with($routeName, 'personal-settings') => 'Cài đặt cá nhân',
                 default => 'Trang hiện tại',
             };
         @endphp
         <header class="topbar">
             <div class="d-flex align-items-center gap-3"><button class="btn topbar-menu" data-sidebar-toggle title="Ẩn/hiện menu" aria-label="Ẩn hoặc hiện menu"><i class="bi bi-list fs-5"></i></button><div><div class="topbar-title">@yield('header', $systemName)</div><div class="topbar-path">@if($isLanguageCenter)<i class="bi bi-house-door me-1"></i> {{ $languageSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $languagePage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@else<i class="bi bi-house-door me-1"></i> {{ $generalSection }} <i class="bi bi-chevron-right mx-1"></i> {{ $generalPage }} <i class="bi bi-chevron-right mx-1 d-none d-md-inline"></i> <span class="d-none d-md-inline">{{ $pageAction }}</span>@endif</div></div></div>
-            <div class="dropdown topbar-reminders" data-realtime-notifications>
+            <div class="dropdown topbar-reminders" data-realtime-notifications data-user-id="{{auth()->id()}}" data-reverb-key="{{config('broadcasting.connections.reverb.key')}}" data-reverb-host="{{config('broadcasting.connections.reverb.client.host')}}" data-reverb-port="{{config('broadcasting.connections.reverb.client.port')}}" data-reverb-scheme="{{config('broadcasting.connections.reverb.client.scheme')}}">
     <button class="btn border-0 reminder-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Thông báo" aria-label="Thông báo">
         <i class="bi bi-bell fs-5"></i>
         <span class="reminder-count {{ $planReminders->isEmpty() ? 'd-none' : '' }}" data-notification-count>{{ $planReminders->count() }}</span>
     </button>
     <div class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-0 reminder-menu">
-        <div class="d-flex align-items-center justify-content-between px-3 py-3 border-bottom"><strong>Thông báo</strong><a class="small text-decoration-none" href="{{ route('profile.edit') }}">Cài đặt</a></div>
+        <div class="d-flex align-items-center justify-content-between px-3 py-3 border-bottom"><strong>Thông báo</strong><a class="small text-decoration-none" href="{{ route('personal-settings.edit') }}">Cài đặt</a></div>
         <div data-notification-items>
             @forelse($planReminders as $reminder)
             <a class="reminder-item text-decoration-none text-dark" href="{{ route('plans.index',['month'=>$reminder->scheduled_for->format('Y-m')]) }}"><i class="bi {{ $reminder->scheduled_for->isPast() ? 'bi-exclamation-circle-fill text-danger' : 'bi-bell-fill' }}"></i><span><strong>{{ $reminder->title }}</strong><small>{{ $reminder->scheduled_for->format('H:i d/m/Y') }}</small></span></a>
             @empty<div class="empty-state py-4"><i class="bi bi-bell-slash"></i><div class="small mt-2">Không có việc cần nhắc.</div></div>@endforelse
         </div>
-        <div class="px-3 py-2 border-top small text-muted">Tự cập nhật mỗi 15 giây</div>
+        <div class="px-3 py-2 border-top small text-muted"><i class="bi bi-broadcast-pin me-1"></i>Cập nhật tức thời</div>
     </div>
 </div>
 <div class="dropdown">
                 <button class="btn border-0 d-flex align-items-center gap-2" data-bs-toggle="dropdown"><span class="avatar">{{ mb_strtoupper(mb_substr($me->name,0,1)) }}</span><span class="d-none d-md-block text-start"><strong class="d-block small">{{ $me->name }}</strong><small class="text-muted">{{ $me->role?->name }}</small></span><i class="bi bi-chevron-down small"></i></button>
                 <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
                     <li><a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-person me-2"></i> Hồ sơ cá nhân</a></li>
+                    <li><a class="dropdown-item" href="{{ route('personal-settings.edit') }}"><i class="bi bi-sliders me-2"></i> Cài đặt cá nhân</a></li>
                     <li><a class="dropdown-item" href="{{ route('profile.password') }}"><i class="bi bi-key me-2"></i> Đổi mật khẩu</a></li>
                     <li><hr class="dropdown-divider"></li>
                     <li><form method="POST" action="{{ route('logout') }}">@csrf<button class="dropdown-item text-danger"><i class="bi bi-box-arrow-right me-2"></i> Đăng xuất</button></form></li>

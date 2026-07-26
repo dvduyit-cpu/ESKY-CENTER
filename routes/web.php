@@ -28,6 +28,7 @@ use App\Http\Controllers\LanguageTuitionController;
 use App\Http\Controllers\LanguageTargetController;
 use App\Http\Controllers\LanguageTargetSubmissionController;
 use App\Http\Controllers\RealtimeController;
+use App\Http\Controllers\PersonalSettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -39,6 +40,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('/personal-settings', [PersonalSettingsController::class, 'edit'])->name('personal-settings.edit');
+    Route::put('/personal-settings', [PersonalSettingsController::class, 'update'])->name('personal-settings.update');
     Route::get('/change-password', [ProfileController::class, 'password'])->name('profile.password');
     Route::put('/change-password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 
@@ -61,13 +64,13 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/plans/{plan}', [WelcomeController::class, 'destroy'])->name('plans.destroy');
         Route::get('/', [SystemDashboardController::class, 'index'])->name('dashboard');
         Route::get('/realtime/status', [RealtimeController::class, 'status'])->name('realtime.status');
-        Route::get('/system-dashboard-export', [SystemDashboardController::class, 'export'])->name('dashboard.export');
+        Route::get('/system-dashboard-export', [SystemDashboardController::class, 'export'])->middleware('permission:system_dashboard,export')->name('dashboard.export');
         Route::get('/kpi-dashboard', [DashboardController::class, 'index'])->name('kpi-dashboard.index');
         Route::get('/language-dashboard', [LanguageDashboardController::class, 'index'])->name('language-dashboard.index');
-        Route::get('/language-dashboard-export', [LanguageDashboardController::class, 'export'])->name('language-dashboard.export');
+        Route::get('/language-dashboard-export', [LanguageDashboardController::class, 'export'])->middleware('permission:language_dashboard_all,export')->name('language-dashboard.export');
         Route::redirect('/settings/theme', '/settings/appearance');
-        Route::get('/settings/{section}', [ThemeController::class, 'section'])->whereIn('section', ['general','appearance','payment'])->name('settings.edit');
-        Route::put('/settings/{section}', [ThemeController::class, 'updateSection'])->whereIn('section', ['general','appearance','payment'])->name('settings.update');
+        Route::get('/settings/{section}', [ThemeController::class, 'section'])->middleware('permission:software_settings,view')->whereIn('section', ['general','appearance','payment'])->name('settings.edit');
+        Route::put('/settings/{section}', [ThemeController::class, 'updateSection'])->middleware('permission:software_settings,update')->whereIn('section', ['general','appearance','payment'])->name('settings.update');
 
         Route::get('/language-leads-export', [LanguageLeadController::class,'export'])->middleware('permission:language_leads,export')->name('language-leads.export');
         Route::get('/language-consulting', [LanguageLeadController::class,'consulting'])->middleware('permission:language_consulting,view')->name('language-consulting.index');
@@ -79,16 +82,16 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::resource('language-programs', LanguageProgramController::class)->except('show')->middleware('permission:language_programs,view')->middlewareFor(['create','store'],'permission:language_programs,create')->middlewareFor(['edit','update'],'permission:language_programs,update')->middlewareFor('destroy','permission:language_programs,delete');
         Route::post('/language-programs/{languageProgram}/levels', [LanguageProgramController::class, 'storeLevel'])->middleware('permission:language_programs,create')->name('language-programs.levels.store');
         Route::delete('/language-programs/{languageProgram}/levels/{level}', [LanguageProgramController::class, 'destroyLevel'])->middleware('permission:language_programs,delete')->name('language-programs.levels.destroy');
-        Route::get('/teacher-classes',[LanguageClassController::class,'teacherIndex'])->name('teacher-classes.index');
-        Route::get('/teacher-classes/{languageClass}/gradebook',[LanguageClassController::class,'gradebook'])->name('teacher-classes.gradebook');
-        Route::post('/teacher-classes/{languageClass}/enrollments',[LanguageClassController::class,'teacherEnroll'])->name('teacher-classes.enrollments.store');
-        Route::put('/teacher-classes/{languageClass}/progress',[LanguageClassController::class,'saveMonthlyProgress'])->name('teacher-classes.progress.update');
-        Route::patch('/teacher-classes/{languageClass}/sessions',[LanguageClassController::class,'updateCompletedSessions'])->name('teacher-classes.sessions.update');
-        Route::patch('/teacher-classes/{languageClass}/completion-request',[LanguageClassController::class,'requestCompletion'])->name('teacher-classes.completion.request');
-        Route::patch('/teacher-classes/{languageClass}/close',[LanguageClassController::class,'closeClass'])->name('teacher-classes.close');
-        Route::post('/teacher-classes/{languageClass}/enrollments/{enrollment}/scores',[LanguageClassController::class,'storeScore'])->name('teacher-classes.scores.store');
-        Route::delete('/teacher-classes/{languageClass}/enrollments/{enrollment}/scores/{score}',[LanguageClassController::class,'destroyScore'])->name('teacher-classes.scores.destroy');
-        Route::patch('/teacher-classes/{languageClass}/enrollments/{enrollment}/status',[LanguageClassController::class,'updateEnrollmentStatus'])->name('teacher-classes.enrollments.status');
+        Route::get('/teacher-classes',[LanguageClassController::class,'teacherIndex'])->middleware('permission:teacher_classes,view')->name('teacher-classes.index');
+        Route::get('/teacher-classes/{languageClass}/gradebook',[LanguageClassController::class,'gradebook'])->middleware('permission:teacher_classes,view')->name('teacher-classes.gradebook');
+        Route::post('/teacher-classes/{languageClass}/enrollments',[LanguageClassController::class,'teacherEnroll'])->middleware('permission:teacher_classes,update')->name('teacher-classes.enrollments.store');
+        Route::put('/teacher-classes/{languageClass}/progress',[LanguageClassController::class,'saveMonthlyProgress'])->middleware('permission:teacher_classes,update')->name('teacher-classes.progress.update');
+        Route::patch('/teacher-classes/{languageClass}/sessions',[LanguageClassController::class,'updateCompletedSessions'])->middleware('permission:teacher_classes,update')->name('teacher-classes.sessions.update');
+        Route::patch('/teacher-classes/{languageClass}/completion-request',[LanguageClassController::class,'requestCompletion'])->middleware('permission:teacher_classes,update')->name('teacher-classes.completion.request');
+        Route::patch('/teacher-classes/{languageClass}/close',[LanguageClassController::class,'closeClass'])->middleware('permission:teacher_classes,update')->name('teacher-classes.close');
+        Route::post('/teacher-classes/{languageClass}/enrollments/{enrollment}/scores',[LanguageClassController::class,'storeScore'])->middleware('permission:teacher_classes,update')->name('teacher-classes.scores.store');
+        Route::delete('/teacher-classes/{languageClass}/enrollments/{enrollment}/scores/{score}',[LanguageClassController::class,'destroyScore'])->middleware('permission:teacher_classes,update')->name('teacher-classes.scores.destroy');
+        Route::patch('/teacher-classes/{languageClass}/enrollments/{enrollment}/status',[LanguageClassController::class,'updateEnrollmentStatus'])->middleware('permission:teacher_classes,update')->name('teacher-classes.enrollments.status');
         Route::resource('language-classes', LanguageClassController::class)->except('show')->middleware('permission:language_classes,view')->middlewareFor(['create','store'],'permission:language_classes,create')->middlewareFor(['edit','update'],'permission:language_classes,update')->middlewareFor('destroy','permission:language_classes,delete');
         Route::post('/language-classes/{languageClass}/enrollments', [LanguageClassController::class, 'enroll'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.store');
         Route::delete('/language-classes/{languageClass}/enrollments/{enrollment}', [LanguageClassController::class, 'unenroll'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.destroy');
@@ -121,7 +124,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/personnels/{personnel}', [PersonnelController::class, 'destroy'])->middleware('permission:personnel,delete')->name('personnels.destroy');
         Route::delete('/personnels', [PersonnelController::class, 'bulkDestroy'])->middleware('permission:personnel,delete')->name('personnels.bulk-destroy');
         Route::patch('/personnels/{id}/restore', [PersonnelController::class, 'restore'])->middleware('permission:personnel,delete')->name('personnels.restore');
-        Route::delete('/personnels/{id}/force', [PersonnelController::class, 'forceDestroy'])->name('personnels.force-destroy');
+        Route::delete('/personnels/{id}/force', [PersonnelController::class, 'forceDestroy'])->middleware('permission:personnel,delete')->name('personnels.force-destroy');
 
         Route::get('/users', [UserController::class, 'index'])->middleware('permission:users,view')->name('users.index');
         Route::get('/users/create', [UserController::class, 'create'])->middleware('permission:users,create')->name('users.create');
@@ -153,7 +156,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/courses/{course}', [CourseController::class, 'destroy'])->middleware('permission:courses,delete')->name('courses.destroy');
         Route::delete('/courses', [CourseController::class, 'bulkDestroy'])->middleware('permission:courses,delete')->name('courses.bulk-destroy');
         Route::patch('/courses/{id}/restore', [CourseController::class, 'restore'])->middleware('permission:courses,delete')->name('courses.restore');
-        Route::delete('/courses/{id}/force', [CourseController::class, 'forceDestroy'])->name('courses.force-destroy');
+        Route::delete('/courses/{id}/force', [CourseController::class, 'forceDestroy'])->middleware('permission:courses,delete')->name('courses.force-destroy');
 
         Route::get('/kpis', [KpiPlanController::class, 'index'])->middleware('permission:kpis,view')->name('kpis.index');
         Route::get('/kpis/create', [KpiPlanController::class, 'create'])->middleware('permission:kpis,create')->name('kpis.create');

@@ -19,9 +19,15 @@ class RealtimeController extends Controller
         $submissionUpdates = $since && ($user->isAdmin() || $user->allowed('language_target_submissions')) ? LanguageTargetSubmission::where('submitted_by',$user->id)->whereHas('lead',fn($q)=>$q->where('updated_at','>',$since))->count() : 0;
         $pendingReceipts = $user->isAdmin() || $user->allowed('language_tuition') ? LanguageTuitionPayment::where('receipt_status','pending')->count() : 0;
         $newTargets = $since && ($user->isAdmin() || $user->allowed('language_targets')) ? LanguageMonthlyTargetRecord::where('updated_at','>',$since)->count() : 0;
-        $workTasksDue = $user->allowed('work_tasks') ? WorkTask::query()
-            ->whereNull('closed_at')->whereBetween('due_at', [now(), now()->addDays(3)->endOfDay()])
-            ->whereHas('assignees', fn ($query) => $query->where('user_id', $user->id)->whereNull('completed_at'))->count() : 0;
+        $workTasks = $user->allowed('work_tasks') ? WorkTask::query()
+            ->whereNull('closed_at')
+            ->whereHas('assignees', fn ($query) => $query->where('user_id', $user->id)->whereNull('completed_at'))
+            ->where(fn ($query) => $query
+                ->whereHas('assignees', fn ($assignee) => $assignee->where('user_id', $user->id)->whereNull('acknowledged_at'))
+                ->orWhereBetween('due_at', [now(), now()->addDays(3)->endOfDay()]))
+            ->orderBy('due_at')
+            ->get(['id', 'title', 'due_at']) : collect();
+        $workTasksDue = $workTasks->count();
 
         $reminders = UpcomingPlan::query()->where('user_id',$user->id)->whereNull('completed_at')->where('scheduled_for','<=',now()->addDays(30)->endOfDay())->orderBy('scheduled_for')->get()->filter->is_due_for_reminder->take(10)->values();
         $newPlans = $since ? UpcomingPlan::query()->where('user_id',$user->id)->where('created_at','>',$since)->count() : 0;
@@ -30,7 +36,7 @@ class RealtimeController extends Controller
             ['key'=>'submissions','label'=>'Chỉ tiêu gửi đã được cập nhật','count'=>$submissionUpdates,'url'=>route('language-target-submissions.index')],
             ['key'=>'receipts','label'=>'Phiếu thu chờ bổ sung','count'=>$pendingReceipts,'url'=>route('language-tuition.index',['status'=>'pending_receipt'])],
             ['key'=>'targets','label'=>'Chỉ tiêu trung tâm mới','count'=>$newTargets,'url'=>route('language-targets.index')],
-            ['key'=>'work_tasks','label'=>'Công việc sắp đến hạn','count'=>$workTasksDue,'url'=>route('tasks.index',['status'=>'pending'])],
+            ['key'=>'work_tasks','label'=>'Công việc mới hoặc sắp đến hạn','count'=>$workTasksDue,'names'=>$workTasks->take(3)->pluck('title')->values(),'url'=>route('tasks.index',['status'=>'unread'])],
         ])->filter(fn($item)=>$item['count']>0)->values();
 
         return response()->json([

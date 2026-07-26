@@ -99,12 +99,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const selected = selectedRows();
             if (!selected.length || !confirm(`Xóa ${selected.length} dòng đã chọn?`)) return;
             deleteButton.disabled = true;
+            let failed = false;
             for (const row of selected) {
                 const form = deleteForms(row)[0];
-                const response = await fetch(form.action, {method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'XMLHttpRequest'}});
-                if (!response.ok) { alert('Có dòng không thể xóa do phân quyền hoặc đang được sử dụng.'); break; }
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                    redirect: 'manual',
+                });
+                if (!response.ok && response.type !== 'opaqueredirect') {
+                    failed = true;
+                    alert('Có dòng không thể xóa do phân quyền hoặc đang được sử dụng.');
+                    break;
+                }
             }
-            window.location.reload();
+            if (!failed) window.location.reload();
+            else refresh();
         });
         refresh();
     });
@@ -148,6 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const refresh = () => { const list=selected(); cards.forEach((card,index)=>card.classList.toggle('is-selected',boxes[index].checked)); count.textContent=`${list.length} đã chọn`; exportButton.disabled=!list.length; all.checked=list.length===cards.length; all.indeterminate=list.length>0&&list.length<cards.length; if(deleteButton)deleteButton.disabled=!list.length||list.some(card=>!card.querySelector('[data-card-delete]')); };
     boxes.forEach(box => box.addEventListener('change', refresh)); all.addEventListener('change',()=>{boxes.forEach(box=>box.checked=all.checked);refresh()});
     exportButton.addEventListener('click',()=>{const rows=selected().map(card=>'"'+card.innerText.replace(/\s+/g,' ').trim().replaceAll('"','""')+'"');const blob=new Blob(['\uFEFFNội dung\r\n'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='cong-viec-da-chon.csv';link.click();URL.revokeObjectURL(link.href)});
-    deleteButton?.addEventListener('click',async()=>{const list=selected();if(!confirm(`Xóa ${list.length} công việc đã chọn?`))return;for(const card of list){const form=card.querySelector('[data-card-delete]');const response=await fetch(form.action,{method:'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest'}});if(!response.ok){alert('Có công việc không thể xóa.');break}}location.reload()});
+    deleteButton?.addEventListener('click',async()=>{const list=selected();if(!confirm(`Xóa ${list.length} công việc đã chọn?`))return;let failed=false;for(const card of list){const form=card.querySelector('[data-card-delete]');const response=await fetch(form.action,{method:'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest'},redirect:'manual'});if(!response.ok&&response.type!=='opaqueredirect'){failed=true;alert('Có công việc không thể xóa.');break}}if(!failed)location.reload()});
     refresh();
 });

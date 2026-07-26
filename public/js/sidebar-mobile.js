@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const desktopQuery = window.matchMedia('(min-width: 992px)');
     const desktopStorageKey = 'esky.sidebar.hidden';
+    const sidebarMode = document.body.dataset.sidebarMode || 'remember';
     const groupStorageKey = 'esky.sidebar.groups';
     const toggleButtons = document.querySelectorAll('[data-sidebar-toggle]');
 
@@ -70,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    if (desktopQuery.matches && localStorage.getItem(desktopStorageKey) === '1') {
+    if (desktopQuery.matches && (sidebarMode === 'collapsed' || (sidebarMode === 'remember' && localStorage.getItem(desktopStorageKey) === '1'))) {
         document.body.classList.add('sidebar-desktop-hidden');
     }
     syncDesktopButton();
@@ -79,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (desktopQuery.matches) {
             sidebar.classList.remove('open');
             document.body.classList.toggle('sidebar-desktop-hidden');
-            localStorage.setItem(desktopStorageKey, document.body.classList.contains('sidebar-desktop-hidden') ? '1' : '0');
+            if (sidebarMode === 'remember') localStorage.setItem(desktopStorageKey, document.body.classList.contains('sidebar-desktop-hidden') ? '1' : '0');
             syncDesktopButton();
         } else {
             window.setTimeout(syncMobile, 0);

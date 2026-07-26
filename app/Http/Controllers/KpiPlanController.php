@@ -127,7 +127,7 @@ class KpiPlanController extends Controller
 
     public function editTarget(KpiPlan $plan, KpiTarget $target): View
     {
-        abort_unless($target->plan_id === $plan->id, 404);
+        abort_unless((int) $target->plan_id === (int) $plan->id, 404);
         return view('kpis.target-form', [
             'plan' => $plan,
             'target' => $target,
@@ -138,7 +138,7 @@ class KpiPlanController extends Controller
 
     public function updateTarget(Request $request, KpiPlan $plan, KpiTarget $target): RedirectResponse
     {
-        abort_unless($target->plan_id === $plan->id, 404);
+        abort_unless((int) $target->plan_id === (int) $plan->id, 404);
         $data = $this->targetData($request);
         $this->guardDuplicate($plan, $data, $target);
         $before = $target->toArray();
@@ -149,7 +149,7 @@ class KpiPlanController extends Controller
 
     public function destroyTarget(KpiPlan $plan, KpiTarget $target): RedirectResponse
     {
-        abort_unless($target->plan_id === $plan->id, 404);
+        abort_unless((int) $target->plan_id === (int) $plan->id, 404);
         $target->delete();
         ActivityLogger::log('kpis', 'delete_target', 'Xóa mềm chỉ tiêu', $target);
         return back()->with('success', 'Đã xóa chỉ tiêu.');

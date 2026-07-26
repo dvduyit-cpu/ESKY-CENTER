@@ -23,7 +23,7 @@
     <div class="col-lg-2 col-md-4 d-flex align-items-end"><button class="btn btn-primary w-100"><i class="bi bi-filter"></i>Xem tổng quan</button></div>
 </form>
 
-<div class="system-section-title"><span><i class="bi bi-cash-stack"></i></span><div><h5>Học phí thu – chi</h5><small>Số liệu trong {{$selectedPeriod}}</small></div><div class="ms-auto d-flex gap-2"><a class="btn btn-sm btn-outline-success" href="{{route('language-dashboard.export',request()->query())}}"><i class="bi bi-file-earmark-excel"></i>Xuất tổng quan</a>@if(auth()->user()->allowed('language_tuition'))<a class="btn btn-sm btn-outline-primary" href="{{route('language-tuition.index')}}">Chi tiết học phí</a>@endif</div></div>
+<div class="system-section-title"><span><i class="bi bi-cash-stack"></i></span><div><h5>Học phí thu – chi</h5><small>Số liệu trong {{$selectedPeriod}}</small></div><div class="ms-auto d-flex gap-2">@if(auth()->user()->allowed('language_dashboard_all','export'))<a class="btn btn-sm btn-outline-success" href="{{route('language-dashboard.export',request()->query())}}"><i class="bi bi-file-earmark-excel"></i>Xuất tổng quan</a>@endif @if(auth()->user()->allowed('language_tuition'))<a class="btn btn-sm btn-outline-primary" href="{{route('language-tuition.index')}}">Chi tiết học phí</a>@endif</div></div>
 <div class="row g-3 mb-4">
     @foreach([
         ['Phải thu',$financial['receivable'],'bi-receipt','primary'],

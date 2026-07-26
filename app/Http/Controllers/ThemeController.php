@@ -12,17 +12,18 @@ use Illuminate\View\View;
 
 class ThemeController extends Controller
 {
-    public const THEMES = ['blue','navy','azure','sky','cyan','teal','mint','emerald','green','lime','olive','yellow','amber','orange','coral','red','rose','pink','fuchsia','purple','violet','indigo','brown','slate','graphite'];
+    public const THEMES = ['white','gradient-ocean','gradient-aurora','gradient-sunset','gradient-galaxy','gradient-berry','gradient-forest','gradient-candy','gradient-fire','pastel-blue','pastel-sky','pastel-mint','pastel-green','pastel-lavender','pastel-purple','pastel-pink','pastel-peach','pastel-yellow','pastel-gray','blue','navy','azure','sky','cyan','teal','mint','emerald','green','lime','olive','yellow','amber','orange','coral','red','rose','pink','fuchsia','purple','violet','indigo','brown','slate','graphite'];
 
     public function section(Request $request, string $section): View
     {
-        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless($request->user()->allowed('software_settings','view'), 403);
         return view('settings.section', [
             'section' => $section,
             'theme' => SystemSetting::valueOf('theme_color', 'blue'),
             'softwareName' => SystemSetting::valueOf('software_name', 'E-SKY CENTER'),
             'logoPath' => SystemSetting::valueOf('logo_path'),
             'loadingStyle' => SystemSetting::valueOf('loading_style', 'center'),
+            'visualEffect' => SystemSetting::valueOf('visual_effect', 'standard'),
             'footerText' => SystemSetting::valueOf('footer_text', '© 2026 E-sky center v1.0.0 | Phát triển bởi Đặng Việt Duy'),
             'defaultPerPage' => (int) SystemSetting::valueOf('default_per_page', 10),
             'bankEnabled' => SystemSetting::valueOf('bank_enabled', '0') === '1',
@@ -36,7 +37,7 @@ class ThemeController extends Controller
 
     public function updateSection(Request $request, string $section): RedirectResponse
     {
-        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless($request->user()->allowed('software_settings','update'), 403);
         if ($section === 'general') {
             $data = $request->validate([
                 'software_name' => 'required|string|max:80', 'footer_text' => 'required|string|max:200',
@@ -53,7 +54,7 @@ class ThemeController extends Controller
             $this->saveSettings(['software_name'=>trim($data['software_name']), 'footer_text'=>trim($data['footer_text']),
                 'default_per_page'=>(string)$data['default_per_page'], 'logo_path'=>$logoPath]);
         } elseif ($section === 'appearance') {
-            $data = $request->validate(['theme_color'=>['required',Rule::in(self::THEMES)], 'loading_style'=>['required',Rule::in(['center','top'])]]);
+            $data = $request->validate(['theme_color'=>['required',Rule::in(self::THEMES)], 'loading_style'=>['required',Rule::in(['center','top'])], 'visual_effect'=>['required',Rule::in(['standard','soft','glass','glow'])]]);
             $this->saveSettings($data);
         } else {
             $data = $request->validate([

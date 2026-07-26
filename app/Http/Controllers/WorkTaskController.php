@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use App\Support\RealtimeNotifier;
 
 class WorkTaskController extends Controller
 {
@@ -90,6 +91,7 @@ class WorkTaskController extends Controller
                 $task->activities()->create(['user_id'=>$request->user()->id, 'action'=>'created', 'description'=>'Đã tạo và giao công việc cho '.$ids->count().' người.']);
             }
         });
+        RealtimeNotifier::users($ids, ($repeatMonths > 1 ? 'Bạn được giao công việc định kỳ: ' : 'Bạn được giao công việc: ').$data['title']);
         return redirect()->route('tasks.index')->with('success', $repeatMonths > 1 ? 'Đã giao '.$repeatMonths.' kỳ công việc hàng tháng.' : 'Đã giao công việc.');
     }
 
@@ -108,7 +110,7 @@ class WorkTaskController extends Controller
     public function update(Request $request, WorkTask $task): RedirectResponse
     {
         abort_unless($task->created_by_id === $request->user()->id, 403, 'Chỉ người giao mới được chỉnh sửa công việc.');
-        abort_if($task->closed_at, 422, 'Task đã đóng, hãy mở lại trước khi chỉnh sửa.');
+        if ($task->closed_at) return back()->with('warning', 'Task đã đóng. Chỉ người giao việc mới có thể mở lại task.');
         $data = $request->validate([
             'title' => 'required|string|max:180', 'description' => 'nullable|string|max:5000',
             'due_at' => 'required|date', 'priority' => 'required|in:low,normal,high',
@@ -129,44 +131,49 @@ class WorkTaskController extends Controller
             }
             $this->log($task, $request, 'Đã chỉnh sửa nội dung và phân công công việc.', 'updated');
         });
+        RealtimeNotifier::users($ids, 'Đã cập nhật công việc: '.$task->title);
         return redirect()->route('tasks.show', $task)->with('success', 'Đã cập nhật công việc.');
     }
 
     public function acknowledge(Request $request, WorkTask $task): RedirectResponse
     {
-        abort_if($task->closed_at, 422, 'Task đã đóng, hãy mở lại trước khi cập nhật.');
+        if ($task->closed_at) return back()->with('warning', 'Task đã đóng. Bạn không thể thay đổi xác nhận nhận việc.');
         $assignment = $this->assignment($request,$task);
         $assignment->update(['acknowledged_at'=>$assignment->acknowledged_at ? null : now()]);
         $this->log($task,$request,$assignment->acknowledged_at ? 'Đã xác nhận nhận công việc.' : 'Đã bỏ xác nhận nhận công việc.','acknowledged');
+        RealtimeNotifier::user($task->created_by_id, $request->user()->name.' vừa cập nhật xác nhận: '.$task->title);
         return back()->with('success','Đã cập nhật xác nhận.');
     }
 
     public function complete(Request $request, WorkTask $task): RedirectResponse
     {
-        abort_if($task->closed_at, 422, 'Task đã đóng, hãy mở lại trước khi cập nhật.');
+        if ($task->closed_at) return back()->with('warning', 'Task đã đóng. Chỉ người giao việc mới có thể mở lại task.');
         $assignment = $this->assignment($request,$task);
         $data = $request->validate(['note'=>'nullable|string|max:2000']);
         $assignment->update(['completed_at'=>$assignment->completed_at ? null : now(), 'note'=>$data['note'] ?? $assignment->note]);
         $this->log($task,$request,$assignment->completed_at ? 'Đã hoàn thành công việc.' : 'Đã mở lại công việc.','status');
+        RealtimeNotifier::user($task->created_by_id, $request->user()->name.' vừa cập nhật trạng thái: '.$task->title);
         return back()->with('success','Đã cập nhật trạng thái thực hiện.');
     }
 
     public function comment(Request $request, WorkTask $task): RedirectResponse
     {
         $this->ensureParticipant($request,$task);
-        abort_if($task->closed_at, 422, 'Task đã đóng, hãy mở lại trước khi phản hồi.');
+        if ($task->closed_at) return back()->with('warning', 'Task đã đóng. Không thể gửi thêm phản hồi.');
         $data=$request->validate(['body'=>'required|string|max:3000']);
         $task->comments()->create(['user_id'=>$request->user()->id,'body'=>$data['body']]);
         $this->log($task,$request,'Đã gửi một phản hồi.','comment');
+        RealtimeNotifier::users($this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id), 'Phản hồi mới trong công việc: '.$task->title);
         return back()->with('success','Đã gửi phản hồi.');
     }
 
     public function close(Request $request, WorkTask $task): RedirectResponse
     {
-        $this->ensureParticipant($request, $task);
-        $canClose = $task->created_by_id === $request->user()->id
-            || $task->assignees()->where('user_id', $request->user()->id)->where('is_lead', true)->exists();
-        abort_unless($canClose, 403, 'Chỉ người giao hoặc người chủ trì được đóng task.');
+        abort_unless(
+            $task->created_by_id === $request->user()->id,
+            403,
+            'Chỉ người giao công việc mới được đóng hoặc mở lại task.'
+        );
 
         if (! $task->closed_at && $task->assignees()->whereNull('completed_at')->exists()) {
             throw ValidationException::withMessages(['task' => 'Chỉ có thể đóng khi tất cả người nhận đã hoàn thành.']);
@@ -175,13 +182,16 @@ class WorkTaskController extends Controller
         $closing = ! $task->closed_at;
         $task->update(['closed_at' => $closing ? now() : null, 'closed_by_id' => $closing ? $request->user()->id : null]);
         $this->log($task, $request, $closing ? 'Đã đóng task.' : 'Đã mở lại task.', 'closed');
+        RealtimeNotifier::users($this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id), ($closing ? 'Đã đóng công việc: ' : 'Đã mở lại công việc: ').$task->title);
 
         return redirect()->route('tasks.show', $task)->with('success', $closing ? 'Đã đóng task.' : 'Đã mở lại task.');
     }
     public function destroy(Request $request, WorkTask $task): RedirectResponse
     {
         abort_unless($task->created_by_id === $request->user()->id, 403, 'Chỉ người giao mới được xóa công việc.');
+        $recipients = $this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id);
         $task->delete();
+        RealtimeNotifier::users($recipients, 'Đã xóa công việc: '.$task->title);
         return redirect()->route('tasks.index')->with('success','Đã xóa công việc.');
     }
 
@@ -191,4 +201,6 @@ class WorkTaskController extends Controller
     { return $task->assignees()->where('user_id',$request->user()->id)->firstOrFail(); }
     private function log(WorkTask $task, Request $request, string $description, string $action): void
     { $task->activities()->create(['user_id'=>$request->user()->id,'action'=>$action,'description'=>$description]); }
+    private function participantIds(WorkTask $task)
+    { return $task->assignees()->pluck('user_id')->push($task->created_by_id)->unique(); }
 }

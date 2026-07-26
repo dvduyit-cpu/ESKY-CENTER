@@ -2,13 +2,12 @@
 @section('title','Hồ sơ cá nhân')
 @section('header','Hồ sơ cá nhân')
 @section('content')
-<div class="d-flex justify-content-between align-items-center mb-4"><div><h1 class="page-title">Hồ sơ cá nhân</h1><div class="page-subtitle">Cập nhật thông tin và tùy chọn thông báo của tài khoản.</div></div></div>
+<div class="d-flex justify-content-between align-items-center mb-4"><div><h1 class="page-title">Hồ sơ cá nhân</h1><div class="page-subtitle">Cập nhật thông tin liên hệ của tài khoản.</div></div><a class="btn btn-outline-primary" href="{{route('personal-settings.edit')}}"><i class="bi bi-sliders me-2"></i>Cài đặt cá nhân</a></div>
 <div class="row g-4">
 <div class="col-lg-4"><div class="card card-soft"><div class="card-body text-center p-4"><div class="avatar mx-auto mb-3" style="width:86px;height:86px;font-size:32px">{{mb_strtoupper(mb_substr($user->name,0,1))}}</div><h4>{{$user->name}}</h4><span class="badge-soft badge-info">{{$user->role?->name}}</span><hr><div class="text-start small text-muted"><div class="mb-2"><i class="bi bi-briefcase me-2"></i>{{$user->personnel?->position ?: 'Chưa cập nhật chức vụ'}}</div><div><i class="bi bi-clock me-2"></i>Đăng nhập gần nhất: {{$user->last_login_at?->format('d/m/Y H:i') ?: 'Chưa có'}}</div></div></div></div></div>
 <div class="col-lg-8"><div class="card card-soft"><div class="card-body p-4">
 <form method="POST" action="{{route('profile.update')}}">@csrf @method('PUT')
 <div class="row g-3"><div class="col-md-6"><label class="form-label">Họ tên</label><input class="form-control" name="name" value="{{old('name',$user->name)}}" required></div><div class="col-md-6"><label class="form-label">Email</label><input class="form-control" type="email" name="email" value="{{old('email',$user->email)}}" required></div><div class="col-md-6"><label class="form-label">Số điện thoại</label><input class="form-control" name="phone" value="{{old('phone',$user->personnel?->phone)}}"></div><div class="col-md-6"><label class="form-label">Vai trò</label><input class="form-control" value="{{$user->role?->name}}" disabled></div></div>
-<div class="notification-setting mt-4"><div><span class="notification-setting-icon"><i class="bi bi-bell-fill"></i></span><span><strong>Thông báo theo thời gian thực</strong><small>Cập nhật chuông nhắc việc tự động mỗi 15 giây.</small></span></div><div class="form-check form-switch"><input type="hidden" name="notifications_enabled" value="0"><input class="form-check-input" type="checkbox" role="switch" id="notifications_enabled" name="notifications_enabled" value="1" @checked(old('notifications_enabled',$user->notifications_enabled))><label class="form-check-label" for="notifications_enabled">Bật</label></div></div>
 <div class="mt-4"><button class="btn btn-primary"><i class="bi bi-save me-2"></i>Lưu hồ sơ</button></div>
 </form></div></div></div>
 </div>
