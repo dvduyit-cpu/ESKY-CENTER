@@ -29,12 +29,15 @@ use App\Http\Controllers\LanguageTargetController;
 use App\Http\Controllers\LanguageTargetSubmissionController;
 use App\Http\Controllers\RealtimeController;
 use App\Http\Controllers\PersonalSettingsController;
+use App\Http\Controllers\ZaloAuthController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
+    Route::get('/auth/zalo', [ZaloAuthController::class, 'login'])->name('zalo.login');
 });
+Route::get('/auth/zalo/callback', [ZaloAuthController::class, 'callback'])->name('zalo.callback');
 
 Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
@@ -42,6 +45,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('/personal-settings', [PersonalSettingsController::class, 'edit'])->name('personal-settings.edit');
     Route::put('/personal-settings', [PersonalSettingsController::class, 'update'])->name('personal-settings.update');
+    Route::get('/personal-settings/zalo/connect', [ZaloAuthController::class, 'connect'])->name('zalo.connect');
+    Route::delete('/personal-settings/zalo', [ZaloAuthController::class, 'disconnect'])->name('zalo.disconnect');
     Route::get('/change-password', [ProfileController::class, 'password'])->name('profile.password');
     Route::put('/change-password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 

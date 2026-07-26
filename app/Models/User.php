@@ -14,7 +14,7 @@ class User extends Authenticatable
     use HasFactory, Notifiable, SoftDeletes;
 
     protected $fillable = [
-        'personnel_id', 'language_collaborator_id', 'role_id', 'name', 'email', 'password', 'active',
+        'personnel_id', 'language_collaborator_id', 'role_id', 'name', 'email', 'zalo_id', 'zalo_name', 'zalo_linked_at', 'password', 'active',
         'must_change_password', 'notifications_enabled', 'theme_color', 'last_login_at', 'last_login_ip',
     ];
 
@@ -24,7 +24,7 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed', 'active' => 'boolean',
-            'must_change_password' => 'boolean', 'notifications_enabled' => 'boolean', 'last_login_at' => 'datetime',
+            'must_change_password' => 'boolean', 'notifications_enabled' => 'boolean', 'last_login_at' => 'datetime', 'zalo_linked_at' => 'datetime',
         ];
     }
 

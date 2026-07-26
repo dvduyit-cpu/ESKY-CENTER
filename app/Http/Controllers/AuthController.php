@@ -19,6 +19,12 @@ class AuthController extends Controller
 
     public function login(Request $request): RedirectResponse
     {
+        $email = trim((string) $request->input('email'));
+        if ($email !== '' && ! str_contains($email, '@')) {
+            $email .= '@'.config('auth.login_email_domain');
+        }
+        $request->merge(['email' => mb_strtolower($email)]);
+
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],

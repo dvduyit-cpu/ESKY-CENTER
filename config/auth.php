@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'login_email_domain' => env('LOGIN_EMAIL_DOMAIN', 'bdu.edu.vn'),
     'defaults' => ['guard' => env('AUTH_GUARD', 'web'), 'passwords' => env('AUTH_PASSWORD_BROKER', 'users')],
     'guards' => ['web' => ['driver' => 'session', 'provider' => 'users']],
     'providers' => ['users' => ['driver' => 'eloquent', 'model' => App\Models\User::class]],

@@ -13,6 +13,7 @@
     <link href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ asset('vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/login.css') }}?v={{ filemtime(public_path('css/login.css')) }}" rel="stylesheet">
+    <style>.field-control.email-field{grid-template-columns:45px minmax(80px,1fr) auto}.email-domain{padding:0 14px 0 8px;color:#64748b;font-size:14px;font-weight:700;white-space:nowrap}.email-field input{padding-right:4px}</style>
 </head>
 <body data-theme="{{ $systemTheme }}" data-loading-style="{{ $systemLoadingStyle }}">
 <main class="login-shell">
@@ -40,12 +41,17 @@
             <div class="login-form-wrap">
                 <header class="form-heading"><span>Chào mừng trở lại</span><h2 id="login-title">Đăng nhập hệ thống</h2><p>Nhập thông tin tài khoản được quản trị viên cấp.</p></header>
                 @if($errors->any())<div class="login-alert" role="alert" data-auto-dismiss="5000"><i class="bi bi-exclamation-circle-fill"></i><span>{{ $errors->first() }}</span></div>@endif
+                @if(session('warning'))<div class="login-alert" role="alert" data-auto-dismiss="5000"><i class="bi bi-exclamation-triangle-fill"></i><span>{{session('warning')}}</span></div>@endif
                 <form method="POST" action="{{ route('login.submit') }}" class="login-form">@csrf
-                    <div class="form-field"><label for="email">Địa chỉ email</label><div class="field-control @error('email') is-invalid @enderror"><i class="bi bi-envelope"></i><input id="email" type="email" name="email" value="{{ old('email') }}" placeholder="name@example.com" autocomplete="username" inputmode="email" required></div></div>
+                    <div class="form-field"><label for="email">Địa chỉ email</label><div class="field-control email-field @error('email') is-invalid @enderror"><i class="bi bi-envelope"></i><input id="email" type="text" name="email" value="{{ old('email') }}" placeholder="tên tài khoản" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required><span class="email-domain">{{ '@'.config('auth.login_email_domain') }}</span></div></div>
                     <div class="form-field"><label for="password">Mật khẩu</label><div class="field-control password-field"><i class="bi bi-lock"></i><input id="password" type="password" name="password" placeholder="Nhập mật khẩu" autocomplete="current-password" required><button type="button" class="password-toggle" data-password-toggle aria-label="Hiện mật khẩu"><i class="bi bi-eye"></i></button></div></div>
                     <label class="remember-option" for="remember"><input id="remember" type="checkbox" name="remember" value="1" @checked(old('remember'))><span>Ghi nhớ đăng nhập trên thiết bị này</span></label>
                     <button class="login-submit" type="submit"><span>Đăng nhập</span><i class="bi bi-arrow-right"></i></button>
                 </form>
+                @if(config('zalo.app_id') && config('zalo.app_secret'))
+                <div class="text-center text-muted small my-3">hoặc</div>
+                <a class="btn btn-outline-primary w-100" href="{{route('zalo.login')}}"><i class="bi bi-qr-code-scan me-2"></i>Đăng nhập bằng Zalo</a>
+                @endif
                 <p class="login-help"><i class="bi bi-info-circle"></i> Liên hệ quản trị viên nếu bạn không thể đăng nhập.</p>
                 <p class="mobile-copyright">{!! $systemCopyright !!}</p>
             </div>
