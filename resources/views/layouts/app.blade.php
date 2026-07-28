@@ -95,6 +95,7 @@
             @if($me->allowed('roles'))<a class="nav-link {{ request()->routeIs('roles.*') ? 'active' : '' }}" href="{{ route('roles.index') }}"><i class="bi bi-shield-check"></i> Vai trò & quyền</a>@endif
             @if($me->allowed('logs'))<a class="nav-link {{ request()->routeIs('logs.*') ? 'active' : '' }}" href="{{ route('logs.index') }}"><i class="bi bi-clock-history"></i> Nhật ký hệ thống</a>@endif
             @if($me->allowed('software_settings'))<a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.edit','general') }}"><i class="bi bi-sliders"></i> Cấu hình phần mềm</a>@endif
+            @if($me->isAdmin())<a class="nav-link {{ request()->routeIs('admin.system-test*') ? 'active' : '' }}" href="{{ route('admin.system-test') }}"><i class="bi bi-clipboard2-pulse"></i> Kiểm thử hệ thống</a>@endif
         </nav>
         @endif
         <div class="sidebar-label">Trợ giúp</div>

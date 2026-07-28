@@ -30,6 +30,7 @@ use App\Http\Controllers\LanguageTargetSubmissionController;
 use App\Http\Controllers\RealtimeController;
 use App\Http\Controllers\PersonalSettingsController;
 use App\Http\Controllers\ZaloAuthController;
+use App\Http\Controllers\AdminSystemTestController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -53,6 +54,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::put('/change-password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 
     Route::middleware('password.changed')->group(function () {
+        Route::get('/admin/system-test', [AdminSystemTestController::class, 'index'])->name('admin.system-test');
+        Route::get('/admin/system-test/catalog', [AdminSystemTestController::class, 'catalog'])->name('admin.system-test.catalog');
         Route::get('/welcome', [WelcomeController::class, 'index'])->name('welcome');
         Route::get('/plans', [WelcomeController::class, 'plans'])->name('plans.index');
         Route::get('/tasks', [WorkTaskController::class, 'index'])->middleware('permission:work_tasks,view')->name('tasks.index');
