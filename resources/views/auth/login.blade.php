@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     @php
-        $faviconPath = $systemLogo ?: 'logo-20260722101948.png';
+        $faviconPath = $systemLogo ?: 'uploads/branding/logo-20260722101948.png';
     @endphp
     <link rel="icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
     <link rel="apple-touch-icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
@@ -20,7 +20,7 @@
     <section class="login-panel" aria-labelledby="login-title">
         <div class="login-intro">
             <div class="login-brand">
-                <span class="login-logo @if($systemLogo) has-logo @endif">@if($systemLogo)<img src="{{ asset($systemLogo) }}" alt="Logo">@else<i class="bi bi-mortarboard-fill"></i>@endif</span>
+                <span class="login-logo has-logo"><img src="{{ asset($faviconPath) }}" alt="Logo {{ $systemName }}"></span>
                 <span><strong>{{ $systemName }}</strong><small>Hệ thống quản lý trung tâm</small></span>
             </div>
             <div class="intro-content">
@@ -44,7 +44,7 @@
                 @if(session('warning'))<div class="login-alert" role="alert" data-auto-dismiss="5000"><i class="bi bi-exclamation-triangle-fill"></i><span>{{session('warning')}}</span></div>@endif
                 <form method="POST" action="{{ route('login.submit') }}" class="login-form">@csrf
                     <div class="form-field"><label for="email">Địa chỉ email</label><div class="field-control email-field @error('email') is-invalid @enderror"><i class="bi bi-envelope"></i><input id="email" type="text" name="email" value="{{ old('email') }}" placeholder="tên tài khoản" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required><span class="email-domain">{{ '@'.config('auth.login_email_domain') }}</span></div></div>
-                    <div class="form-field"><label for="password">Mật khẩu</label><div class="field-control password-field"><i class="bi bi-lock"></i><input id="password" type="password" name="password" placeholder="Nhập mật khẩu" autocomplete="current-password" required><button type="button" class="password-toggle" data-password-toggle aria-label="Hiện mật khẩu"><i class="bi bi-eye"></i></button></div></div>
+                    <div class="form-field"><label for="password">Mật khẩu</label><div class="field-control password-field"><i class="bi bi-lock"></i><input id="password" type="password" name="password" placeholder="Nhập mật khẩu" autocomplete="current-password" required><button type="button" class="password-toggle" data-password-toggle aria-controls="password" aria-pressed="false" aria-label="Hiện mật khẩu" title="Hiện mật khẩu"><i class="bi bi-eye" aria-hidden="true"></i></button></div></div>
                     <label class="remember-option" for="remember"><input id="remember" type="checkbox" name="remember" value="1" @checked(old('remember'))><span>Ghi nhớ đăng nhập trên thiết bị này</span></label>
                     <button class="login-submit" type="submit"><span>Đăng nhập</span><i class="bi bi-arrow-right"></i></button>
                 </form>
@@ -61,6 +61,6 @@
 <div class="page-loading-overlay" data-page-loading aria-hidden="true" aria-live="polite"><div class="page-loading-card"><span class="page-loading-spinner" aria-hidden="true"></span><span>Đang tải dữ liệu...</span></div></div>
 <script src="{{ asset('js/page-loading.js') }}?v={{ filemtime(public_path('js/page-loading.js')) }}"></script>
 <script src="{{ asset('js/auto-dismiss-alerts.js') }}"></script>
-<script>document.querySelector('[data-password-toggle]')?.addEventListener('click',function(){const input=document.getElementById('password'),visible=input.type==='text';input.type=visible?'password':'text';this.setAttribute('aria-label',visible?'Hiện mật khẩu':'Ẩn mật khẩu');this.querySelector('i').className=visible?'bi bi-eye':'bi bi-eye-slash'});</script>
+<script>document.querySelector('[data-password-toggle]')?.addEventListener('click',function(){const input=document.getElementById(this.getAttribute('aria-controls')),visible=input.type==='text';input.type=visible?'password':'text';const label=visible?'Hiện mật khẩu':'Ẩn mật khẩu';this.setAttribute('aria-label',label);this.setAttribute('title',label);this.setAttribute('aria-pressed',visible?'false':'true');this.querySelector('i').className=visible?'bi bi-eye':'bi bi-eye-slash';input.focus({preventScroll:true})});</script>
 </body>
 </html>

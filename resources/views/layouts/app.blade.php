@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     @php
-    $faviconPath = $systemLogo ?: 'logo-20260722101948.png';
+    $faviconPath = $systemLogo ?: 'uploads/branding/logo-20260722101948.png';
 @endphp
     <link rel="icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
     <link rel="apple-touch-icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
