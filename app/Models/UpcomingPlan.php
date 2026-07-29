@@ -16,12 +16,12 @@ class UpcomingPlan extends Model
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class)->withTrashed();
     }
 
     public function assignedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'assigned_by_id');
+        return $this->belongsTo(User::class, 'assigned_by_id')->withTrashed();
     }
 
     public function getIsDueForReminderAttribute(): bool

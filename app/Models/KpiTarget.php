@@ -23,6 +23,6 @@ class KpiTarget extends Model
     ];
 
     public function plan(): BelongsTo { return $this->belongsTo(KpiPlan::class, 'plan_id'); }
-    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class); }
-    public function course(): BelongsTo { return $this->belongsTo(Course::class)->withDefault(['name' => 'Tất cả khóa học']); }
+    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class)->withTrashed(); }
+    public function course(): BelongsTo { return $this->belongsTo(Course::class)->withTrashed()->withDefault(['name' => 'Tất cả khóa học']); }
 }

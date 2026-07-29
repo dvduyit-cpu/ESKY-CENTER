@@ -24,6 +24,6 @@ class ExcessPayment extends Model
         'approved_at' => 'datetime', 'paid_at' => 'datetime',
     ];
 
-    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class); }
-    public function course(): BelongsTo { return $this->belongsTo(Course::class); }
+    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class)->withTrashed(); }
+    public function course(): BelongsTo { return $this->belongsTo(Course::class)->withTrashed(); }
 }

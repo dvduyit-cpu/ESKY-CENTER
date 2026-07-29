@@ -25,7 +25,7 @@ class KpiRecord extends Model
     ];
 
     public function batch(): BelongsTo { return $this->belongsTo(ImportBatch::class, 'import_batch_id'); }
-    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class); }
-    public function collaborator(): BelongsTo { return $this->belongsTo(Personnel::class, 'collaborator_id'); }
-    public function course(): BelongsTo { return $this->belongsTo(Course::class); }
+    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class)->withTrashed(); }
+    public function collaborator(): BelongsTo { return $this->belongsTo(Personnel::class, 'collaborator_id')->withTrashed(); }
+    public function course(): BelongsTo { return $this->belongsTo(Course::class)->withTrashed(); }
 }

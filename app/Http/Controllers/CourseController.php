@@ -73,6 +73,7 @@ class CourseController extends Controller
         $courses = Course::withTrashed()->whereKey($data['ids'])->get();
         $deleted = 0;
         foreach ($courses as $course) {
+            if ($force && $this->hasPermanentDeleteDependencies($course)) continue;
             try { $force ? $this->forceDeleteCourse($course) : $course->delete(); $deleted++; } catch (QueryException) {}
         }
         ActivityLogger::log('courses', $force ? 'bulk_force_delete' : 'bulk_delete', ($force ? 'Xóa vĩnh viễn ' : 'Xóa mềm ').$deleted.' khóa học');
@@ -94,6 +95,12 @@ class CourseController extends Controller
 
         $course = Course::onlyTrashed()->findOrFail($id);
         $name = $course->name;
+
+        if ($this->hasPermanentDeleteDependencies($course)) {
+            return back()->withErrors([
+                'course' => 'Không thể xóa vĩnh viễn vì khóa học còn chỉ tiêu hoặc dữ liệu KPI. Hãy giữ bản ghi ở trạng thái xóa mềm.',
+            ]);
+        }
 
         try {
             $this->forceDeleteCourse($course);
@@ -135,10 +142,14 @@ class CourseController extends Controller
     private function forceDeleteCourse(Course $course): void
     {
         DB::transaction(function () use ($course): void {
-            KpiTarget::withTrashed()->where('course_id', $course->id)->forceDelete();
-            KpiRecord::withTrashed()->where('course_id', $course->id)->forceDelete();
             ExcessPayment::where('course_id', $course->id)->update(['course_id' => null]);
             $course->forceDelete();
         });
+    }
+
+    private function hasPermanentDeleteDependencies(Course $course): bool
+    {
+        return KpiTarget::withTrashed()->where('course_id', $course->id)->exists()
+            || KpiRecord::withTrashed()->where('course_id', $course->id)->exists();
     }
 }

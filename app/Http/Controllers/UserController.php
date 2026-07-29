@@ -107,6 +107,7 @@ class UserController extends Controller
         $deleted = 0;
         foreach ($users as $user) {
             if ($user->role?->code === 'admin' && User::where('role_id', $user->role_id)->where('active', true)->count() <= 1) continue;
+            if ($force && $this->hasPermanentDeleteDependencies($user)) continue;
             try { $force ? $user->forceDelete() : $user->delete(); $deleted++; } catch (QueryException) {}
         }
         ActivityLogger::log('users', $force ? 'bulk_force_delete' : 'bulk_delete', ($force ? 'Xóa vĩnh viễn ' : 'Xóa mềm ').$deleted.' tài khoản');
@@ -191,5 +192,13 @@ class UserController extends Controller
         if ($user->role?->code !== 'admin') return;
         $adminRoleId = Role::where('code', 'admin')->value('id');
         abort_if(User::where('role_id', $adminRoleId)->where('active', true)->count() <= 1, 422, 'Không thể khóa hoặc xóa Admin cuối cùng.');
+    }
+
+    private function hasPermanentDeleteDependencies(User $user): bool
+    {
+        return DB::table('work_tasks')->where('created_by_id', $user->id)->exists()
+            || DB::table('work_task_assignees')->where('user_id', $user->id)->exists()
+            || DB::table('work_task_comments')->where('user_id', $user->id)->exists()
+            || DB::table('upcoming_plans')->where('user_id', $user->id)->exists();
     }
 }

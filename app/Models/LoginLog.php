@@ -14,5 +14,5 @@ class LoginLog extends Model
     protected $fillable = ['user_id','email','event','success','ip_address','user_agent','created_at'];
     protected $casts = ['success' => 'boolean', 'created_at' => 'datetime'];
 
-    public function user(): BelongsTo { return $this->belongsTo(User::class); }
+    public function user(): BelongsTo { return $this->belongsTo(User::class)->withTrashed(); }
 }

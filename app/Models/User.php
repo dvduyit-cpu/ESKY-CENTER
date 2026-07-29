@@ -29,7 +29,7 @@ class User extends Authenticatable
     }
 
     public function role(): BelongsTo { return $this->belongsTo(Role::class); }
-    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class); }
+    public function personnel(): BelongsTo { return $this->belongsTo(Personnel::class)->withTrashed(); }
     public function languageCollaborator(): BelongsTo { return $this->belongsTo(LanguageCollaborator::class)->withTrashed(); }
     public function upcomingPlans(): HasMany { return $this->hasMany(UpcomingPlan::class); }
     public function preferences(): HasMany { return $this->hasMany(UserPreference::class); }

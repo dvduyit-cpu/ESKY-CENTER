@@ -19,6 +19,6 @@ class ImportBatch extends Model
 
     protected $casts = ['total_revenue' => 'decimal:2', 'error_details' => 'array'];
 
-    public function user(): BelongsTo { return $this->belongsTo(User::class, 'imported_by'); }
+    public function user(): BelongsTo { return $this->belongsTo(User::class, 'imported_by')->withTrashed(); }
     public function records(): HasMany { return $this->hasMany(KpiRecord::class); }
 }
