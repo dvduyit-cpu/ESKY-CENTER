@@ -6,9 +6,11 @@ use App\Models\User;
 use App\Models\UpcomingPlan;
 use App\Models\WorkTask;
 use App\Models\WorkTaskAssignee;
+use App\Notifications\WorkTaskAssigned;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -84,14 +86,28 @@ class WorkTaskController extends Controller
         }
         $repeatMonths = (int) ($data['repeat_months'] ?? 1);
         $firstDueAt = \Carbon\Carbon::parse($data['due_at']);
-        DB::transaction(function () use ($request, $data, $ids, $repeatMonths, $firstDueAt) {
+        $tasks = DB::transaction(function () use ($request, $data, $ids, $repeatMonths, $firstDueAt) {
+            $createdTasks = collect();
             for ($index = 0; $index < $repeatMonths; $index++) {
                 $task = WorkTask::create(['created_by_id'=>$request->user()->id, 'title'=>$data['title'], 'description'=>$data['description'] ?? null, 'due_at'=>$firstDueAt->copy()->addMonthsNoOverflow($index), 'priority'=>$data['priority']]);
                 foreach ($ids as $id) $task->assignees()->create(['user_id'=>$id, 'is_lead'=>$id===(int)$data['lead_id']]);
                 $task->activities()->create(['user_id'=>$request->user()->id, 'action'=>'created', 'description'=>'Đã tạo và giao công việc cho '.$ids->count().' người.']);
+                $createdTasks->push($task);
             }
+            return $createdTasks;
         });
         RealtimeNotifier::users($ids, ($repeatMonths > 1 ? 'Bạn được giao công việc định kỳ: ' : 'Bạn được giao công việc: ').$data['title']);
+        User::query()->whereKey($ids)->where('notifications_enabled', true)->get()->each(function (User $recipient) use ($request, $tasks): void {
+            try {
+                $recipient->notify(new WorkTaskAssigned($request->user(), $tasks));
+            } catch (\Throwable $exception) {
+                Log::warning('Không thể gửi email thông báo giao việc.', [
+                    'recipient_id'=>$recipient->id,
+                    'task_id'=>$tasks->first()?->id,
+                    'error'=>$exception->getMessage(),
+                ]);
+            }
+        });
         return redirect()->route('tasks.index')->with('success', $repeatMonths > 1 ? 'Đã giao '.$repeatMonths.' kỳ công việc hàng tháng.' : 'Đã giao công việc.');
     }
 

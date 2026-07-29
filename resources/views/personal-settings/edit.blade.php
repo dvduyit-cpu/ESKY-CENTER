@@ -18,21 +18,10 @@
 </div>
 <div class="col-xl-5">
 <section class="card card-soft form-card"><div class="card-header"><h5><i class="bi bi-bell me-2"></i>Thông báo</h5></div><div class="card-body p-4"><div class="notification-setting"><div><span class="notification-setting-icon"><i class="bi bi-bell-fill"></i></span><span><strong>Thông báo thời gian thực</strong><small>Nhận ngay khi có công việc hoặc nội dung mới.</small></span></div><div class="form-check form-switch"><input type="hidden" name="notifications_enabled" value="0"><input class="form-check-input" type="checkbox" role="switch" name="notifications_enabled" value="1" @checked(old('notifications_enabled',$user->notifications_enabled))></div></div></div></section>
-<section class="card card-soft form-card mt-4"><div class="card-header"><h5><i class="bi bi-qr-code-scan me-2"></i>Đăng nhập Zalo</h5></div><div class="card-body p-4">
-@if($user->zalo_id)
-<div class="alert alert-success"><strong>Đã liên kết</strong><div class="small mt-1">{{$user->zalo_name ?: 'Tài khoản Zalo'}} · {{optional($user->zalo_linked_at)->format('H:i d/m/Y')}}</div></div>
-<label class="form-label">Nhập mật khẩu hiện tại để ngắt liên kết</label><input class="form-control mb-2" type="password" name="current_password" form="zalo-disconnect-form" autocomplete="current-password" required><button class="btn btn-outline-danger w-100" type="submit" form="zalo-disconnect-form" data-confirm="Ngắt liên kết Zalo khỏi tài khoản này?"><i class="bi bi-link-45deg me-1"></i>Ngắt liên kết Zalo</button>
-@elseif(config('zalo.app_id') && config('zalo.app_secret'))
-<p class="small text-muted">Liên kết tài khoản Zalo đã xác thực. Sau đó bạn có thể đăng nhập bằng Zalo hoặc quét mã khi Zalo yêu cầu.</p><a class="btn btn-primary w-100" href="{{route('zalo.connect')}}"><i class="bi bi-link-45deg me-1"></i>Liên kết tài khoản Zalo</a>
-@else
-<div class="alert alert-light border mb-0"><i class="bi bi-info-circle me-1"></i>Admin chưa cấu hình ứng dụng Zalo.</div>
-@endif
-</div></section>
 <div class="card card-soft mt-4"><div class="card-body p-4"><div class="d-flex gap-3"><i class="bi bi-info-circle-fill text-primary fs-4"></i><div><strong>Kế thừa cấu hình hệ thống</strong><p class="small text-muted mb-0 mt-1">Khi chọn “Dùng/Theo cấu hình hệ thống”, thay đổi của Admin sẽ tự động áp dụng cho tài khoản này.</p></div></div></div></div>
 </div>
 </div>
 <div class="form-actions settings-actions"><a class="btn btn-light" href="{{route('dashboard')}}">Hủy</a><button class="btn btn-primary"><i class="bi bi-check2-circle me-1"></i>Lưu cài đặt cá nhân</button></div>
 </form>
-@if($user->zalo_id)<form id="zalo-disconnect-form" method="POST" action="{{route('zalo.disconnect')}}" class="d-none">@csrf @method('DELETE')</form>@endif
 @endsection
 @push('scripts')<script>document.addEventListener('DOMContentLoaded',()=>{const select=document.querySelector('[data-personal-theme]'),label=document.querySelector('[data-theme-preview-label]');select?.addEventListener('change',event=>{document.body.dataset.theme=event.target.value||@js($defaultSystemTheme);if(label)label.textContent=event.target.options[event.target.selectedIndex]?.text||'Dùng màu hệ thống'});document.querySelectorAll('[name="visual_effect"]').forEach(input=>input.addEventListener('change',()=>{document.body.dataset.visualEffect=input.value||@js($systemVisualEffect);document.querySelectorAll('.visual-effect-option').forEach(option=>option.classList.toggle('selected',option.contains(input)))}))});</script>@endpush

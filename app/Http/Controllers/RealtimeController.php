@@ -28,6 +28,13 @@ class RealtimeController extends Controller
             ->orderBy('due_at')
             ->get(['id', 'title', 'due_at']) : collect();
         $workTasksDue = $workTasks->count();
+        $newWorkTasks = $since && $user->allowed('work_tasks') ? WorkTask::query()
+            ->whereNull('closed_at')
+            ->whereHas('assignees', fn ($query) => $query
+                ->where('user_id', $user->id)
+                ->where('work_task_assignees.created_at', '>', $since))
+            ->latest()
+            ->get(['id', 'title']) : collect();
 
         $reminders = UpcomingPlan::query()->where('user_id',$user->id)->whereNull('completed_at')->where('scheduled_for','<=',now()->addDays(30)->endOfDay())->orderBy('scheduled_for')->get()->filter->is_due_for_reminder->take(10)->values();
         $newPlans = $since ? UpcomingPlan::query()->where('user_id',$user->id)->where('created_at','>',$since)->count() : 0;
@@ -41,7 +48,12 @@ class RealtimeController extends Controller
 
         return response()->json([
             'server_time'=>now()->utc()->toIso8601String(),'enabled'=>true,
-            'changed'=>(bool)($since && ($submissionUpdates+$newTargets+$newPlans>0)),
+            'changed'=>(bool)($since && ($submissionUpdates+$newTargets+$newPlans+$newWorkTasks->count()>0)),
+            'event_message'=>$newWorkTasks->isEmpty()
+                ? null
+                : ($newWorkTasks->count() === 1
+                    ? 'Bạn được giao công việc: '.$newWorkTasks->first()->title
+                    : 'Bạn được giao '.$newWorkTasks->count().' công việc mới.'),
             'total'=>$items->sum('count')+$reminders->count(),'items'=>$items,
             'reminders'=>$reminders->map(fn(UpcomingPlan $plan)=>['id'=>$plan->id,'title'=>$plan->title,'time'=>$plan->scheduled_for->format('H:i d/m/Y'),'overdue'=>$plan->scheduled_for->isPast(),'url'=>route('plans.index',['month'=>$plan->scheduled_for->format('Y-m')])])->values(),
         ]);

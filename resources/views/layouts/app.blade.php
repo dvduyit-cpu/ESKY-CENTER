@@ -250,7 +250,7 @@
 <script src="{{ asset('js/page-loading.js') }}?v={{ filemtime(public_path('js/page-loading.js')) }}"></script>
 <script src="{{ asset('js/sidebar-scroll.js') }}"></script>
 <script src="{{ asset('js/sidebar-mobile.js') }}"></script>
-<script src="{{ asset('js/realtime.js') }}"></script>
+<script src="{{ asset('js/realtime.js') }}?v={{ filemtime(public_path('js/realtime.js')) }}"></script>
 <script src="{{ asset('js/auto-dismiss-alerts.js') }}"></script>
 <script src="{{ asset('js/permissions.js') }}"></script>
 <script src="{{ asset('js/searchable-select.js') }}?v={{ filemtime(public_path('js/searchable-select.js')) }}"></script>

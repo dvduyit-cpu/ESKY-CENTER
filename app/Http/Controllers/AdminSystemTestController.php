@@ -115,7 +115,7 @@ class AdminSystemTestController extends Controller
         );
 
         $unprotected = $namedRoutes->filter(function (LaravelRoute $route, string $name) {
-            if (in_array($name, ['login', 'login.submit', 'zalo.login', 'zalo.callback'], true)) return false;
+            if (in_array($name, ['login', 'login.submit'], true)) return false;
             return !in_array('auth', $route->gatherMiddleware(), true);
         });
         $add(

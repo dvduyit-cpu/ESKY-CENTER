@@ -49,10 +49,6 @@
                     <label class="remember-option" for="remember"><input id="remember" type="checkbox" name="remember" value="1" @checked(old('remember'))><span>Ghi nhớ đăng nhập trên thiết bị này</span></label>
                     <button class="login-submit" type="submit"><span>Đăng nhập</span><i class="bi bi-arrow-right"></i></button>
                 </form>
-                @if(config('zalo.app_id') && config('zalo.app_secret'))
-                <div class="text-center text-muted small my-3">hoặc</div>
-                <a class="btn btn-outline-primary w-100" href="{{route('zalo.login')}}"><i class="bi bi-qr-code-scan me-2"></i>Đăng nhập bằng Zalo</a>
-                @endif
                 <p class="login-help"><i class="bi bi-info-circle"></i> Liên hệ quản trị viên nếu bạn không thể đăng nhập.</p>
                 <p class="mobile-copyright">{!! $systemCopyright !!}</p>
             </div>

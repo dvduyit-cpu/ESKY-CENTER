@@ -24,16 +24,6 @@ php artisan optimize
 
 7. Kiểm tra `https://ten-mien-cua-ban/up`, sau đó mở trang đăng nhập.
 
-## Zalo
-
-Điền `ZALO_APP_ID`, `ZALO_APP_SECRET` và đăng ký callback sau trong Zalo Developers:
-
-```text
-https://ten-mien-cua-ban/auth/zalo/callback
-```
-
-Người dùng cần đăng nhập bằng mật khẩu một lần để liên kết Zalo trong Cài đặt cá nhân.
-
 ## Reverb
 
 Mẫu production mặc định dùng `BROADCAST_CONNECTION=null`, phù hợp shared hosting. Nếu dùng VPS và muốn thông báo tức thời, cấu hình Reverb theo `deploy/REVERB_UBUNTU.md` rồi đổi sang `BROADCAST_CONNECTION=reverb`.

@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let reconnectTimer = null;
     let reconnectAttempts = 0;
     let refreshInFlight = null;
+    let lastServerTime = null;
+    let pollingTimer = null;
 
     const empty = message => {
         const box = document.createElement('div');
@@ -81,20 +83,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const refresh = async (message = null) => {
         if (refreshInFlight) return refreshInFlight;
-        refreshInFlight = fetch('/realtime/status', {
+        const statusUrl = new URL('/realtime/status', window.location.origin);
+        if (lastServerTime) statusUrl.searchParams.set('since', lastServerTime);
+        refreshInFlight = fetch(statusUrl, {
             headers: { Accept: 'application/json' },
             credentials: 'same-origin',
             cache: 'no-store',
         }).then(async response => {
             if (!response.ok) return;
             const data = await response.json();
+            lastServerTime = data.server_time || lastServerTime;
             render(data);
-            if (message && data.enabled) {
+            const toastMessage = message || data.event_message;
+            if (toastMessage && data.enabled) {
                 const toast = document.createElement('div');
                 toast.className = 'alert alert-info alert-dismissible fade show realtime-toast shadow';
                 const icon = document.createElement('i');
                 icon.className = 'bi bi-bell-fill me-2';
-                toast.append(icon, document.createTextNode(message));
+                toast.append(icon, document.createTextNode(toastMessage));
                 const close = document.createElement('button');
                 close.type = 'button';
                 close.className = 'btn-close';
@@ -164,11 +170,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     refresh().then(() => connect());
+    pollingTimer = window.setInterval(() => {
+        if (!document.hidden && navigator.onLine) refresh();
+    }, 30000);
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
         refresh();
         connect();
     });
     window.addEventListener('online', connect);
-    window.addEventListener('pagehide', () => socket?.close());
+    window.addEventListener('pagehide', () => {
+        socket?.close();
+        if (pollingTimer) window.clearInterval(pollingTimer);
+    });
 });
