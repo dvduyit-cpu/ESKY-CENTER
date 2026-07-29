@@ -5,13 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     @php
-        $faviconPath = $systemLogo ?: 'uploads/branding/logo-20260722101948.png';
+        $configuredLogo = $systemLogo && is_file(public_path($systemLogo)) ? $systemLogo : null;
+        $faviconPath = $configuredLogo ?: 'uploads/branding/logo-20260722101948.png';
     @endphp
     <link rel="icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
     <link rel="apple-touch-icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
     <title>Đăng nhập · {{ $systemName }}</title>
-    <link href="{{ asset('vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
-    <link href="{{ asset('vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('assets/vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('assets/vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/login.css') }}?v={{ filemtime(public_path('css/login.css')) }}" rel="stylesheet">
     <style>.field-control.email-field{grid-template-columns:45px minmax(80px,1fr) auto}.email-domain{padding:0 14px 0 8px;color:#64748b;font-size:14px;font-weight:700;white-space:nowrap}.email-field input{padding-right:4px}</style>
 </head>
