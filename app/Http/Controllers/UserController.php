@@ -67,7 +67,7 @@ class UserController extends Controller
         return view('users.form', [
             'user' => $user,
             'roles' => Role::orderBy('name')->get(),
-            'personnels' => Personnel::where('active', true)
+            'personnels' => Personnel::where(fn ($q) => $q->where('active', true)->orWhereKey($user->personnel_id))
                 ->where(fn ($q) => $q->whereDoesntHave('user')->orWhere('id', $user->personnel_id))
                 ->orderBy('name')->get(),
             'collaborators' => LanguageCollaborator::where(function ($query) use ($user) {

@@ -64,7 +64,7 @@ class LanguageCollaboratorController extends Controller
     private function form(LanguageCollaborator $item): View
     {
         $linkedUserId=$item->user?->id;
-        $users=User::with('personnel')->where('active',true)->whereNull('deleted_at')
+        $users=User::with('personnel')->where(fn($query)=>$query->where('active',true)->when($linkedUserId,fn($q)=>$q->orWhere('id',$linkedUserId)))
             ->where(fn($query)=>$query->whereNull('language_collaborator_id')->when($linkedUserId,fn($q)=>$q->orWhere('id',$linkedUserId)))
             ->orderBy('name')->get();
         return view('language.collaborators.form',compact('item','users','linkedUserId'));
@@ -83,7 +83,7 @@ class LanguageCollaboratorController extends Controller
         if ($user?->personnel_id && LanguageCollaborator::where('personnel_id',$user->personnel_id)->when($collaborator,fn($query)=>$query->whereKeyNot($collaborator->id))->exists()) throw ValidationException::withMessages(['user_id'=>'Hồ sơ nhân sự của account này đã liên kết với một cộng tác viên khác.']);
         unset($validated['user_id']);
         $validated['active']=$request->boolean('active');
-        if ($user?->personnel_id) $validated['personnel_id']=$user->personnel_id;
+        $validated['personnel_id']=$user?->personnel_id;
         return [$validated,$user];
     }
 

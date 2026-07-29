@@ -252,7 +252,7 @@
 <script src="{{ asset('js/realtime.js') }}"></script>
 <script src="{{ asset('js/auto-dismiss-alerts.js') }}"></script>
 <script src="{{ asset('js/permissions.js') }}"></script>
-<script src="{{ asset('js/searchable-select.js') }}"></script>
+<script src="{{ asset('js/searchable-select.js') }}?v={{ filemtime(public_path('js/searchable-select.js')) }}"></script>
 <script src="{{ asset('js/table-serial-numbers.js') }}"></script>
 <script src="{{ asset('js/icon-buttons.js') }}?v={{ filemtime(public_path('js/icon-buttons.js')) }}"></script>
 @stack('scripts')

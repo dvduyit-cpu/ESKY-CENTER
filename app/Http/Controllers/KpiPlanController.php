@@ -131,8 +131,11 @@ class KpiPlanController extends Controller
         return view('kpis.target-form', [
             'plan' => $plan,
             'target' => $target,
-            'personnels' => Personnel::where('active', true)->where('type', '!=', 'collaborator')->orderBy('name')->get(),
-            'courses' => Course::where('active', true)->orderBy('name')->get(),
+            'personnels' => Personnel::where('type', '!=', 'collaborator')
+                ->where(fn ($query) => $query->where('active', true)->orWhereKey($target->personnel_id))
+                ->orderBy('name')->get(),
+            'courses' => Course::where(fn ($query) => $query->where('active', true)->orWhereKey($target->course_id))
+                ->orderBy('name')->get(),
         ]);
     }
 

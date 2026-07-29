@@ -44,7 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const render = () => {
             const keyword = search.value.trim().toLocaleLowerCase('vi');
-            const matches = originalOptions.filter(option => option.value && !option.disabled && (!keyword || option.text.toLocaleLowerCase('vi').includes(keyword)));
+            const matches = originalOptions.filter(option =>
+                !option.disabled
+                && (!isRequired || option.value)
+                && (!keyword || option.text.toLocaleLowerCase('vi').includes(keyword))
+            );
             optionsBox.replaceChildren(...matches.map(option => {
                 const button = document.createElement('button');
                 button.type = 'button';

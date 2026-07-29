@@ -120,9 +120,14 @@ class ImportController extends Controller
     {
         return [
             'record' => $record,
-            'personnels' => Personnel::where('active', true)->where('type', '!=', 'collaborator')->orderBy('name')->get(),
-            'collaborators' => Personnel::where('active', true)->where('type', 'collaborator')->orderBy('name')->get(),
-            'courses' => Course::where('active', true)->orderBy('name')->get(),
+            'personnels' => Personnel::where('type', '!=', 'collaborator')
+                ->where(fn ($query) => $query->where('active', true)->orWhereKey($record->personnel_id))
+                ->orderBy('name')->get(),
+            'collaborators' => Personnel::where('type', 'collaborator')
+                ->where(fn ($query) => $query->where('active', true)->orWhereKey($record->collaborator_id))
+                ->orderBy('name')->get(),
+            'courses' => Course::where(fn ($query) => $query->where('active', true)->orWhereKey($record->course_id))
+                ->orderBy('name')->get(),
         ];
     }
 
