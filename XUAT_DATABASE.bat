@@ -20,7 +20,7 @@ set "OUTPUT_FILE=%~dp0database\demo.sql"
 set "TEMP_FILE=%~dp0database\demo.sql.tmp"
 
 echo Dang xuat database kpi_laravel...
-"%MYSQLDUMP_EXE%" -u root --default-character-set=utf8mb4 --single-transaction --routines --triggers --events --set-gtid-purged=OFF --databases kpi_laravel > "%TEMP_FILE%"
+"%MYSQLDUMP_EXE%" -u root --default-character-set=utf8mb4 --single-transaction --routines --triggers --events --databases kpi_laravel > "%TEMP_FILE%"
 if errorlevel 1 (
   if exist "%TEMP_FILE%" del /q "%TEMP_FILE%"
   echo [LOI] Xuat database that bai. File demo.sql cu duoc giu nguyen.
