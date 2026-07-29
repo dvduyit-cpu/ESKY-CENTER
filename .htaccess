@@ -1,0 +1,14 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L,NC]
+    RewriteRule \.(?:env|ini|log|sql|sqlite|bak|dist|lock|md|yml|yaml)$ - [F,L,NC]
+    RewriteRule ^(?:app|bootstrap|config|database|deploy|resources|routes|storage|tests|vendor)(?:/|$) - [F,L,NC]
+
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    DirectoryIndex public/index.php
+</IfModule>
