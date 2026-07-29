@@ -89,7 +89,7 @@ class LanguageLeadController extends Controller
             $query->where('active',1);
             if ($item->language_collaborator_id) $query->orWhere('id',$item->language_collaborator_id);
         })->orderBy('name')->get();
-        return view('language.leads.form', compact('item','collaborators') + ['programs'=>LanguageProgram::where(fn($query)=>$query->where('active',1)->orWhereKey($item->language_program_id))->orderBy('name')->get(),'courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhereKey($item->language_course_id))->orderBy('name')->get(),'users'=>User::where(fn($query)=>$query->where('active',1)->orWhereKey($item->consultant_user_id))->orderBy('name')->get()]);
+        return view('language.leads.form', compact('item','collaborators') + ['programs'=>LanguageProgram::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_program_id))->orderBy('name')->get(),'courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_course_id))->orderBy('name')->get(),'users'=>User::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->consultant_user_id))->orderBy('name')->get()]);
     }
 
     private function data(Request $request, ?LanguageLead $lead = null): array

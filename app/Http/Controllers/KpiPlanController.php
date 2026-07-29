@@ -132,9 +132,9 @@ class KpiPlanController extends Controller
             'plan' => $plan,
             'target' => $target,
             'personnels' => Personnel::where('type', '!=', 'collaborator')
-                ->where(fn ($query) => $query->where('active', true)->orWhereKey($target->personnel_id))
+                ->where(fn ($query) => $query->where('active', true)->orWhere('id', $target->personnel_id))
                 ->orderBy('name')->get(),
-            'courses' => Course::where(fn ($query) => $query->where('active', true)->orWhereKey($target->course_id))
+            'courses' => Course::where(fn ($query) => $query->where('active', true)->orWhere('id', $target->course_id))
                 ->orderBy('name')->get(),
         ]);
     }

@@ -68,8 +68,8 @@ class LanguageStudentController extends Controller
     private function form(LanguageStudent $item): View
     {
         return view('language.students.form', compact('item') + [
-            'courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhereKey($item->language_course_id))->orderBy('name')->get(),
-            'discounts'=>LanguageDiscountPolicy::where(fn($query)=>$query->where('active',1)->orWhereKey($item->language_discount_policy_id))->orderBy('name')->get(),
+            'courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_course_id))->orderBy('name')->get(),
+            'discounts'=>LanguageDiscountPolicy::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_discount_policy_id))->orderBy('name')->get(),
             'classes'=>LanguageClass::whereIn('status',['recruiting','upcoming','active'])->with(['program','level'])->orderBy('name')->get(),
         ]);
     }
