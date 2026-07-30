@@ -43,7 +43,12 @@ class WorkTaskAssigned extends Notification
         if ($this->tasks->count() > 1) {
             /** @var WorkTask $lastTask */
             $lastTask = $this->tasks->last();
-            $schedule = $this->tasks->count().' kỳ hàng tháng, từ '
+            /** @var WorkTask $secondTask */
+            $secondTask = $this->tasks->get(1);
+            $frequency = $firstTask->due_at->diffInDays($secondTask->due_at) <= 8
+                ? 'hàng tuần'
+                : 'hàng tháng';
+            $schedule = $this->tasks->count().' kỳ '.$frequency.', từ '
                 .$firstTask->due_at->format('H:i d/m/Y').' đến '.$lastTask->due_at->format('H:i d/m/Y');
         } else {
             $schedule = $firstTask->due_at->format('H:i d/m/Y');

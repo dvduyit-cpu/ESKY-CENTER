@@ -57,10 +57,13 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/tasks', [WorkTaskController::class, 'store'])->middleware('permission:work_tasks,create')->name('tasks.store');
         Route::get('/tasks/{task}', [WorkTaskController::class, 'show'])->middleware('permission:work_tasks,view')->name('tasks.show');
         Route::put('/tasks/{task}', [WorkTaskController::class, 'update'])->middleware('permission:work_tasks,update')->name('tasks.update');
-        Route::patch('/tasks/{task}/acknowledge', [WorkTaskController::class, 'acknowledge'])->middleware('permission:work_tasks,update')->name('tasks.acknowledge');
-        Route::patch('/tasks/{task}/complete', [WorkTaskController::class, 'complete'])->middleware('permission:work_tasks,update')->name('tasks.complete');
+        Route::patch('/tasks/{task}/acknowledge', [WorkTaskController::class, 'acknowledge'])->middleware('permission:work_tasks,view')->name('tasks.acknowledge');
+        Route::patch('/tasks/{task}/complete', [WorkTaskController::class, 'complete'])->middleware('permission:work_tasks,view')->name('tasks.complete');
         Route::patch('/tasks/{task}/close', [WorkTaskController::class, 'close'])->middleware('permission:work_tasks,update')->name('tasks.close');
-        Route::post('/tasks/{task}/comments', [WorkTaskController::class, 'comment'])->middleware('permission:work_tasks,update')->name('tasks.comments.store');
+        Route::post('/tasks/{task}/comments', [WorkTaskController::class, 'comment'])->middleware('permission:work_tasks,view')->name('tasks.comments.store');
+        Route::delete('/tasks/{task}/comments/{comment}', [WorkTaskController::class, 'retractComment'])->middleware('permission:work_tasks,view')->name('tasks.comments.retract');
+        Route::get('/tasks/{task}/attachments/{attachment}', [WorkTaskController::class, 'downloadAttachment'])->middleware('permission:work_tasks,view')->name('tasks.attachments.download');
+        Route::delete('/tasks/{task}/attachments/{attachment}', [WorkTaskController::class, 'destroyAttachment'])->middleware('permission:work_tasks,update')->name('tasks.attachments.destroy');
         Route::delete('/tasks/{task}', [WorkTaskController::class, 'destroy'])->middleware('permission:work_tasks,delete')->name('tasks.destroy');
         Route::get('/guide', [WelcomeController::class, 'guide'])->name('guide');
         Route::post('/plans', [WelcomeController::class, 'store'])->name('plans.store');

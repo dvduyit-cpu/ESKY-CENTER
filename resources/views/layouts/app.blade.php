@@ -256,6 +256,7 @@
 <script src="{{ asset('js/searchable-select.js') }}?v={{ filemtime(public_path('js/searchable-select.js')) }}"></script>
 <script src="{{ asset('js/table-serial-numbers.js') }}"></script>
 <script src="{{ asset('js/icon-buttons.js') }}?v={{ filemtime(public_path('js/icon-buttons.js')) }}"></script>
+<script src="{{ asset('js/work-task-editor.js') }}?v={{ filemtime(public_path('js/work-task-editor.js')) }}"></script>
 @stack('scripts')
 </body>
 </html>

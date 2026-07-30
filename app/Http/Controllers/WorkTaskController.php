@@ -6,11 +6,15 @@ use App\Models\User;
 use App\Models\UpcomingPlan;
 use App\Models\WorkTask;
 use App\Models\WorkTaskAssignee;
+use App\Models\WorkTaskAttachment;
+use App\Models\WorkTaskComment;
 use App\Notifications\WorkTaskAssigned;
+use App\Notifications\WorkTaskActivityNotification;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -76,27 +80,43 @@ class WorkTaskController extends Controller
             'priority'=>'required|in:low,normal,high', 'assignee_ids'=>'required|array|min:1',
             'assignee_ids.*'=>['integer', Rule::exists('users','id')->where('active',true)],
             'lead_id'=>'required|integer',
-            'repeat_months'=>'nullable|integer|min:1|max:60',
+            'repeat_unit'=>'nullable|in:none,week,month',
+            'repeat_count'=>'nullable|integer|min:1|max:4',
+            'attachments'=>'nullable|array|max:5',
+            'attachments.*'=>'file|max:10240',
         ]);
+        $data['description'] = $this->sanitizeRichText($data['description'] ?? null);
         $ids = collect($data['assignee_ids'])->map(fn ($id)=>(int)$id)->unique();
         if (! $ids->contains((int) $data['lead_id'])) {
             throw ValidationException::withMessages([
                 'lead_id' => 'Vui lòng chọn người chủ trì trong danh sách người nhận đã tích.',
             ]);
         }
-        $repeatMonths = (int) ($data['repeat_months'] ?? 1);
+        $repeatUnit = $data['repeat_unit'] ?? 'none';
+        $repeatCount = $repeatUnit === 'none' ? 1 : (int) ($data['repeat_count'] ?? 1);
+        if ($repeatUnit === 'month' && $repeatCount > 2) {
+            throw ValidationException::withMessages(['repeat_count' => 'Lặp theo tháng chỉ được chọn 1 hoặc 2 tháng.']);
+        }
         $firstDueAt = \Carbon\Carbon::parse($data['due_at']);
-        $tasks = DB::transaction(function () use ($request, $data, $ids, $repeatMonths, $firstDueAt) {
+        $tasks = DB::transaction(function () use ($request, $data, $ids, $repeatUnit, $repeatCount, $firstDueAt) {
             $createdTasks = collect();
-            for ($index = 0; $index < $repeatMonths; $index++) {
-                $task = WorkTask::create(['created_by_id'=>$request->user()->id, 'title'=>$data['title'], 'description'=>$data['description'] ?? null, 'due_at'=>$firstDueAt->copy()->addMonthsNoOverflow($index), 'priority'=>$data['priority']]);
+            for ($index = 0; $index < $repeatCount; $index++) {
+                $dueAt = match ($repeatUnit) {
+                    'week' => $firstDueAt->copy()->addWeeks($index),
+                    'month' => $firstDueAt->copy()->addMonthsNoOverflow($index),
+                    default => $firstDueAt->copy(),
+                };
+                $task = WorkTask::create(['created_by_id'=>$request->user()->id, 'title'=>$data['title'], 'description'=>$data['description'] ?? null, 'due_at'=>$dueAt, 'priority'=>$data['priority']]);
                 foreach ($ids as $id) $task->assignees()->create(['user_id'=>$id, 'is_lead'=>$id===(int)$data['lead_id']]);
                 $task->activities()->create(['user_id'=>$request->user()->id, 'action'=>'created', 'description'=>'Đã tạo và giao công việc cho '.$ids->count().' người.']);
                 $createdTasks->push($task);
             }
             return $createdTasks;
         });
-        RealtimeNotifier::users($ids, ($repeatMonths > 1 ? 'Bạn được giao công việc định kỳ: ' : 'Bạn được giao công việc: ').$data['title']);
+        foreach ($tasks as $task) {
+            $this->storeAttachments($request, $task);
+        }
+        RealtimeNotifier::users($ids, ($repeatCount > 1 ? 'Bạn được giao công việc định kỳ: ' : 'Bạn được giao công việc: ').$data['title']);
         User::query()->whereKey($ids)->where('notifications_enabled', true)->get()->each(function (User $recipient) use ($request, $tasks): void {
             try {
                 $recipient->notify(new WorkTaskAssigned($request->user(), $tasks));
@@ -108,13 +128,14 @@ class WorkTaskController extends Controller
                 ]);
             }
         });
-        return redirect()->route('tasks.index')->with('success', $repeatMonths > 1 ? 'Đã giao '.$repeatMonths.' kỳ công việc hàng tháng.' : 'Đã giao công việc.');
+        $periodLabel = $repeatUnit === 'week' ? 'hàng tuần' : 'hàng tháng';
+        return redirect()->route('tasks.index')->with('success', $repeatCount > 1 ? 'Đã giao '.$repeatCount.' kỳ công việc '.$periodLabel.'.' : 'Đã giao công việc.');
     }
 
     public function show(Request $request, WorkTask $task): View
     {
         $this->ensureParticipant($request,$task);
-        $task->load(['creator','assignees.user','comments.user','activities.user']);
+        $task->load(['creator','assignees.user','comments.user','comments.attachments','activities.user','attachments']);
         $canEdit = $task->created_by_id === $request->user()->id
             && $request->user()->allowed('work_tasks', 'update');
         $users = $canEdit
@@ -133,8 +154,12 @@ class WorkTaskController extends Controller
             'assignee_ids' => 'required|array|min:1',
             'assignee_ids.*' => ['integer', Rule::exists('users', 'id')->where('active', true)],
             'lead_id' => 'required|integer',
+            'attachments'=>'nullable|array|max:5',
+            'attachments.*'=>'file|max:10240',
         ]);
+        $data['description'] = $this->sanitizeRichText($data['description'] ?? null);
         $ids = collect($data['assignee_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        $previousIds = $task->assignees()->pluck('user_id');
         if (! $ids->contains((int) $data['lead_id'])) {
             throw ValidationException::withMessages(['lead_id' => 'Vui lòng chọn người chủ trì trong danh sách người nhận đã tích.']);
         }
@@ -147,7 +172,24 @@ class WorkTaskController extends Controller
             }
             $this->log($task, $request, 'Đã chỉnh sửa nội dung và phân công công việc.', 'updated');
         });
-        RealtimeNotifier::users($ids, 'Đã cập nhật công việc: '.$task->title);
+        $this->storeAttachments($request, $task);
+        $updatedParticipantIds = $previousIds->merge($ids)->unique()->values();
+        RealtimeNotifier::users($updatedParticipantIds, 'Đã cập nhật công việc: '.$task->title);
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $ids,
+            'Công việc đã được cập nhật',
+            'đã cập nhật nội dung hoặc phân công công việc.'
+        );
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $previousIds->diff($ids),
+            'Bạn đã được gỡ khỏi công việc',
+            'đã gỡ bạn khỏi danh sách người thực hiện.',
+            false
+        );
         return redirect()->route('tasks.show', $task)->with('success', 'Đã cập nhật công việc.');
     }
 
@@ -157,7 +199,15 @@ class WorkTaskController extends Controller
         $assignment = $this->assignment($request,$task);
         $assignment->update(['acknowledged_at'=>$assignment->acknowledged_at ? null : now()]);
         $this->log($task,$request,$assignment->acknowledged_at ? 'Đã xác nhận nhận công việc.' : 'Đã bỏ xác nhận nhận công việc.','acknowledged');
-        RealtimeNotifier::user($task->created_by_id, $request->user()->name.' vừa cập nhật xác nhận: '.$task->title);
+        $recipients = $this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id);
+        RealtimeNotifier::users($recipients, $request->user()->name.' vừa cập nhật xác nhận: '.$task->title);
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $recipients,
+            $assignment->acknowledged_at ? 'Đã nhận việc' : 'Đã bỏ xác nhận nhận việc',
+            $assignment->acknowledged_at ? 'đã xác nhận nhận việc.' : 'đã bỏ xác nhận nhận việc.'
+        );
         return back()->with('success','Đã cập nhật xác nhận.');
     }
 
@@ -166,9 +216,18 @@ class WorkTaskController extends Controller
         if ($task->closed_at) return back()->with('warning', 'Task đã đóng. Chỉ người giao việc mới có thể mở lại task.');
         $assignment = $this->assignment($request,$task);
         $data = $request->validate(['note'=>'nullable|string|max:2000']);
+        $data['note'] = $this->sanitizeRichText($data['note'] ?? null);
         $assignment->update(['completed_at'=>$assignment->completed_at ? null : now(), 'note'=>$data['note'] ?? $assignment->note]);
         $this->log($task,$request,$assignment->completed_at ? 'Đã hoàn thành công việc.' : 'Đã mở lại công việc.','status');
-        RealtimeNotifier::user($task->created_by_id, $request->user()->name.' vừa cập nhật trạng thái: '.$task->title);
+        $recipients = $this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id);
+        RealtimeNotifier::users($recipients, $request->user()->name.' vừa cập nhật trạng thái: '.$task->title);
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $recipients,
+            $assignment->completed_at ? 'Công việc đã hoàn thành' : 'Công việc đã được mở lại',
+            $assignment->completed_at ? 'đã báo cáo hoàn thành công việc.' : 'đã mở lại công việc để tiếp tục thực hiện.'
+        );
         return back()->with('success','Đã cập nhật trạng thái thực hiện.');
     }
 
@@ -176,11 +235,105 @@ class WorkTaskController extends Controller
     {
         $this->ensureParticipant($request,$task);
         if ($task->closed_at) return back()->with('warning', 'Task đã đóng. Không thể gửi thêm phản hồi.');
-        $data=$request->validate(['body'=>'required|string|max:3000']);
-        $task->comments()->create(['user_id'=>$request->user()->id,'body'=>$data['body']]);
+        $data=$request->validate([
+            'body'=>'required|string|max:3000',
+            'attachments'=>'nullable|array|max:5',
+            'attachments.*'=>'file|max:10240',
+        ]);
+        $data['body'] = $this->sanitizeRichText($data['body']);
+        $comment = $task->comments()->create(['user_id'=>$request->user()->id,'body'=>$data['body']]);
+        $this->storeAttachments($request, $task, $comment->id);
         $this->log($task,$request,'Đã gửi một phản hồi.','comment');
-        RealtimeNotifier::users($this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id), 'Phản hồi mới trong công việc: '.$task->title);
+        $recipients = $this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id);
+        RealtimeNotifier::users($recipients, 'Phản hồi mới trong công việc: '.$task->title);
+        $this->sendActivityEmails($request, $task, $recipients, 'Phản hồi mới', 'vừa gửi một phản hồi mới.');
         return back()->with('success','Đã gửi phản hồi.');
+    }
+
+    public function retractComment(Request $request, WorkTask $task, WorkTaskComment $comment): RedirectResponse
+    {
+        $this->ensureParticipant($request, $task);
+        abort_unless($comment->work_task_id === $task->id, 404);
+        abort_unless($comment->user_id === $request->user()->id, 403, 'Bạn chỉ được thu hồi phản hồi của chính mình.');
+
+        if ($comment->created_at->lt(now()->subHours(24))) {
+            throw ValidationException::withMessages([
+                'comment' => 'Phản hồi đã quá 24 giờ nên không thể thu hồi.',
+            ]);
+        }
+
+        DB::transaction(function () use ($request, $task, $comment) {
+            $comment->load('attachments');
+            foreach ($comment->attachments as $attachment) {
+                Storage::disk('local')->delete($attachment->storage_path);
+            }
+            $comment->delete();
+            $this->log($task, $request, 'Đã thu hồi một phản hồi.', 'comment_retracted');
+        });
+
+        $recipients = $this->participantIds($task)->reject(fn ($id) => (int) $id === $request->user()->id);
+        RealtimeNotifier::users(
+            $recipients,
+            $request->user()->name.' đã thu hồi một phản hồi trong công việc: '.$task->title
+        );
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $recipients,
+            'Phản hồi đã được thu hồi',
+            'đã thu hồi một phản hồi.'
+        );
+
+        return back()->with('success', 'Đã thu hồi phản hồi.');
+    }
+
+    public function downloadAttachment(Request $request, WorkTask $task, WorkTaskAttachment $attachment)
+    {
+        $this->ensureParticipant($request, $task);
+        abort_unless($attachment->work_task_id === $task->id, 404);
+        abort_unless(Storage::disk('local')->exists($attachment->storage_path), 404);
+
+        $extension = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
+        $previewMimeTypes = [
+            'pdf' => 'application/pdf',
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            'svg' => 'image/svg+xml',
+            'txt' => 'text/plain; charset=UTF-8',
+            'csv' => 'text/plain; charset=UTF-8',
+        ];
+        $previewMime = $previewMimeTypes[$extension] ?? null;
+
+        if ($request->boolean('preview') && $previewMime) {
+            return response()
+                ->file(Storage::disk('local')->path($attachment->storage_path), ['Content-Type' => $previewMime])
+                ->setContentDisposition('inline', $attachment->original_name);
+        }
+
+        return Storage::disk('local')->download($attachment->storage_path, $attachment->original_name);
+    }
+
+    public function destroyAttachment(Request $request, WorkTask $task, WorkTaskAttachment $attachment): RedirectResponse
+    {
+        abort_unless($task->created_by_id === $request->user()->id, 403, 'Chỉ người giao công việc mới được xóa file.');
+        abort_unless($attachment->work_task_id === $task->id && $attachment->work_task_comment_id === null, 404);
+
+        Storage::disk('local')->delete($attachment->storage_path);
+        $fileName = $attachment->original_name;
+        $attachment->delete();
+        $this->log($task, $request, 'Đã xóa file đính kèm: '.$fileName, 'attachment_deleted');
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $this->participantIds($task),
+            'File đính kèm đã bị xóa',
+            'đã xóa file đính kèm “'.$fileName.'”.'
+        );
+
+        return back()->with('success', 'Đã xóa file đính kèm.');
     }
 
     public function close(Request $request, WorkTask $task): RedirectResponse
@@ -198,7 +351,15 @@ class WorkTaskController extends Controller
         $closing = ! $task->closed_at;
         $task->update(['closed_at' => $closing ? now() : null, 'closed_by_id' => $closing ? $request->user()->id : null]);
         $this->log($task, $request, $closing ? 'Đã đóng task.' : 'Đã mở lại task.', 'closed');
-        RealtimeNotifier::users($this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id), ($closing ? 'Đã đóng công việc: ' : 'Đã mở lại công việc: ').$task->title);
+        $recipients = $this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id);
+        RealtimeNotifier::users($recipients, ($closing ? 'Đã đóng công việc: ' : 'Đã mở lại công việc: ').$task->title);
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $recipients,
+            $closing ? 'Công việc đã đóng' : 'Công việc đã được mở lại',
+            $closing ? 'đã đóng công việc.' : 'đã mở lại công việc.'
+        );
 
         return redirect()->route('tasks.show', $task)->with('success', $closing ? 'Đã đóng task.' : 'Đã mở lại task.');
     }
@@ -206,8 +367,17 @@ class WorkTaskController extends Controller
     {
         abort_unless($task->created_by_id === $request->user()->id, 403, 'Chỉ người giao mới được xóa công việc.');
         $recipients = $this->participantIds($task)->reject(fn ($id)=>(int)$id===$request->user()->id);
+        Storage::disk('local')->deleteDirectory('work-task-attachments/'.$task->id);
         $task->delete();
         RealtimeNotifier::users($recipients, 'Đã xóa công việc: '.$task->title);
+        $this->sendActivityEmails(
+            $request,
+            $task,
+            $recipients,
+            'Công việc đã bị xóa',
+            'đã xóa công việc.',
+            false
+        );
         return redirect()->route('tasks.index')->with('success','Đã xóa công việc.');
     }
 
@@ -219,4 +389,76 @@ class WorkTaskController extends Controller
     { $task->activities()->create(['user_id'=>$request->user()->id,'action'=>$action,'description'=>$description]); }
     private function participantIds(WorkTask $task)
     { return $task->assignees()->pluck('user_id')->push($task->created_by_id)->unique(); }
+
+    private function sendActivityEmails(
+        Request $request,
+        WorkTask $task,
+        iterable $recipientIds,
+        string $eventTitle,
+        string $eventDescription,
+        bool $includeTaskLink = true,
+    ): void {
+        $ids = collect($recipientIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0 && $id !== (int) $request->user()->id)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) return;
+
+        $notification = new WorkTaskActivityNotification(
+            $request->user()->name,
+            $task->title,
+            $eventTitle,
+            $eventDescription,
+            $includeTaskLink ? route('tasks.show', $task) : null,
+        );
+
+        User::query()
+            ->whereKey($ids)
+            ->where('active', true)
+            ->where('notifications_enabled', true)
+            ->get()
+            ->each(function (User $recipient) use ($notification, $task, $eventTitle): void {
+                try {
+                    $recipient->notify($notification);
+                } catch (\Throwable $exception) {
+                    Log::warning('Không thể gửi email hoạt động công việc.', [
+                        'recipient_id' => $recipient->id,
+                        'task_id' => $task->id,
+                        'event' => $eventTitle,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+            });
+    }
+
+    private function storeAttachments(Request $request, WorkTask $task, ?int $commentId = null): void
+    {
+        foreach ($request->file('attachments', []) as $file) {
+            $path = $file->store('work-task-attachments/'.$task->id, 'local');
+            $task->attachments()->create([
+                'work_task_comment_id' => $commentId,
+                'uploaded_by_id' => $request->user()->id,
+                'original_name' => mb_substr($file->getClientOriginalName(), 0, 255),
+                'storage_path' => $path,
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
+            ]);
+        }
+    }
+
+    private function sanitizeRichText(?string $html): ?string
+    {
+        if ($html === null || trim($html) === '') return null;
+        $html = strip_tags($html, '<p><div><br><strong><b><em><i><u><s><ul><ol><li><blockquote><h1><h2><h3><a>');
+        $html = preg_replace('/\s+(on\w+|style|class|id)\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/is', '', $html);
+        $html = preg_replace_callback('/<a\b([^>]*)>/i', function ($match) {
+            if (! preg_match('/href\s*=\s*(["\'])(.*?)\1/i', $match[1], $href)) return '<a>';
+            $url = trim(html_entity_decode($href[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            if (! preg_match('#^(https?://|mailto:)#i', $url)) return '<a>';
+            return '<a href="'.e($url).'" target="_blank" rel="noopener noreferrer">';
+        }, $html);
+        return trim($html);
+    }
 }

@@ -16,4 +16,5 @@ class WorkTask extends Model
     public function assignees(): HasMany { return $this->hasMany(WorkTaskAssignee::class); }
     public function comments(): HasMany { return $this->hasMany(WorkTaskComment::class); }
     public function activities(): HasMany { return $this->hasMany(WorkTaskActivity::class); }
+    public function attachments(): HasMany { return $this->hasMany(WorkTaskAttachment::class)->whereNull('work_task_comment_id'); }
 }
