@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{ActivityLog,ExcessPayment,ImportBatch,LanguageClass,LanguageLead,LanguageStudent,LanguageTuitionCharge,LanguageTuitionPayment,Personnel,User};
+use App\Models\{ActivityLog,ExcessPayment,ImportBatch,LanguageClass,LanguageLead,LanguageStudent,LanguageTuitionCharge,LanguageTuitionPayment,Personnel,User,WorkTask,WorkTaskAssignee};
 use App\Support\{ExcelExporter,KpiCalculator};
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -41,6 +41,33 @@ class SystemDashboardController extends Controller
         $registeredLeads=(clone $periodLeads)->where('status','registered')->count();
         $financial=['receivable'=>(float)(clone $charges)->sum('payable_amount'),'collected'=>(float)(clone $receipts)->sum('amount'),'outstanding'=>(float)(clone $charges)->selectRaw('COALESCE(SUM(GREATEST(payable_amount-paid_amount,0)),0) total')->value('total'),'expense'=>(float)(clone $expenses)->sum('payment_amount')];
         $financial['net']=$financial['collected']-$financial['expense'];
+        $workTasks=WorkTask::query()->whereBetween('created_at',[$start,$end]);
+        if(!$canViewAll){
+            $workTasks->where(fn($query)=>$query->where('created_by_id',$user->id)
+                ->orWhereHas('assignees',fn($assignees)=>$assignees->where('user_id',$user->id)));
+        }
+        $workAssignments=WorkTaskAssignee::query()->whereIn('work_task_id',(clone $workTasks)->select('id'));
+        $workTaskStats=[
+            'total'=>(clone $workTasks)->count(),
+            'assignments'=>(clone $workAssignments)->count(),
+            'acknowledged'=>(clone $workAssignments)->whereNotNull('acknowledged_at')->count(),
+            'completed'=>(clone $workAssignments)->whereNotNull('completed_at')->count(),
+            'overdue'=>(clone $workTasks)->whereNull('closed_at')->where('due_at','<',now())
+                ->whereHas('assignees',fn($query)=>$query->whereNull('completed_at'))->count(),
+        ];
+        $taskRecipientStats=$canViewAll
+            ? WorkTaskAssignee::query()
+                ->select('user_id')
+                ->selectRaw('COUNT(*) AS total_tasks')
+                ->selectRaw('SUM(CASE WHEN acknowledged_at IS NOT NULL THEN 1 ELSE 0 END) AS acknowledged_tasks')
+                ->selectRaw('SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) AS completed_tasks')
+                ->selectRaw('SUM(CASE WHEN acknowledged_at IS NULL THEN 1 ELSE 0 END) AS unacknowledged_tasks')
+                ->whereIn('work_task_id',(clone $workTasks)->select('id'))
+                ->with('user:id,name,email')
+                ->groupBy('user_id')
+                ->orderByDesc('total_tasks')
+                ->get()
+            : collect();
 
         return view('system-dashboard',[
             'year'=>$year,'periodType'=>$request->input('period_type','year'),'period'=>$period,'start'=>$start,'end'=>$end,'canViewAll'=>$canViewAll,'currentUser'=>$user,
@@ -52,7 +79,8 @@ class SystemDashboardController extends Controller
             'studentStatuses'=>(clone $periodStudents)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'classStatuses'=>(clone $classes)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'tuitionStatuses'=>(clone $charges)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
-            'financial'=>$financial,'recentActivities'=>$activities->limit(8)->get(),'recentImports'=>$imports->limit(6)->get(),
+            'financial'=>$financial,'workTaskStats'=>$workTaskStats,'taskRecipientStats'=>$taskRecipientStats,
+            'recentActivities'=>$canViewAll?$activities->limit(8)->get():collect(),'recentImports'=>$imports->limit(6)->get(),
         ]);
     }
 
@@ -60,6 +88,12 @@ class SystemDashboardController extends Controller
     {
         $data=$this->index($request)->getData(); $period=$data['period'];
         $rows=[['Hệ thống','Tài khoản hoạt động',$data['activeUsers'],'tài khoản',$period],['Hệ thống','Nhân sự hoạt động',$data['activePersonnel'],'nhân sự',$period],['KPI','Chỉ tiêu năm',$data['kpiTotals']['target_quantity'],'KPI','Năm '.$data['year']],['KPI','Đã thực hiện',$data['kpiTotals']['actual_quantity'],'KPI','Năm '.$data['year']],['Tuyển sinh','Khách hàng mới',$data['leads'],'lượt',$period],['Tuyển sinh','Đã tư vấn',$data['consulted'],'lượt',$period],['Tuyển sinh','Đã đăng ký',$data['registeredLeads'],'lượt',$period],['Tuyển sinh','Tỷ lệ chuyển đổi',$data['conversionRate'],'%',$period],['Học viên','Học viên mới',$data['students'],'học viên',$period],['Lớp học','Đang hoạt động',$data['activeClasses'],'lớp',$period],['Lớp học','Đang/sắp tuyển',$data['upcomingClasses'],'lớp',$period],['Tài chính','Phải thu',$data['financial']['receivable'],'đ',$period],['Tài chính','Đã thu',$data['financial']['collected'],'đ',$period],['Tài chính','Còn nợ',$data['financial']['outstanding'],'đ',$period],['Tài chính','Đã chi',$data['financial']['expense'],'đ',$period],['Tài chính','Thu ròng',$data['financial']['net'],'đ',$period]];
+        array_splice($rows,2,0,[
+            ['Công việc','Tổng công việc đã giao',$data['workTaskStats']['total'],'công việc',$period],
+            ['Công việc','Lượt phân công',$data['workTaskStats']['assignments'],'lượt',$period],
+            ['Công việc','Đã nhận việc',$data['workTaskStats']['acknowledged'],'lượt',$period],
+            ['Công việc','Đã hoàn thành',$data['workTaskStats']['completed'],'lượt',$period],
+        ]);
         foreach($data['leadStatuses'] as $status=>$total)$rows[]=['Trạng thái tư vấn',$status,$total,'khách hàng',$period];
         foreach($data['studentStatuses'] as $status=>$total)$rows[]=['Trạng thái học viên',$status,$total,'học viên',$period];
         foreach($data['classStatuses'] as $status=>$total)$rows[]=['Trạng thái lớp học',$status,$total,'lớp',$period];

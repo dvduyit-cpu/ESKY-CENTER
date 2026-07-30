@@ -19,6 +19,46 @@
 <div class="col-lg-2 d-flex align-items-end"><button class="btn btn-primary w-100"><i class="bi bi-filter"></i>Xem tổng quan</button></div>
 </form>
 
+<div class="system-section-title"><span><i class="bi bi-list-check"></i></span><div><h5>{{$canViewAll?'Công việc toàn hệ thống':'Công việc của tôi'}}</h5><small>Thống kê công việc được giao trong {{$period}}</small></div>@if($canViewAll)<button class="btn btn-sm btn-outline-primary ms-auto" type="button" data-bs-toggle="modal" data-bs-target="#taskRecipientStatsModal"><i class="bi bi-people me-1"></i>Xem theo thành viên</button>@elseif(auth()->user()->allowed('work_tasks'))<a class="btn btn-sm btn-outline-primary ms-auto" href="{{route('tasks.index')}}">Mở công việc</a>@endif</div>
+<div class="row g-3 mb-4">
+@foreach([
+    [$canViewAll?'Tổng công việc đã giao':'Công việc liên quan',$workTaskStats['total'],'primary','bi-send-check'],
+    ['Lượt phân công',$workTaskStats['assignments'],'info','bi-people'],
+    ['Đã nhận việc',$workTaskStats['acknowledged'],'success','bi-check-square'],
+    ['Đã hoàn thành',$workTaskStats['completed'],'success','bi-check2-circle'],
+    ['Đang quá hạn',$workTaskStats['overdue'],'danger','bi-exclamation-triangle']
+] as [$label,$value,$color,$icon])
+<div class="col-6 col-xl">@if(auth()->user()->allowed('work_tasks'))<a class="dashboard-card-link" href="{{route('tasks.index')}}">@endif<div class="card card-soft stat-card h-100"><div class="card-body p-4"><div class="stat-label">{{$label}}</div><div class="d-flex justify-content-between align-items-center"><div class="stat-value text-{{$color}}">{{number_format($value)}}</div><div class="stat-icon bg-{{$color}}-subtle text-{{$color}}"><i class="bi {{$icon}}"></i></div></div></div></div>@if(auth()->user()->allowed('work_tasks'))</a>@endif</div>
+@endforeach
+</div>
+
+@if($canViewAll)
+<div class="modal fade" id="taskRecipientStatsModal" tabindex="-1" aria-labelledby="taskRecipientStatsTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0">
+            <div class="modal-header">
+                <div><h5 class="modal-title" id="taskRecipientStatsTitle">Công việc theo thành viên</h5><small class="text-muted">Số công việc mỗi thành viên được giao trong {{$period}}.</small></div>
+                <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-modern align-middle mb-0">
+                        <thead><tr><th>Thành viên</th><th class="text-center">Được giao</th><th class="text-center">Đã nhận việc</th><th class="text-center">Hoàn thành</th><th class="text-center">Chưa nhận</th></tr></thead>
+                        <tbody>
+                        @forelse($taskRecipientStats as $member)
+                            <tr><td><strong>{{$member->user?->name ?? 'Tài khoản đã xóa'}}</strong><div class="small text-muted">{{$member->user?->email}}</div></td><td class="text-center"><span class="badge-soft badge-info">{{number_format($member->total_tasks)}}</span></td><td class="text-center">{{number_format($member->acknowledged_tasks)}}</td><td class="text-center text-success fw-bold">{{number_format($member->completed_tasks)}}</td><td class="text-center {{$member->unacknowledged_tasks?'text-danger fw-bold':'text-muted'}}">{{number_format($member->unacknowledged_tasks)}}</td></tr>
+                        @empty
+                            <tr><td colspan="5"><div class="empty-state py-5">Chưa có công việc được giao trong kỳ này.</div></td></tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
 <div class="system-section-title"><span><i class="bi bi-cash-stack"></i></span><div><h5>Tài chính trung tâm</h5><small>Học phí thu, công nợ và khoản chi</small></div></div>
 <div class="row g-3 mb-4">@foreach([['Phải thu',$financial['receivable'],'primary','bi-receipt','language-tuition.index','language_tuition'],['Đã thu',$financial['collected'],'success','bi-wallet2','language-tuition.index','language_tuition'],['Còn phải thu',$financial['outstanding'],'warning','bi-exclamation-circle','language-tuition.index','language_tuition'],['Đã chi',$financial['expense'],'danger','bi-cash-coin','payments.index','payments'],['Thu ròng',$financial['net'],$financial['net']>=0?'success':'danger','bi-graph-up-arrow','language-tuition.index','language_tuition']] as [$label,$value,$color,$icon,$route,$permission])<div class="col-sm-6 col-xl">@if(auth()->user()->allowed($permission))<a class="dashboard-card-link" href="{{route($route)}}">@endif<div class="card card-soft stat-card h-100"><div class="card-body p-4"><div class="d-flex justify-content-between gap-2"><div><div class="stat-label">{{$label}}</div><div class="fs-4 fw-bold text-{{$color}}">{{number_format($value)}}đ</div></div><div class="stat-icon bg-{{$color}}-subtle text-{{$color}}"><i class="bi {{$icon}}"></i></div></div></div></div>@if(auth()->user()->allowed($permission))</a>@endif</div>@endforeach</div>
 
@@ -38,6 +78,6 @@
 @endforeach
 </div>
 
-<div class="row g-4"><div class="col-xl-7">@if(auth()->user()->allowed('logs'))<a class="dashboard-card-link" href="{{route('logs.index')}}">@endif<div class="card card-soft"><div class="card-header bg-white p-4"><h5 class="mb-0 fw-bold">Hoạt động gần đây</h5></div><div class="table-responsive"><table class="table table-modern"><thead><tr><th>Người thực hiện</th><th>Nội dung</th><th>Thời gian</th></tr></thead><tbody>@forelse($recentActivities as $log)<tr><td><strong>{{$log->user?->name?:'Hệ thống'}}</strong></td><td>{{$log->description}}</td><td>{{$log->created_at?->format('d/m/Y H:i')}}</td></tr>@empty<tr><td colspan="3"><div class="empty-state">Không có hoạt động trong kỳ.</div></td></tr>@endforelse</tbody></table></div></div>@if(auth()->user()->allowed('logs'))</a>@endif</div><div class="col-xl-5">@if(auth()->user()->allowed('imports'))<a class="dashboard-card-link" href="{{route('imports.index')}}">@endif<div class="card card-soft h-100"><div class="card-header bg-white p-4"><h5 class="mb-0 fw-bold">Dữ liệu nhập gần đây</h5></div><div class="card-body">@forelse($recentImports as $batch)<div class="d-flex gap-3 border-bottom py-3"><div class="stat-icon bg-primary-subtle text-primary"><i class="bi bi-file-earmark-spreadsheet"></i></div><div><strong>{{$batch->original_name}}</strong><div class="small text-muted">{{$batch->user?->name}} · {{$batch->created_at?->format('d/m/Y H:i')}}</div></div></div>@empty<div class="empty-state">Không có dữ liệu nhập trong kỳ.</div>@endforelse</div></div>@if(auth()->user()->allowed('imports'))</a>@endif</div></div>
+<div class="row g-4">@if($canViewAll)<div class="col-xl-7">@if(auth()->user()->allowed('logs'))<a class="dashboard-card-link" href="{{route('logs.index')}}">@endif<div class="card card-soft"><div class="card-header bg-white p-4"><h5 class="mb-0 fw-bold">Hoạt động gần đây</h5></div><div class="table-responsive"><table class="table table-modern"><thead><tr><th>Người thực hiện</th><th>Nội dung</th><th>Thời gian</th></tr></thead><tbody>@forelse($recentActivities as $log)<tr><td><strong>{{$log->user?->name?:'Hệ thống'}}</strong></td><td>{{$log->description}}</td><td>{{$log->created_at?->format('d/m/Y H:i')}}</td></tr>@empty<tr><td colspan="3"><div class="empty-state">Không có hoạt động trong kỳ.</div></td></tr>@endforelse</tbody></table></div></div>@if(auth()->user()->allowed('logs'))</a>@endif</div>@endif<div class="{{$canViewAll?'col-xl-5':'col-12'}}">@if(auth()->user()->allowed('imports'))<a class="dashboard-card-link" href="{{route('imports.index')}}">@endif<div class="card card-soft h-100"><div class="card-header bg-white p-4"><h5 class="mb-0 fw-bold">Dữ liệu nhập gần đây</h5></div><div class="card-body">@forelse($recentImports as $batch)<div class="d-flex gap-3 border-bottom py-3"><div class="stat-icon bg-primary-subtle text-primary"><i class="bi bi-file-earmark-spreadsheet"></i></div><div><strong>{{$batch->original_name}}</strong><div class="small text-muted">{{$batch->user?->name}} · {{$batch->created_at?->format('d/m/Y H:i')}}</div></div></div>@empty<div class="empty-state">Không có dữ liệu nhập trong kỳ.</div>@endforelse</div></div>@if(auth()->user()->allowed('imports'))</a>@endif</div></div>
 @endsection
 @push('scripts')<script>document.addEventListener('DOMContentLoaded',()=>{const form=document.querySelector('[data-system-period-filter]'),mode=form?.querySelector('[data-period-mode]');if(!form||!mode)return;const update=()=>form.querySelectorAll('[data-period-field]').forEach(field=>field.classList.toggle('d-none',field.dataset.periodField!==mode.value));mode.addEventListener('change',update);update()});</script>@endpush

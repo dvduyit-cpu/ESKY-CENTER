@@ -6,19 +6,27 @@ use App\Models\User;
 use App\Models\WorkTask;
 use App\Models\SystemSetting;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Collection;
 
-class WorkTaskAssigned extends Notification
+class WorkTaskAssigned extends Notification implements ShouldQueue
 {
     use Queueable;
+
+    private readonly string $logoPath;
 
     public function __construct(
         private readonly User $assigner,
         private readonly Collection $tasks,
-    ) {}
+    ) {
+        $logoPath = Schema::hasTable('system_settings') ? SystemSetting::valueOf('logo_path') : null;
+        $this->logoPath = $logoPath && is_file(public_path($logoPath))
+            ? $logoPath
+            : 'uploads/branding/logo-20260722101948.png';
+    }
 
     public function via(object $notifiable): array
     {
@@ -34,11 +42,6 @@ class WorkTaskAssigned extends Notification
             'low' => 'Thấp',
             default => 'Bình thường',
         };
-
-        $logoPath = Schema::hasTable('system_settings') ? SystemSetting::valueOf('logo_path') : null;
-        if (! $logoPath || ! is_file(public_path($logoPath))) {
-            $logoPath = 'uploads/branding/logo-20260722101948.png';
-        }
 
         if ($this->tasks->count() > 1) {
             /** @var WorkTask $lastTask */
@@ -63,7 +66,7 @@ class WorkTaskAssigned extends Notification
                 'priority'=>$priority,
                 'schedule'=>$schedule,
                 'taskUrl'=>route('tasks.show', $firstTask),
-                'logoUrl'=>asset($logoPath),
+                'logoUrl'=>asset($this->logoPath),
             ]);
     }
 }

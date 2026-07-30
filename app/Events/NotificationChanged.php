@@ -15,6 +15,7 @@ class NotificationChanged implements ShouldBroadcastNow
     public function __construct(
         public readonly int|array|null $userId = null,
         public readonly string $message = 'Có thông báo mới.',
+        public readonly ?string $url = null,
     ) {}
 
     public function broadcastOn(): array
@@ -31,6 +32,10 @@ class NotificationChanged implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
-        return ['message'=>$this->message,'sent_at'=>now()->utc()->toIso8601String()];
+        return [
+            'message'=>$this->message,
+            'url'=>$this->url,
+            'sent_at'=>now()->utc()->toIso8601String(),
+        ];
     }
 }

@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (bulkForm && !bulkForm.querySelector('[data-list-export]')) {
                 const exportButton = document.createElement('button');
                 exportButton.type = 'button'; exportButton.className = 'btn btn-sm btn-outline-success';
-                exportButton.dataset.listExport = ''; exportButton.disabled = true;
+                exportButton.dataset.listExport = ''; exportButton.dataset.keepLabel = ''; exportButton.disabled = true;
                 exportButton.innerHTML = '<i class="bi bi-file-earmark-spreadsheet me-1"></i>Xuất dòng đã chọn';
                 bulkForm.append(exportButton);
                 const refreshExport = () => exportButton.disabled = !boxes.some(box => box.checked);
@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const toolbar = document.createElement('div');
         toolbar.className = 'list-selection-toolbar d-flex flex-wrap align-items-center gap-2 p-3 border-bottom';
-        toolbar.innerHTML = `<label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" class="form-check-input" data-list-select-all> Chọn tất cả trang này</label><span class="badge-soft badge-info" data-list-count>0 đã chọn</span><button type="button" class="btn btn-sm btn-outline-success" data-list-export disabled><i class="bi bi-file-earmark-spreadsheet me-1"></i>Xuất dòng đã chọn</button>`;
+        toolbar.innerHTML = `<label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" class="form-check-input" data-list-select-all> Chọn tất cả trang này</label><span class="badge-soft badge-info" data-list-count>0 đã chọn</span><button type="button" class="btn btn-sm btn-outline-success" data-list-export data-keep-label disabled><i class="bi bi-file-earmark-spreadsheet me-1"></i>Xuất dòng đã chọn</button>`;
         const container = table.closest('.table-responsive') ?? table;
         container.before(toolbar);
         const all = toolbar.querySelector('[data-list-select-all]');
@@ -80,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteButton = document.createElement('button');
             deleteButton.type = 'button';
             deleteButton.className = 'btn btn-sm btn-outline-danger';
+            deleteButton.dataset.keepLabel = '';
             deleteButton.innerHTML = '<i class="bi bi-trash me-1"></i>Xóa dòng đã chọn';
             deleteButton.disabled = true;
             toolbar.append(deleteButton);
@@ -130,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const bulkForm = formId ? document.getElementById(formId) : null;
         if (bulkForm && !bulkForm.querySelector('[data-list-export]')) {
             const button = document.createElement('button');
-            button.type = 'button'; button.className = 'btn btn-sm btn-outline-success'; button.dataset.listExport = ''; button.disabled = true;
+            button.type = 'button'; button.className = 'btn btn-sm btn-outline-success'; button.dataset.listExport = ''; button.dataset.keepLabel = ''; button.disabled = true;
             button.innerHTML = '<i class="bi bi-file-earmark-spreadsheet me-1"></i>Xuất dòng đã chọn'; bulkForm.append(button);
             const refresh = () => button.disabled = !existingBoxes.some(box => box.checked);
             existingBoxes.forEach(box => box.addEventListener('change', refresh)); bulkForm.querySelector('[data-bulk-all]')?.addEventListener('change', () => setTimeout(refresh));
@@ -142,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toolbar = document.createElement('div');
     toolbar.dataset.cardSelectionToolbar = '';
     toolbar.className = 'list-selection-toolbar d-flex flex-wrap align-items-center gap-2 p-3 mb-3';
-    toolbar.innerHTML = '<label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" class="form-check-input" data-card-all> Chọn tất cả trang này</label><span class="badge-soft badge-info" data-card-count>0 đã chọn</span><button class="btn btn-sm btn-outline-success" type="button" data-card-export disabled><i class="bi bi-file-earmark-spreadsheet me-1"></i>Xuất dòng đã chọn</button>';
+    toolbar.innerHTML = '<label class="d-flex align-items-center gap-2 mb-0"><input type="checkbox" class="form-check-input" data-card-all> Chọn tất cả trang này</label><span class="badge-soft badge-info" data-card-count>0 đã chọn</span><button class="btn btn-sm btn-outline-success" type="button" data-card-export data-keep-label disabled><i class="bi bi-file-earmark-spreadsheet me-1"></i>Xuất dòng đã chọn</button>';
     cards[0].closest('.row')?.before(toolbar);
     const boxes = cards.map(card => {
         const box = document.createElement('input');
@@ -154,11 +155,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const all = toolbar.querySelector('[data-card-all]'), count = toolbar.querySelector('[data-card-count]'), exportButton = toolbar.querySelector('[data-card-export]');
     const deletable = cards.some(card => card.querySelector('[data-card-delete]'));
     let deleteButton = null;
-    if (deletable) { deleteButton = document.createElement('button'); deleteButton.type = 'button'; deleteButton.className = 'btn btn-sm btn-outline-danger'; deleteButton.innerHTML = '<i class="bi bi-trash me-1"></i>Xóa đã chọn'; toolbar.append(deleteButton); }
+    if (deletable) { deleteButton = document.createElement('button'); deleteButton.type = 'button'; deleteButton.className = 'btn btn-sm btn-outline-danger'; deleteButton.dataset.keepLabel = ''; deleteButton.innerHTML = '<i class="bi bi-trash me-1"></i>Xóa đã chọn'; toolbar.append(deleteButton); }
     const selected = () => cards.filter((card, index) => boxes[index].checked);
     const refresh = () => { const list=selected(); cards.forEach((card,index)=>card.classList.toggle('is-selected',boxes[index].checked)); count.textContent=`${list.length} đã chọn`; exportButton.disabled=!list.length; all.checked=list.length===cards.length; all.indeterminate=list.length>0&&list.length<cards.length; if(deleteButton)deleteButton.disabled=!list.length||list.some(card=>!card.querySelector('[data-card-delete]')); };
     boxes.forEach(box => box.addEventListener('change', refresh)); all.addEventListener('change',()=>{boxes.forEach(box=>box.checked=all.checked);refresh()});
     exportButton.addEventListener('click',()=>{const rows=selected().map(card=>'"'+card.innerText.replace(/\s+/g,' ').trim().replaceAll('"','""')+'"');const blob=new Blob(['\uFEFFNội dung\r\n'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='cong-viec-da-chon.csv';link.click();URL.revokeObjectURL(link.href)});
-    deleteButton?.addEventListener('click',async()=>{const list=selected();if(!confirm(`Xóa ${list.length} công việc đã chọn?`))return;let failed=false;for(const card of list){const form=card.querySelector('[data-card-delete]');const response=await fetch(form.action,{method:'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest'},redirect:'manual'});if(!response.ok&&response.type!=='opaqueredirect'){failed=true;alert('Có công việc không thể xóa.');break}}if(!failed)location.reload()});
+    deleteButton?.addEventListener('click', async () => {
+        if (deleteButton.dataset.submitting === 'true') return;
+        const list = selected();
+        if (!confirm(`Xóa ${list.length} công việc đã chọn?`)) return;
+
+        deleteButton.dataset.submitting = 'true';
+        deleteButton.disabled = true;
+        deleteButton.setAttribute('aria-busy', 'true');
+        deleteButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Đang xóa...';
+        window.dispatchEvent(new Event('page-loading:show'));
+
+        let deletedCount = 0;
+        try {
+            for (const card of list) {
+                const form = card.querySelector('[data-card-delete]');
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                    redirect: 'manual',
+                });
+                if (!response.ok && response.type !== 'opaqueredirect') {
+                    throw new Error('Không thể xóa công việc.');
+                }
+                deletedCount++;
+            }
+            location.reload();
+        } catch (error) {
+            alert('Có công việc không thể xóa hoặc kết nối mạng bị gián đoạn.');
+            if (deletedCount > 0) {
+                location.reload();
+                return;
+            }
+            deleteButton.dataset.submitting = 'false';
+            deleteButton.removeAttribute('aria-busy');
+            deleteButton.innerHTML = '<i class="bi bi-trash me-1"></i>Xóa đã chọn';
+            window.dispatchEvent(new Event('page-loading:hide'));
+            refresh();
+        }
+    });
     refresh();
 });

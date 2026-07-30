@@ -20,6 +20,28 @@ document.addEventListener('DOMContentLoaded', () => {
     let refreshInFlight = null;
     let lastServerTime = null;
     let pollingTimer = null;
+    let latestStatusData = null;
+    const recentEventsStorageKey = `esky-realtime-events:${config.userId}`;
+    const recentEventMaxAge = 7 * 24 * 60 * 60 * 1000;
+    let recentEvents = (() => {
+        try {
+            const stored = JSON.parse(window.localStorage.getItem(recentEventsStorageKey) || '[]');
+            const oldestAllowed = Date.now() - recentEventMaxAge;
+            return Array.isArray(stored)
+                ? stored
+                    .filter(item => item?.message && Date.parse(item.sentAt) >= oldestAllowed)
+                    .slice(0, 12)
+                : [];
+        } catch (_) {
+            return [];
+        }
+    })();
+
+    const saveRecentEvents = () => {
+        try {
+            window.localStorage.setItem(recentEventsStorageKey, JSON.stringify(recentEvents));
+        } catch (_) {}
+    };
 
     const empty = message => {
         const box = document.createElement('div');
@@ -65,17 +87,66 @@ document.addEventListener('DOMContentLoaded', () => {
         return link;
     };
 
+    const realtimeEventLink = item => {
+        const link = document.createElement(item.url ? 'a' : 'div');
+        link.className = 'reminder-item text-decoration-none text-dark';
+        if (item.url) {
+            try {
+                const url = new URL(item.url, window.location.origin);
+                if (url.origin === window.location.origin) {
+                    link.href = url.pathname + url.search + url.hash;
+                }
+            } catch (_) {}
+        }
+        link.innerHTML = '<i class="bi bi-chat-left-text-fill text-primary"></i>';
+        const copy = document.createElement('span');
+        const title = document.createElement('strong');
+        title.textContent = item.message;
+        const time = document.createElement('small');
+        const sentAt = new Date(item.sentAt);
+        time.textContent = Number.isNaN(sentAt.getTime())
+            ? 'Vừa xong'
+            : sentAt.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+        copy.append(title, time);
+        link.appendChild(copy);
+        return link;
+    };
+
+    const recordRealtimeEvent = payload => {
+        const message = payload?.message?.trim();
+        if (!message) return;
+        const sentAt = payload.sent_at || new Date().toISOString();
+        const key = `${sentAt}|${message}`;
+        if (recentEvents.some(item => item.key === key)) return;
+        recentEvents.unshift({
+            key,
+            message,
+            url: payload.url || null,
+            sentAt,
+            read: false,
+        });
+        recentEvents = recentEvents.slice(0, 12);
+        saveRecentEvents();
+    };
+
     const render = data => {
-        badge.textContent = data.total > 99 ? '99+' : data.total;
+        latestStatusData = data;
+        const unreadEventCount = recentEvents.filter(item => !item.read).length;
+        const total = Number(data.total || 0) + unreadEventCount;
+        badge.textContent = total > 99 ? '99+' : total;
         notificationsEnabled = Boolean(data.enabled);
-        badge.classList.toggle('d-none', !data.enabled || data.total === 0);
+        badge.classList.toggle('d-none', !data.enabled || total === 0);
         if (!data.enabled) {
             itemsBox.replaceChildren(empty('Thông báo đã tắt cho tài khoản này.'));
             initialized = true;
             socket?.close();
             return;
         }
-        const nodes = [...data.reminders.map(reminderLink), ...data.items.map(summaryLink)];
+        const nodes = [
+            ...recentEvents.map(realtimeEventLink),
+            ...data.reminders.map(reminderLink),
+            ...data.items.map(summaryLink),
+        ];
         itemsBox.replaceChildren(...(nodes.length ? nodes : [empty('Không có thông báo mới.')]));
         initialized = true;
         document.dispatchEvent(new CustomEvent('esky:realtime-update', { detail: data }));
@@ -162,6 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (packet.event === 'notification.changed') {
                 const payload = typeof packet.data === 'string' ? JSON.parse(packet.data) : packet.data;
+                recordRealtimeEvent(payload);
                 refresh(payload?.message || 'Có thông báo mới.');
             }
         });
@@ -177,6 +249,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (document.hidden) return;
         refresh();
         connect();
+    });
+    widget.addEventListener('shown.bs.dropdown', () => {
+        if (!recentEvents.some(item => !item.read)) return;
+        recentEvents = recentEvents.map(item => ({ ...item, read: true }));
+        saveRecentEvents();
+        if (latestStatusData) render(latestStatusData);
     });
     window.addEventListener('online', connect);
     window.addEventListener('pagehide', () => {
