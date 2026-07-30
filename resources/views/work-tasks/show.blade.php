@@ -20,7 +20,7 @@
         <h5>Phản hồi</h5>
         @if($task->closed_at)
             <div class="alert alert-secondary py-2"><i class="bi bi-lock me-1"></i>Task đã đóng. Mở lại task để tiếp tục phản hồi.</div>
-        @else
+        @elseif($canParticipate)
             <form method="POST" action="{{route('tasks.comments.store',$task)}}" enctype="multipart/form-data" @if($errors->any() && old('_task_form')==='comment-task') data-open-on-error @endif>
                 @csrf
                 <input type="hidden" name="_task_form" value="comment-task">
@@ -38,6 +38,8 @@
                 </div>
                 <button class="btn btn-primary"><i class="bi bi-send me-1"></i>Gửi phản hồi</button>
             </form>
+        @else
+            <div class="alert alert-info py-2"><i class="bi bi-eye me-1"></i>Bạn đang xem công việc ở chế độ giám sát.</div>
         @endif
 
         @forelse($comments as $comment)
@@ -59,7 +61,7 @@
                     <strong>{{$comment->user->name}}</strong>
                     <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
                         <small class="text-muted">{{$comment->created_at->format('H:i d/m/Y')}}</small>
-                        @unless($task->closed_at)
+                        @if($canParticipate && !$task->closed_at)
                             <button
                                 class="btn btn-sm btn-light py-1 px-2"
                                 type="button"
@@ -71,7 +73,7 @@
                                 data-preview="{{$commentPreview}}"
                                 title="Trả lời phản hồi"
                             ><i class="bi bi-reply me-1"></i>Trả lời</button>
-                        @endunless
+                        @endif
                         @if($comment->user_id===auth()->id() && $comment->created_at->gte(now()->subHours(24)))
                             <form method="POST" action="{{route('tasks.comments.retract',[$task,$comment])}}" data-confirm="Thu hồi phản hồi này? Nội dung và file đính kèm sẽ bị xóa.">
                                 @csrf

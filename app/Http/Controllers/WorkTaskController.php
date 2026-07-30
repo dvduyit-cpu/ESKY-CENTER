@@ -27,8 +27,11 @@ class WorkTaskController extends Controller
     public function index(Request $request): View
     {
         $me = $request->user();
-        $base = WorkTask::query()
-            ->where(fn ($q) => $q->where('created_by_id', $me->id)->orWhereHas('assignees', fn ($a) => $a->where('user_id', $me->id)));
+        $base = WorkTask::query();
+        if (! $me->isAdmin() && ! $me->isDirector()) {
+            $base->where(fn ($q) => $q->where('created_by_id', $me->id)
+                ->orWhereHas('assignees', fn ($a) => $a->where('user_id', $me->id)));
+        }
         $filterYear = $request->integer('year');
         $filterMonth = $request->integer('month');
         $filterQuarter = $request->integer('quarter');
@@ -192,7 +195,7 @@ class WorkTaskController extends Controller
 
     public function show(Request $request, WorkTask $task): View
     {
-        $this->ensureParticipant($request,$task);
+        $this->ensureCanViewTask($request, $task);
         $task->load(['creator', 'assignees.user', 'attachments']);
         $comments = $task->comments()
             ->with(['user', 'parent.user', 'attachments'])
@@ -207,13 +210,14 @@ class WorkTaskController extends Controller
             ->withQueryString()
             ->fragment('taskHistory');
         $isCreator = $task->created_by_id === $request->user()->id;
+        $canParticipate = $isCreator || $task->assignees->contains('user_id', $request->user()->id);
         $canEdit = $isCreator && $request->user()->allowed('work_tasks', 'update');
         $canClose = $canEdit;
         $canDelete = $isCreator && $request->user()->allowed('work_tasks', 'delete');
         $users = $canEdit
             ? User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email'])
             : collect();
-        return view('work-tasks.show', compact('task', 'comments', 'activities', 'users', 'canEdit', 'canClose', 'canDelete'));
+        return view('work-tasks.show', compact('task', 'comments', 'activities', 'users', 'canParticipate', 'canEdit', 'canClose', 'canDelete'));
     }
 
     public function update(Request $request, WorkTask $task): RedirectResponse
@@ -626,7 +630,7 @@ class WorkTaskController extends Controller
 
     public function downloadAttachment(Request $request, WorkTask $task, WorkTaskAttachment $attachment)
     {
-        $this->ensureParticipant($request, $task);
+        $this->ensureCanViewTask($request, $task);
         abort_unless($attachment->work_task_id === $task->id, 404);
         abort_unless(Storage::disk('local')->exists($attachment->storage_path), 404);
 
@@ -821,7 +825,19 @@ class WorkTaskController extends Controller
     }
 
     private function ensureParticipant(Request $request, WorkTask $task): void
-    { abort_unless($task->created_by_id===$request->user()->id || $task->assignees()->where('user_id',$request->user()->id)->exists(),403); }
+    {
+        abort_unless(
+            $task->created_by_id === $request->user()->id
+                || $task->assignees()->where('user_id', $request->user()->id)->exists(),
+            403
+        );
+    }
+    private function ensureCanViewTask(Request $request, WorkTask $task): void
+    {
+        if ($request->user()->isAdmin() || $request->user()->isDirector()) return;
+
+        $this->ensureParticipant($request, $task);
+    }
     private function log(WorkTask $task, Request $request, string $description, string $action): void
     { $task->activities()->create(['user_id'=>$request->user()->id,'action'=>$action,'description'=>$description]); }
     private function participantIds(WorkTask $task)

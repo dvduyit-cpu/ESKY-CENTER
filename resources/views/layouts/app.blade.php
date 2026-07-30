@@ -35,6 +35,7 @@
         <nav class="sidebar-nav nav flex-column">
             <a class="nav-link {{ request()->routeIs('welcome') ? 'active' : '' }}" href="{{ route('welcome') }}"><i class="bi bi-house-door-fill"></i> Trang chủ</a>
             <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> {{ auth()->user()->isAdmin() || auth()->user()->allowed('system_dashboard') ? 'Tổng quan toàn hệ thống' : 'Tổng quan cá nhân' }}</a>
+            @if(auth()->user()->isDirector())<a class="nav-link {{ request()->routeIs('director.*') ? 'active' : '' }}" href="{{ route('director.dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> Tổng quan điều hành</a>@endif
         </nav>
         @php
             $me = auth()->user();
@@ -161,6 +162,7 @@
                 str_starts_with($routeName, 'plans.'), str_starts_with($routeName, 'tasks.') => 'Công việc',
                 $routeName === 'guide' => 'Trợ giúp',
                 $routeName === 'dashboard' => 'Tổng quan',
+                str_starts_with($routeName, 'director.') => 'Điều hành',
                 str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'KPI & báo cáo',
                 str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'profile'), str_starts_with($routeName, 'personal-settings') => 'Tài khoản cá nhân',
@@ -172,6 +174,7 @@
                 str_starts_with($routeName, 'tasks.') => 'Giao task',
                 $routeName === 'guide' => 'Hướng dẫn sử dụng',
                 $routeName === 'dashboard' => 'Tổng quan hệ thống',
+                str_starts_with($routeName, 'director.') => 'Tổng quan toàn Trung tâm',
                 str_starts_with($routeName, 'kpi-dashboard') => 'Tổng quan chỉ tiêu',
                 str_starts_with($routeName, 'kpis') => 'Kế hoạch chỉ tiêu',
                 str_starts_with($routeName, 'courses') => 'Khóa học & quy đổi',

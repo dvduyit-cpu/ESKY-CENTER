@@ -36,6 +36,8 @@ class UserPreferences
 
     public static function landingRoute(User $user): string
     {
+        if ($user->isDirector()) return 'director.dashboard';
+
         $selected = (string) self::value($user, 'landing_page', 'welcome');
         $available = self::landingPages($user);
 

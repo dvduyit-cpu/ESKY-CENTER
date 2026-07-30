@@ -40,9 +40,24 @@ class User extends Authenticatable
         return $this->role?->code === 'admin';
     }
 
+    public function isDirector(): bool
+    {
+        return $this->role?->code === 'director';
+    }
+
+    public function isDeputyDirector(): bool
+    {
+        return $this->role?->code === 'deputy_director';
+    }
+
+    public function isManagement(): bool
+    {
+        return $this->isAdmin() || $this->isDirector() || $this->isDeputyDirector();
+    }
+
     public function isLeader(): bool
     {
-        return in_array($this->role?->code, ['admin', 'leader'], true);
+        return in_array($this->role?->code, ['admin', 'director', 'deputy_director', 'leader'], true);
     }
 
     public function allowed(string $moduleCode, string $action = 'view'): bool

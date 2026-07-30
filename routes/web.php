@@ -5,6 +5,7 @@ use App\Http\Controllers\WelcomeController;
 use App\Http\Controllers\WorkTaskController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DirectorDashboardController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\KpiPlanController;
 use App\Http\Controllers\LogController;
@@ -71,6 +72,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::patch('/plans/{plan}/toggle', [WelcomeController::class, 'toggle'])->name('plans.toggle');
         Route::delete('/plans/{plan}', [WelcomeController::class, 'destroy'])->name('plans.destroy');
         Route::get('/', [SystemDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/director/operations', [DirectorDashboardController::class, 'index'])->name('director.dashboard');
         Route::get('/realtime/status', [RealtimeController::class, 'status'])->name('realtime.status');
         Route::get('/system-dashboard-export', [SystemDashboardController::class, 'export'])->middleware('permission:system_dashboard,export')->name('dashboard.export');
         Route::get('/kpi-dashboard', [DashboardController::class, 'index'])->name('kpi-dashboard.index');

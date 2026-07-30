@@ -22,6 +22,9 @@ class UserController extends Controller
     public function index(Request $request): View
     {
         $query = User::with(['role','personnel','languageCollaborator'])->withTrashed()->orderBy('name');
+        if ($request->user()->isDirector()) {
+            $query->whereHas('role', fn ($role) => $role->where('code', 'deputy_director'));
+        }
         if ($request->filled('q')) {
             $q = $request->string('q')->toString();
             $query->where(fn ($b) => $b->where('name','like',"%{$q}%")->orWhere('email','like',"%{$q}%"));
@@ -37,15 +40,15 @@ class UserController extends Controller
         }
         return view('users.index', [
             'users' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
-            'roles' => Role::orderBy('name')->get(),
+            'roles' => $this->manageableRoles($request->user()),
         ]);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
         return view('users.form', [
             'user' => new User(),
-            'roles' => Role::orderBy('name')->get(),
+            'roles' => $this->manageableRoles($request->user()),
             'personnels' => Personnel::where('active', true)->whereDoesntHave('user')->orderBy('name')->get(),
             'collaborators' => LanguageCollaborator::where('active',true)->whereDoesntHave('personnel.user')->orderBy('name')->get(),
         ]);
@@ -62,11 +65,13 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('success', 'Đã tạo tài khoản.');
     }
 
-    public function edit(User $user): View
+    public function edit(Request $request, User $user): View
     {
+        $this->ensureCanManageUser($request->user(), $user);
+
         return view('users.form', [
             'user' => $user,
-            'roles' => Role::orderBy('name')->get(),
+            'roles' => $this->manageableRoles($request->user()),
             'personnels' => Personnel::where(fn ($q) => $q->where('active', true)->orWhere('id', $user->personnel_id))
                 ->where(fn ($q) => $q->whereDoesntHave('user')->orWhere('id', $user->personnel_id))
                 ->orderBy('name')->get(),
@@ -79,6 +84,7 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): RedirectResponse
     {
+        $this->ensureCanManageUser($request->user(), $user);
         $before = $user->only(['name','email','role_id','active','personnel_id']);
         $data = $this->validated($request, $user);
         unset($data['password']);
@@ -91,6 +97,7 @@ class UserController extends Controller
 
     public function destroy(Request $request, User $user): RedirectResponse
     {
+        $this->ensureCanManageUser($request->user(), $user);
         abort_if($request->user()->is($user), 422, 'Không thể xóa tài khoản đang đăng nhập.');
         $this->guardLastAdmin($user);
         $user->delete();
@@ -100,6 +107,7 @@ class UserController extends Controller
 
     public function bulkDestroy(Request $request): RedirectResponse
     {
+        abort_unless($request->user()->isAdmin(), 403, 'Chỉ Admin được xóa nhiều tài khoản.');
         $data = $request->validate(['ids' => ['required','array','min:1'], 'ids.*' => ['integer'], 'delete_type' => ['required', Rule::in(['soft','force'])]]);
         $force = $data['delete_type'] === 'force';
         abort_if($force && ! $request->user()->isAdmin(), 403, 'Chỉ quản trị viên được xóa vĩnh viễn.');
@@ -115,9 +123,10 @@ class UserController extends Controller
         return back()->with('success', 'Đã '.($force ? 'xóa vĩnh viễn ' : 'xóa mềm ').$deleted.' tài khoản. Tài khoản đang đăng nhập, Admin cuối cùng hoặc bản ghi còn ràng buộc được giữ lại.');
     }
 
-    public function restore(int $id): RedirectResponse
+    public function restore(Request $request, int $id): RedirectResponse
     {
         $user = User::withTrashed()->findOrFail($id);
+        $this->ensureCanManageUser($request->user(), $user);
         $user->restore();
         ActivityLogger::log('users', 'restore', 'Khôi phục tài khoản '.$user->email, $user);
         return back()->with('success', 'Đã khôi phục tài khoản.');
@@ -125,6 +134,7 @@ class UserController extends Controller
 
     public function toggle(Request $request, User $user): RedirectResponse
     {
+        $this->ensureCanManageUser($request->user(), $user);
         abort_if($request->user()->is($user), 422, 'Không thể khóa tài khoản đang đăng nhập.');
         if ($user->active) $this->guardLastAdmin($user);
         $user->update(['active' => ! $user->active]);
@@ -134,14 +144,17 @@ class UserController extends Controller
 
     public function resetPassword(Request $request, User $user): RedirectResponse
     {
+        $this->ensureCanManageUser($request->user(), $user);
         $data = $request->validate(['password' => ['required','string','min:8','confirmed']]);
         $user->update(['password' => Hash::make($data['password']), 'must_change_password' => true]);
         ActivityLogger::log('users', 'reset_password', 'Đặt lại mật khẩu '.$user->email, $user);
         return back()->with('success', 'Đã đặt lại mật khẩu. Người dùng phải đổi mật khẩu khi đăng nhập.');
     }
 
-    public function permissions(User $user): View
+    public function permissions(Request $request, User $user): View
     {
+        abort_unless($request->user()->isAdmin(), 403, 'Chỉ Admin được ghi đè quyền riêng.');
+
         return view('users.permissions', [
             'user' => $user->load('role'),
             'modules' => Module::orderBy('sort_order')->get(),
@@ -151,6 +164,7 @@ class UserController extends Controller
 
     public function updatePermissions(Request $request, User $user): RedirectResponse
     {
+        abort_unless($request->user()->isAdmin(), 403, 'Chỉ Admin được ghi đè quyền riêng.');
         $modules = Module::all();
         DB::transaction(function () use ($request, $user, $modules): void {
             foreach ($modules as $module) {
@@ -180,7 +194,11 @@ class UserController extends Controller
         return $request->validate([
             'personnel_id' => ['nullable','integer','exists:personnels,id', Rule::unique('users')->ignore($user?->id)],
             'language_collaborator_id' => ['nullable','integer','exists:language_collaborators,id', Rule::unique('users')->ignore($user?->id)],
-            'role_id' => ['required','integer','exists:roles,id'],
+            'role_id' => [
+                'required',
+                'integer',
+                Rule::in($this->manageableRoles($request->user())->pluck('id')->all()),
+            ],
             'name' => ['required','string','max:150'],
             'email' => ['required','email','max:150', Rule::unique('users')->ignore($user?->id)],
             'password' => $user ? ['nullable'] : ['required','string','min:8','confirmed'],
@@ -200,5 +218,24 @@ class UserController extends Controller
             || DB::table('work_task_assignees')->where('user_id', $user->id)->exists()
             || DB::table('work_task_comments')->where('user_id', $user->id)->exists()
             || DB::table('upcoming_plans')->where('user_id', $user->id)->exists();
+    }
+
+    private function manageableRoles(User $actor)
+    {
+        if ($actor->isAdmin()) return Role::orderBy('name')->get();
+        if ($actor->isDirector()) return Role::where('code', 'deputy_director')->orderBy('name')->get();
+
+        return collect();
+    }
+
+    private function ensureCanManageUser(User $actor, User $target): void
+    {
+        if ($actor->isAdmin()) return;
+
+        abort_unless(
+            $actor->isDirector() && $target->role?->code === 'deputy_director',
+            403,
+            'Giám đốc chỉ được quản lý tài khoản Phó giám đốc.'
+        );
     }
 }

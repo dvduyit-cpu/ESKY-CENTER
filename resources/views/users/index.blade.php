@@ -4,8 +4,8 @@
 @section('content')
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
-        <h1 class="page-title">Tài khoản hệ thống</h1>
-        <div class="page-subtitle">Tạo, khóa, xóa mềm, đặt lại mật khẩu và cấp quyền riêng.</div>
+        <h1 class="page-title">{{auth()->user()->isDirector()?'Quản lý Phó giám đốc':'Tài khoản hệ thống'}}</h1>
+        <div class="page-subtitle">{{auth()->user()->isDirector()?'Giám đốc có thể cập nhật, khóa/mở và đặt lại mật khẩu tài khoản Phó giám đốc.':'Tạo, khóa, xóa mềm, đặt lại mật khẩu và cấp quyền riêng.'}}</div>
     </div>
     @if(auth()->user()->allowed('users','create'))
         <a href="{{ route('users.create') }}" class="btn btn-primary"><i class="bi bi-person-plus me-2"></i>Tạo tài khoản</a>
@@ -38,12 +38,12 @@
                         @if($u->must_change_password)<div class="small text-warning mt-1">Phải đổi mật khẩu</div>@endif
                     </td>
                     <td class="text-end text-nowrap">
-                        @if($u->trashed())
+                        @if($u->trashed() && auth()->user()->allowed('users','delete'))
                             <form class="d-inline" method="POST" action="{{ route('users.restore',$u->id) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-success">Khôi phục</button></form>
                         @else
                             @if(auth()->user()->allowed('users','update'))
                                 <a class="btn btn-sm btn-outline-primary" href="{{ route('users.edit',$u) }}" title="Sửa"><i class="bi bi-pencil"></i></a>
-                                <a class="btn btn-sm btn-outline-dark" href="{{ route('users.permissions',$u) }}" title="Quyền riêng"><i class="bi bi-shield-lock"></i></a>
+                                @if(auth()->user()->isAdmin())<a class="btn btn-sm btn-outline-dark" href="{{ route('users.permissions',$u) }}" title="Quyền riêng"><i class="bi bi-shield-lock"></i></a>@endif
                                 <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#reset{{ $u->id }}" title="Đặt lại mật khẩu"><i class="bi bi-key"></i></button>
                                 @if(!auth()->user()->is($u))
                                     <form class="d-inline" method="POST" action="{{ route('users.toggle',$u) }}">@csrf @method('PATCH')<button class="btn btn-sm btn-outline-warning" data-confirm="Xác nhận khóa/mở tài khoản?"><i class="bi bi-lock"></i></button></form>
