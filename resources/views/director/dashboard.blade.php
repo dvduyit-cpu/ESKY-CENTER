@@ -5,9 +5,9 @@
 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
     <div>
         <h1 class="page-title">Tổng quan toàn Trung tâm</h1>
-        <div class="page-subtitle">Bảng điều hành riêng của Giám đốc, tổng hợp các hoạt động trọng yếu trong {{$period}}.</div>
+        <div class="page-subtitle">Bảng điều hành dành cho Admin và Giám đốc, tổng hợp các hoạt động trọng yếu trong {{$period}}.</div>
     </div>
-    <span class="badge-soft badge-info"><i class="bi bi-shield-check me-1"></i>Chỉ Giám đốc được xem toàn bộ</span>
+    <span class="badge-soft badge-info"><i class="bi bi-shield-check me-1"></i>Admin và Giám đốc được xem toàn bộ</span>
 </div>
 
 <form class="filter-panel row g-3 mb-4">
@@ -265,7 +265,7 @@
     @if($tasks->hasPages())<div class="card-footer bg-white border-0 p-3">{{$tasks->links()}}</div>@endif
 </div>
 
-<div class="system-section-title"><span><i class="bi bi-person-badge-fill"></i></span><div><h5>Ban Giám đốc</h5><small>Giám đốc theo dõi và quản lý tài khoản Phó giám đốc</small></div></div>
+<div class="system-section-title"><span><i class="bi bi-person-badge-fill"></i></span><div><h5>Ban Giám đốc</h5><small>Admin và Giám đốc theo dõi tài khoản trong Ban Giám đốc</small></div></div>
 <div class="card card-soft">
     <div class="card-body p-4">
         <div class="row g-3">
@@ -280,7 +280,7 @@
                 <div class="col-12"><div class="empty-state py-4">Chưa có tài khoản Phó giám đốc.</div></div>
             @endforelse
         </div>
-        @if(auth()->user()->isDirector() && auth()->user()->allowed('users'))<a class="btn btn-primary mt-4" href="{{route('users.index')}}"><i class="bi bi-person-gear me-1"></i>Quản lý Phó giám đốc</a>@endif
+        @if((auth()->user()->isAdmin() || auth()->user()->isDirector()) && auth()->user()->allowed('users'))<a class="btn btn-primary mt-4" href="{{route('users.index')}}"><i class="bi bi-person-gear me-1"></i>{{auth()->user()->isAdmin()?'Quản lý toàn bộ tài khoản':'Quản lý Phó giám đốc'}}</a>@endif
     </div>
 </div>
 @endsection

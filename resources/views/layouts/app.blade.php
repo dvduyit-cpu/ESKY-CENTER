@@ -36,7 +36,7 @@
         <nav class="sidebar-nav nav flex-column">
             <a class="nav-link {{ request()->routeIs('welcome') ? 'active' : '' }}" href="{{ route('welcome') }}"><i class="bi bi-house-door-fill"></i> Trang chủ</a>
             <a class="nav-link {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> {{ auth()->user()->isAdmin() || auth()->user()->allowed('system_dashboard') ? 'Tổng quan toàn hệ thống' : 'Tổng quan cá nhân' }}</a>
-            @if(auth()->user()->isDirector())<a class="nav-link {{ request()->routeIs('director.*') ? 'active' : '' }}" href="{{ route('director.dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> Tổng quan điều hành</a>@endif
+            @if(auth()->user()->isAdmin() || auth()->user()->isDirector())<a class="nav-link {{ request()->routeIs('director.*') ? 'active' : '' }}" href="{{ route('director.dashboard') }}"><i class="bi bi-grid-1x2-fill"></i> Tổng quan điều hành</a>@endif
         </nav>
         @php
             $me = auth()->user();
