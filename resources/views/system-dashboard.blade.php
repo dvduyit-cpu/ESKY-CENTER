@@ -5,7 +5,7 @@
 @php($leadLabels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'])
 @php($studentLabels=['new'=>'Mới đăng ký','placement_test'=>'Chờ kiểm tra','waiting_class'=>'Chờ xếp lớp','studying'=>'Đang học','paused'=>'Tạm nghỉ','reserved'=>'Bảo lưu','completed'=>'Hoàn thành','dropped'=>'Thôi học'])
 @php($classLabels=['planned'=>'Dự kiến mở','recruiting'=>'Đang tuyển sinh','upcoming'=>'Sắp khai giảng','active'=>'Đang hoạt động','paused'=>'Tạm dừng','completed'=>'Đã kết thúc','cancelled'=>'Đã hủy'])
-@php($tuitionLabels=['unpaid'=>'Chưa thu','partial'=>'Thu một phần','pending_receipt'=>'Chờ bổ sung phiếu thu','paid'=>'Đã thu đủ'])
+@php($tuitionLabels=['unpaid'=>'Chưa thu','partial'=>'Thu một phần','pending_receipt'=>'Chờ bổ sung phiếu thu','paid'=>'Đã thu đủ','transferred'=>'Đã quyết toán chuyển lớp'])
 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4"><div><h1 class="page-title">{{$canViewAll?'Tổng quan toàn hệ thống':'Tổng quan cá nhân'}}</h1><div class="page-subtitle">Toàn bộ vận hành E-SKY CENTER trong {{$period}}.</div></div>@if(auth()->user()->allowed('system_dashboard','export'))<a class="btn btn-outline-success" href="{{route('dashboard.export',request()->query())}}"><i class="bi bi-file-earmark-excel"></i>Xuất Excel</a>@endif</div>
 
 <form class="filter-panel row g-3 mb-4" data-system-period-filter>

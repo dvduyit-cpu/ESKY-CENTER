@@ -2,8 +2,8 @@
 @section('title','Chi tiết thu học phí')
 @section('header','Quản lý học viên')
 @section('content')
-@php($labels=['unpaid'=>'Chưa đóng','partial'=>'Đóng một phần','pending_receipt'=>'Chờ bổ sung phiếu thu','paid'=>'Đã đóng đủ'])
-@php($remaining=max(0,(float)$item->payable_amount-(float)$item->paid_amount))
+@php($labels=['unpaid'=>'Chưa đóng','partial'=>'Đóng một phần','pending_receipt'=>'Chờ bổ sung phiếu thu','paid'=>'Đã đóng đủ','transferred'=>'Đã quyết toán chuyển lớp'])
+@php($remaining=$item->remainingAmount())
 @php($transferContent=\Illuminate\Support\Str::limit(trim(\Illuminate\Support\Str::ascii($item->student->name.' '.($item->languageClass?->code ?? 'CHUA XEP LOP'))),50,''))
 
 <div class="tuition-detail-page">
@@ -32,8 +32,23 @@
                     <div class="col-6 col-md-3"><div class="small text-muted">Học phí</div><strong>{{number_format($item->original_amount)}}đ</strong></div>
                     <div class="col-6 col-md-3"><div class="small text-muted">Miễn giảm</div><strong>{{$item->discount_percentage}}%</strong></div>
                     <div class="col-6 col-md-3"><div class="small text-muted">Đã thu</div><strong class="text-success">{{number_format($item->paid_amount)}}đ</strong></div>
+                    <div class="col-6 col-md-3"><div class="small text-muted">Học phí chuyển sang</div><strong class="text-primary">{{number_format($item->credit_amount)}}đ</strong></div>
                     <div class="col-6 col-md-3"><div class="small text-muted">Còn lại</div><strong class="text-danger">{{number_format($remaining)}}đ</strong></div>
-                    <div class="col-12"><span class="badge-soft {{$item->status==='paid'?'badge-success':(in_array($item->status,['partial','pending_receipt'])?'badge-warning':'badge-danger')}}">{{$labels[$item->status]??$item->status}}</span></div>
+                    <div class="col-12"><span class="badge-soft {{in_array($item->status,['paid','transferred'])?'badge-success':(in_array($item->status,['partial','pending_receipt'])?'badge-warning':'badge-danger')}}">{{$labels[$item->status]??$item->status}}</span></div>
+                    @foreach($item->incomingTransfers as $transfer)
+                        <div class="col-12"><div class="alert alert-info mb-0">
+                            Nhận <strong>{{number_format($transfer->applied_amount)}}đ</strong>
+                            từ lớp {{$transfer->fromClass?->code}} ngày {{$transfer->effective_date->format('d/m/Y')}}.
+                        </div></div>
+                    @endforeach
+                    @foreach($item->outgoingTransfers as $transfer)
+                        <div class="col-12"><div class="alert alert-light border mb-0">
+                            Đã chuyển <strong>{{number_format($transfer->applied_amount)}}đ</strong> sang lớp {{$transfer->toClass?->code}}.
+                            @if((float) $transfer->surplus_amount > 0)
+                                Còn <strong>{{number_format($transfer->surplus_amount)}}đ</strong> chờ hoàn hoặc bảo lưu.
+                            @endif
+                        </div></div>
+                    @endforeach
                 </div></div>
             </div>
 

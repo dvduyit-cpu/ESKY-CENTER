@@ -14,6 +14,7 @@ use Illuminate\View\View;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use App\Models\SystemSetting;
+use Carbon\Carbon;
 
 class LanguageTuitionController extends Controller
 {
@@ -27,6 +28,49 @@ class LanguageTuitionController extends Controller
         if ($request->filled('status')) $query->where('status',$request->status);
         $this->applyPeriod($query,$request);
         return view('language.tuition.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'filterYear'=>$request->integer('year',now()->year)]);
+    }
+
+    public function monthly(Request $request): View
+    {
+        try {
+            $month = $request->filled('month')
+                ? Carbon::createFromFormat('!Y-m', (string) $request->input('month'))->startOfMonth()
+                : now()->startOfMonth();
+        } catch (\Throwable) {
+            $month = now()->startOfMonth();
+        }
+
+        $query = LanguageTuitionPayment::query()
+            ->with(['collector','charge.student.guardians','charge.course','charge.languageClass'])
+            ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()]);
+        if ($request->filled('q')) {
+            $search = (string) $request->string('q')->trim();
+            $query->where(function ($builder) use ($search) {
+                $builder->where('receipt_code', 'like', "%{$search}%")
+                    ->orWhereHas('charge.student', fn ($student) => $student
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereHas('guardians', fn ($guardians) => $guardians->where('phone', 'like', "%{$search}%")))
+                    ->orWhereHas('charge.languageClass', fn ($class) => $class
+                        ->where('code', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%"));
+            });
+        }
+        if ($request->filled('receipt_status')) {
+            $query->where('receipt_status', $request->input('receipt_status'));
+        }
+
+        $tuitionCollected = (float) (clone $query)->sum('amount');
+        $bookCollected = (float) (clone $query)->sum('book_amount');
+        $pendingCount = (clone $query)->where('receipt_status', 'pending')->count();
+
+        return view('language.tuition.monthly', [
+            'items' => $query->orderByDesc('paid_at')->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'month' => $month,
+            'tuitionCollected' => $tuitionCollected,
+            'bookCollected' => $bookCollected,
+            'pendingCount' => $pendingCount,
+        ]);
     }
 
     public function create(Request $request): View
@@ -43,7 +87,7 @@ class LanguageTuitionController extends Controller
     public function show(LanguageTuitionCharge $languageTuition): View
     {
         return view('language.tuition.show', [
-            'item' => $languageTuition->load(['student','course','languageClass.program','languageClass.level','discount','payments']),
+            'item' => $languageTuition->load(['student','course','languageClass.program','languageClass.level','discount','payments','incomingTransfers.fromClass','outgoingTransfers.toClass']),
             'bank' => self::bankSettings(),
         ]);
     }
@@ -61,7 +105,7 @@ class LanguageTuitionController extends Controller
         if (empty($data['language_lead_id'])) $data['language_lead_id']=$this->resolveLeadId((int)$data['language_student_id'],(int)$data['language_course_id']);
         $discount=!empty($data['language_discount_policy_id'])?LanguageDiscountPolicy::find($data['language_discount_policy_id']):null;
         $percentage=(float)($discount?->percentage??0); $amount=(float)$course->tuition;
-        $data+=['code'=>CenterCode::next('language_tuition_charges','HP'),'original_amount'=>$amount,'discount_percentage'=>$percentage,'discount_amount'=>round($amount*$percentage/100,2),'payable_amount'=>round($amount*(100-$percentage)/100,2),'paid_amount'=>0,'status'=>'unpaid','created_by'=>$request->user()->id];
+        $data+=['code'=>CenterCode::next('language_tuition_charges','HP'),'original_amount'=>$amount,'discount_percentage'=>$percentage,'discount_amount'=>round($amount*$percentage/100,2),'payable_amount'=>round($amount*(100-$percentage)/100,2),'paid_amount'=>0,'credit_amount'=>0,'status'=>'unpaid','created_by'=>$request->user()->id];
         LanguageTuitionCharge::create($data);
         LanguageStudent::whereKey($data['language_student_id'])->update(['language_course_id'=>$data['language_course_id'],'language_discount_policy_id'=>$data['language_discount_policy_id'] ?? null]);
         return redirect()->route('language-tuition.index')->with('success','Đã lập khoản thu học phí.');
@@ -81,7 +125,7 @@ class LanguageTuitionController extends Controller
         $paymentId=null;
         DB::transaction(function () use ($data,$request,$languageTuition,&$paymentId) {
             $charge=LanguageTuitionCharge::lockForUpdate()->findOrFail($languageTuition->id);
-            $remaining=(float)$charge->payable_amount-(float)$charge->paid_amount;
+            $remaining=$charge->remainingAmount();
             if ($data['amount']>$remaining+0.001) throw \Illuminate\Validation\ValidationException::withMessages(['amount'=>'Số tiền thu vượt quá công nợ còn lại '.number_format($remaining).'đ.']);
             $payment=$charge->payments()->create($data+['collected_by'=>$request->user()->id]);
             $paymentId=$payment->id;
@@ -138,14 +182,14 @@ class LanguageTuitionController extends Controller
     public function export(Request $request)
     {
         $query=LanguageTuitionCharge::with(['student','course']); $this->applyPeriod($query,$request);
-        return ExcelExporter::download('thu-hoc-phi-'.date('Ymd').'.xlsx',['Mã khoản thu','Học viên','Khóa học','Học phí','Giảm %','Phải thu','Đã thu','Còn lại','Trạng thái','Hạn đóng'],$query->get()->map(fn($item)=>[$item->code,$item->student->name,$item->course->name,$item->original_amount,$item->discount_percentage,$item->payable_amount,$item->paid_amount,(float)$item->payable_amount-(float)$item->paid_amount,$item->status,$item->due_date?->format('d/m/Y')]));
+        return ExcelExporter::download('thu-hoc-phi-'.date('Ymd').'.xlsx',['Mã khoản thu','Học viên','Khóa học','Học phí','Giảm %','Phải thu','Đã thu','Chuyển sang','Còn lại','Trạng thái','Hạn đóng'],$query->get()->map(fn($item)=>[$item->code,$item->student->name,$item->course->name,$item->original_amount,$item->discount_percentage,$item->payable_amount,$item->paid_amount,$item->credit_amount,$item->remainingAmount(),$item->status,$item->due_date?->format('d/m/Y')]));
     }
 
     public function downloadQr(Request $request, LanguageTuitionCharge $languageTuition)
     {
         $languageTuition->load(['student','languageClass']);
         abort_unless(self::bankSettings()['enabled'], 422, 'Chưa cấu hình tài khoản ngân hàng nhận học phí.');
-        $remaining = max(0, (float) $languageTuition->payable_amount - (float) $languageTuition->paid_amount);
+        $remaining = $languageTuition->remainingAmount();
         $tuitionAmount = $request->filled('amount') ? min($remaining, max(1, $request->integer('amount'))) : $remaining;
         $bookAmount = max(0, $request->integer('book_amount'));
         $totalAmount = $tuitionAmount + $bookAmount;
@@ -213,9 +257,10 @@ class LanguageTuitionController extends Controller
     {
         $paidAmount = (float) $charge->payments()->sum('amount');
         $hasPendingReceipt = $charge->payments()->where('receipt_status', 'pending')->exists();
+        $settledAmount = $paidAmount + (float) $charge->credit_amount;
         $status = $hasPendingReceipt
             ? 'pending_receipt'
-            : ($paidAmount >= (float) $charge->payable_amount ? 'paid' : ($paidAmount > 0 ? 'partial' : 'unpaid'));
+            : ($settledAmount >= (float) $charge->payable_amount ? 'paid' : ($settledAmount > 0 ? 'partial' : 'unpaid'));
 
         $charge->update(['paid_amount' => $paidAmount, 'status' => $status]);
 

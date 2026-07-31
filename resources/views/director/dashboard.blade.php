@@ -48,6 +48,43 @@
 </div>
 
 <div class="system-section-title">
+    <span><i class="bi bi-activity"></i></span>
+    <div><h5>Giám sát vận hành và sức khỏe hệ thống</h5><small>Cảnh báo kỹ thuật và nghiệp vụ cần Ban Giám đốc chú ý</small></div>
+</div>
+<div class="row g-4 mb-4">
+    <div class="col-xl-5">
+        <div class="card card-soft h-100 system-health-card system-health-{{$systemHealth['status']}}">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                    <div><div class="stat-label">Sức khỏe hệ thống</div><div class="stat-value">{{$systemHealth['passed']}}/{{$systemHealth['total']}}</div></div>
+                    <span class="badge-soft {{$systemHealth['status']==='healthy'?'badge-success':($systemHealth['status']==='warning'?'badge-warning':'badge-danger')}}"><i class="bi {{$systemHealth['status']==='healthy'?'bi-check-circle-fill':'bi-exclamation-triangle-fill'}} me-1"></i>{{$systemHealth['status']==='healthy'?'Ổn định':($systemHealth['status']==='warning'?'Có cảnh báo':'Cần xử lý')}}</span>
+                </div>
+                <div class="d-flex flex-wrap gap-3 small mb-3"><span class="text-success"><strong>{{$systemHealth['passed']}}</strong> đạt</span><span class="text-warning"><strong>{{$systemHealth['warnings']}}</strong> cảnh báo</span><span class="text-danger"><strong>{{$systemHealth['errors']}}</strong> lỗi</span></div>
+                <div class="health-issue-list">
+                    @forelse($systemHealth['issues'] as $issue)
+                        <div class="health-issue"><i class="bi {{$issue['severity']==='warning'?'bi-exclamation-circle text-warning':'bi-x-octagon text-danger'}}"></i><span><strong>{{$issue['name']}}</strong><small>{{$issue['detail']}}</small></span></div>
+                    @empty
+                        <div class="health-issue is-ok"><i class="bi bi-check-circle-fill text-success"></i><span><strong>Không phát hiện lỗi kỹ thuật</strong><small>Các kiểm tra cốt lõi đều đạt.</small></span></div>
+                    @endforelse
+                </div>
+                <div class="small text-muted mt-3">Cập nhật lúc {{$systemHealth['checked_at']->format('H:i d/m/Y')}}</div>
+                @if(auth()->user()->isAdmin())<a class="btn btn-outline-primary w-100 mt-3" href="{{route('admin.system-test')}}"><i class="bi bi-clipboard2-pulse me-1"></i>Mở kiểm thử hệ thống</a>@endif
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-7">
+        <div class="card card-soft h-100"><div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3"><div><h5 class="mb-1">Cảnh báo vận hành</h5><small class="text-muted">Số liệu hiện tại, không phụ thuộc kỳ lọc phía trên</small></div><i class="bi bi-bell-fill text-primary fs-4"></i></div>
+            <div class="row g-3">
+                @foreach($operationalAlerts as $alert)
+                    <div class="col-sm-6"><a class="operation-alert operation-alert-{{$alert['tone']}}" href="{{route($alert['route'])}}"><span><i class="bi {{$alert['icon']}}"></i></span><div><strong>{{number_format($alert['count'])}}</strong><small>{{$alert['label']}}</small></div><i class="bi bi-arrow-right"></i></a></div>
+                @endforeach
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<div class="system-section-title">
     <span><i class="bi bi-columns-gap"></i></span>
     <div><h5>Tổng quan từng phân hệ</h5><small>Mỗi mô-đun hiển thị nhanh tình hình và dẫn đến dữ liệu chi tiết</small></div>
 </div>
@@ -63,6 +100,7 @@
                     ['Tổng nhân sự',$personnelStats['active']],
                     ['Lãnh đạo',$personnelStats['leaders']],
                     ['Giáo viên',$personnelStats['teachers']],
+                    ['Tài khoản giảng dạy',$personnelStats['teaching_accounts']],
                     ['Nhân viên',$personnelStats['employees']],
                     ['Cộng tác viên',$personnelStats['collaborators']],
                     ['Tài khoản hoạt động',$personnelStats['accounts']]

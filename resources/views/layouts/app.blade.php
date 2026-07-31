@@ -23,6 +23,7 @@
     <link href="{{ asset('css/work-tasks.css') }}?v={{ filemtime(public_path('css/work-tasks.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/list-selection.css') }}?v={{ filemtime(public_path('css/list-selection.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
+    @stack('styles')
 </head>
 <body data-theme="{{ $systemTheme ?? 'blue' }}" data-loading-style="{{ $systemLoadingStyle ?? 'center' }}" data-sidebar-mode="{{ $personalSidebarMode ?? 'remember' }}" data-visual-effect="{{ $personalVisualEffect ?? $systemVisualEffect ?? 'standard' }}">
 <div class="app-shell">
@@ -58,10 +59,10 @@
         <div class="sidebar-label">Học viên</div>
         <nav class="sidebar-nav nav flex-column">
             @if($me->allowed('language_students'))<a class="nav-link {{ request()->routeIs('language-students.*') ? 'active' : '' }}" href="{{ route('language-students.index') }}"><i class="bi bi-mortarboard-fill"></i> Học viên</a>@endif
-            @if($me->allowed('language_tuition'))<a class="nav-link {{ request()->routeIs('language-tuition.*') ? 'active' : '' }}" href="{{ route('language-tuition.index') }}"><i class="bi bi-cash-coin"></i> Thu học phí</a>@endif
+            @if($me->allowed('language_tuition'))<a class="nav-link {{ request()->routeIs('language-tuition.index','language-tuition.create','language-tuition.show') ? 'active' : '' }}" href="{{ route('language-tuition.index') }}"><i class="bi bi-cash-coin"></i> Thu học phí</a><a class="nav-link {{ request()->routeIs('language-tuition.monthly') ? 'active' : '' }}" href="{{ route('language-tuition.monthly') }}"><i class="bi bi-calendar2-check-fill"></i> Thu học phí theo tháng</a>@endif
         </nav>
         @endif
-        @if($me->allowed('language_classes') || $me->allowed('language_programs') || $me->allowed('language_courses'))
+        @if($me->allowed('teacher_classes') || $me->allowed('language_classes') || $me->allowed('language_programs') || $me->allowed('language_courses'))
         <div class="sidebar-label">Đào tạo</div>
         <nav class="sidebar-nav nav flex-column">
             @if($me->allowed('teacher_classes'))<a class="nav-link {{ request()->routeIs('teacher-classes.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>@endif

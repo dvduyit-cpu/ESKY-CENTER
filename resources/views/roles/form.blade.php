@@ -16,9 +16,12 @@
     <div class="card card-soft permission-card">
         <div class="card-header bg-white border-0 p-4 d-flex flex-wrap justify-content-between align-items-center gap-3"><div><h5 class="mb-1 fw-bold">Bảng phân quyền</h5><small class="text-muted">Có thể chọn tất cả hoặc chọn nhanh từng module.</small></div><label class="permission-all"><input class="form-check-input" type="checkbox" data-permission-all> <span>Chọn tất cả quyền</span></label></div>
         <div class="table-responsive"><table class="table table-modern permission-table"><thead><tr><th>Module</th><th class="text-center">Tất cả</th><th class="text-center">Xem</th><th class="text-center">Thêm</th><th class="text-center">Sửa</th><th class="text-center">Xóa</th><th class="text-center">Xuất file</th></tr></thead><tbody>
-        @foreach($modules as $m) @php($p=$permissions->get($m->id))
-            <tr data-permission-row><td><strong><i class="bi {{ $m->icon }} me-2"></i>{{ $m->name }}</strong><div class="small text-muted">{{ $m->code }}</div></td><td class="text-center"><input class="form-check-input permission-row-all" type="checkbox" data-permission-row-all aria-label="Chọn tất cả quyền của {{ $m->name }}"></td>
-            @foreach(['view','create','update','delete','export'] as $a)<td class="text-center"><input class="form-check-input permission-item" type="checkbox" name="permissions[{{ $m->id }}][{{ $a }}]" value="1" @checked($p?->{'can_'.$a})></td>@endforeach</tr>
+        @foreach($moduleGroups as $moduleGroup)
+            <tr class="permission-group-row"><td colspan="7"><i class="bi bi-folder2-open me-2"></i>{{$moduleGroup['name']}}</td></tr>
+            @foreach($moduleGroup['modules'] as $m) @php($p=$permissions->get($m->id)) @php($supportedActions=\App\Support\ModulePermissionCatalog::actionsFor($m->code))
+            <tr data-permission-row data-module-code="{{$m->code}}"><td><strong><i class="bi {{ $m->icon }} me-2"></i>{{ $m->name }}</strong><div class="small text-muted">{{ $m->code }}</div></td><td class="text-center"><input class="form-check-input permission-row-all" type="checkbox" data-permission-row-all aria-label="Chọn tất cả quyền của {{ $m->name }}"></td>
+            @foreach(['view','create','update','delete','export'] as $a)<td class="text-center">@if(in_array($a,$supportedActions,true))<input class="form-check-input permission-item" type="checkbox" name="permissions[{{ $m->id }}][{{ $a }}]" value="1" @checked($p?->{'can_'.$a})>@else<span class="permission-not-applicable" title="Module không có thao tác này">—</span>@endif</td>@endforeach</tr>
+            @endforeach
         @endforeach
         </tbody></table></div>
         <div class="card-footer bg-white border-0 p-4 d-flex justify-content-end"><button class="btn btn-primary"><i class="bi bi-save me-2"></i>Lưu vai trò và quyền</button></div>

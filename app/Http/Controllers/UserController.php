@@ -9,12 +9,14 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\UserPermission;
 use App\Support\ActivityLogger;
+use App\Support\ModulePermissionCatalog;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class UserController extends Controller
@@ -59,9 +61,11 @@ class UserController extends Controller
         $data = $this->validated($request);
         $data['password'] = Hash::make($data['password']);
         $data['active'] = $request->boolean('active', true);
+        $data['is_registrar'] = $this->registrarValue($request, (int) $data['role_id']);
+        $data['is_instructor'] = $this->instructorValue($request, (int) $data['role_id']);
         $data['must_change_password'] = $request->boolean('must_change_password', true);
         $user = User::create($data);
-        ActivityLogger::log('users', 'create', 'Tạo tài khoản '.$user->email, $user, null, $user->only(['name','email','role_id','active']));
+        ActivityLogger::log('users', 'create', 'Tạo tài khoản '.$user->email, $user, null, $user->only(['name','email','role_id','active','is_registrar','is_instructor']));
         return redirect()->route('users.index')->with('success', 'Đã tạo tài khoản.');
     }
 
@@ -85,13 +89,24 @@ class UserController extends Controller
     public function update(Request $request, User $user): RedirectResponse
     {
         $this->ensureCanManageUser($request->user(), $user);
-        $before = $user->only(['name','email','role_id','active','personnel_id']);
+        $before = $user->only(['name','email','role_id','active','is_registrar','is_instructor','personnel_id']);
         $data = $this->validated($request, $user);
         unset($data['password']);
         $data['active'] = $request->boolean('active');
+        $data['is_registrar'] = $this->registrarValue($request, (int) $data['role_id']);
+        $data['is_instructor'] = $this->instructorValue($request, (int) $data['role_id']);
+        if (! $data['is_instructor'] && $user->canTeach() && DB::table('language_classes')
+            ->where('teacher_user_id', $user->id)
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->whereNull('deleted_at')
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'is_instructor' => 'Tài khoản vẫn đang phụ trách lớp. Hãy chuyển giáo viên cho các lớp đang hoạt động trước khi tắt Kiêm giảng dạy.',
+            ]);
+        }
         $data['must_change_password'] = $request->boolean('must_change_password');
         $user->update($data);
-        ActivityLogger::log('users', 'update', 'Cập nhật tài khoản '.$user->email, $user, $before, $user->fresh()->only(['name','email','role_id','active','personnel_id']));
+        ActivityLogger::log('users', 'update', 'Cập nhật tài khoản '.$user->email, $user, $before, $user->fresh()->only(['name','email','role_id','active','is_registrar','is_instructor','personnel_id']));
         return redirect()->route('users.index')->with('success', 'Đã cập nhật tài khoản.');
     }
 
@@ -154,10 +169,12 @@ class UserController extends Controller
     public function permissions(Request $request, User $user): View
     {
         abort_unless($request->user()->isAdmin(), 403, 'Chỉ Admin được ghi đè quyền riêng.');
+        $modules = Module::orderBy('sort_order')->get();
 
         return view('users.permissions', [
             'user' => $user->load('role'),
-            'modules' => Module::orderBy('sort_order')->get(),
+            'modules' => $modules,
+            'moduleGroups' => ModulePermissionCatalog::grouped($modules),
             'overrides' => $user->permissions()->get()->keyBy('module_id'),
         ]);
     }
@@ -173,14 +190,15 @@ class UserController extends Controller
                     UserPermission::where('user_id', $user->id)->where('module_id', $module->id)->delete();
                     continue;
                 }
+                $supportedActions = ModulePermissionCatalog::actionsFor($module->code);
                 UserPermission::updateOrCreate(
                     ['user_id' => $user->id, 'module_id' => $module->id],
                     [
-                        'can_view' => $request->boolean("permissions.{$module->id}.view"),
-                        'can_create' => $request->boolean("permissions.{$module->id}.create"),
-                        'can_update' => $request->boolean("permissions.{$module->id}.update"),
-                        'can_delete' => $request->boolean("permissions.{$module->id}.delete"),
-                        'can_export' => $request->boolean("permissions.{$module->id}.export"),
+                        'can_view' => in_array('view', $supportedActions, true) && $request->boolean("permissions.{$module->id}.view"),
+                        'can_create' => in_array('create', $supportedActions, true) && $request->boolean("permissions.{$module->id}.create"),
+                        'can_update' => in_array('update', $supportedActions, true) && $request->boolean("permissions.{$module->id}.update"),
+                        'can_delete' => in_array('delete', $supportedActions, true) && $request->boolean("permissions.{$module->id}.delete"),
+                        'can_export' => in_array('export', $supportedActions, true) && $request->boolean("permissions.{$module->id}.export"),
                     ]
                 );
             }
@@ -210,6 +228,22 @@ class UserController extends Controller
         if ($user->role?->code !== 'admin') return;
         $adminRoleId = Role::where('code', 'admin')->value('id');
         abort_if(User::where('role_id', $adminRoleId)->where('active', true)->count() <= 1, 422, 'Không thể khóa hoặc xóa Admin cuối cùng.');
+    }
+
+    private function registrarValue(Request $request, int $roleId): bool
+    {
+        $roleCode = Role::whereKey($roleId)->value('code');
+        if ($roleCode === 'teacher') return false;
+        if ($roleCode === 'admin') return true;
+
+        return $request->boolean('is_registrar');
+    }
+
+    private function instructorValue(Request $request, int $roleId): bool
+    {
+        $roleCode = Role::whereKey($roleId)->value('code');
+
+        return $roleCode === 'teacher' || $request->boolean('is_instructor');
     }
 
     private function hasPermanentDeleteDependencies(User $user): bool

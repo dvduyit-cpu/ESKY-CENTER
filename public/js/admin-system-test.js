@@ -2,7 +2,7 @@
     const app = document.querySelector('#systemTestApp');
     if (!app) return;
 
-    const state = { modules: [], results: [], securityChecks: [] };
+    const state = { modules: [], results: [], securityChecks: [], systemChecks: [] };
     const nodes = {
         modules: app.querySelector('[data-modules]'), loading: app.querySelector('[data-loading]'),
         database: app.querySelector('[data-database]'), runAll: app.querySelector('[data-run-all]'),
@@ -11,6 +11,8 @@
         pending: app.querySelector('[data-pending]'),
         securityPanel: app.querySelector('[data-security-panel]'),
         securityResults: app.querySelector('[data-security-results]'),
+        systemHealthPanel: app.querySelector('[data-system-health-panel]'),
+        systemHealthResults: app.querySelector('[data-system-health-results]'),
         progressWrap: app.querySelector('[data-progress-wrap]'),
         progressLabel: app.querySelector('[data-progress-label]'),
         progressPercent: app.querySelector('[data-progress-percent]'),
@@ -142,12 +144,28 @@
             state.results.push({module:'Bảo mật', ok:check.passed, title:check.name, detail:check.detail, severity:check.severity, at:new Date().toLocaleString('vi-VN')});
             return `<div class="test-result ${css}"><i class="bi ${icon} me-1"></i><strong>${escapeHtml(check.name)}</strong> — ${escapeHtml(check.detail)}</div>`;
         }).join('');
+        nodes.progressLabel.textContent = 'Đang kiểm tra sức khỏe hệ thống và nghiệp vụ...';
+        nodes.systemHealthPanel.classList.remove('d-none');
+        nodes.systemHealthResults.innerHTML = state.systemChecks.map(check => {
+            const warning = !check.passed && check.severity === 'warning';
+            const css = check.passed ? 'pass' : (warning ? '' : 'fail');
+            const icon = check.passed ? 'bi-check-circle-fill text-success' : (warning ? 'bi-exclamation-triangle-fill text-warning' : 'bi-x-circle-fill text-danger');
+            state.results.push({module:check.category || 'Sức khỏe hệ thống', ok:check.passed, title:check.name, detail:check.detail, severity:check.severity, at:new Date().toLocaleString('vi-VN')});
+            return `<div class="test-result ${css}"><i class="bi ${icon} me-1"></i><span><strong>${escapeHtml(check.category || 'Hệ thống')} · ${escapeHtml(check.name)}</strong><br>${escapeHtml(check.detail)}</span></div>`;
+        }).join('');
         for (const module of state.modules) {
             nodes.progressLabel.textContent = `Đang kiểm tra: ${module.name}`;
             await run(module);
         }
-        const failures = state.modules.filter(item => item.status === 'failed').length;
-        nodes.progressLabel.textContent = failures ? `Hoàn tất — phát hiện ${failures} module có lỗi` : 'Hoàn tất — hệ thống hoạt động tốt';
+        const moduleFailures = state.modules.filter(item => item.status === 'failed').length;
+        const checkFailures = [...state.securityChecks, ...state.systemChecks]
+            .filter(check => !check.passed && check.severity !== 'warning').length;
+        const warnings = [...state.securityChecks, ...state.systemChecks]
+            .filter(check => !check.passed && check.severity === 'warning').length;
+        const failures = moduleFailures + checkFailures;
+        nodes.progressLabel.textContent = failures
+            ? `Hoàn tất — phát hiện ${failures} lỗi cần xử lý (${moduleFailures} module, ${checkFailures} cấu hình/môi trường; ${warnings} cảnh báo)`
+            : (warnings ? `Hoàn tất — không có lỗi, còn ${warnings} cảnh báo môi trường` : 'Hoàn tất — hệ thống hoạt động tốt');
         nodes.runAll.disabled = false;
         nodes.runAll.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i> TEST LẠI HỆ THỐNG';
     });
@@ -155,7 +173,13 @@
     nodes.export.addEventListener('click', () => {
         const payload = {
             exported_at: new Date().toISOString(),
-            summary: { total: state.modules.length, passed: state.modules.filter(x => x.status === 'passed').length, failed: state.modules.filter(x => x.status === 'failed').length },
+            summary: {
+                total: state.modules.length,
+                passed: state.modules.filter(x => x.status === 'passed').length,
+                failed: state.modules.filter(x => x.status === 'failed').length,
+                health_errors: [...state.securityChecks, ...state.systemChecks].filter(x => !x.passed && x.severity !== 'warning').length,
+                health_warnings: [...state.securityChecks, ...state.systemChecks].filter(x => !x.passed && x.severity === 'warning').length,
+            },
             results: state.results,
         };
         const link = document.createElement('a');
@@ -170,6 +194,7 @@
         .then(data => {
             state.modules = data.modules.map((item, id) => ({...item, id:String(id), status:'pending'}));
             state.securityChecks = data.security_checks || [];
+            state.systemChecks = data.system_checks || [];
             nodes.loading.classList.add('d-none');
             nodes.database.className = `alert ${data.database.ok ? 'alert-success' : 'alert-danger'}`;
             nodes.database.textContent = data.database.ok ? `✓ ${data.database.message}` : `Lỗi cơ sở dữ liệu: ${data.database.message}`;

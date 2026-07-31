@@ -6,6 +6,7 @@ use App\Models\Module;
 use App\Models\Role;
 use App\Models\RolePermission;
 use App\Support\ActivityLogger;
+use App\Support\ModulePermissionCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,8 @@ class RoleController extends Controller
 
     public function create(): View
     {
-        return view('roles.form', ['role' => new Role(), 'modules' => Module::orderBy('sort_order')->get(), 'permissions' => collect()]);
+        $modules = Module::orderBy('sort_order')->get();
+        return view('roles.form', ['role' => new Role(), 'modules' => $modules, 'moduleGroups' => ModulePermissionCatalog::grouped($modules), 'permissions' => collect()]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -39,9 +41,11 @@ class RoleController extends Controller
 
     public function edit(Role $role): View
     {
+        $modules = Module::orderBy('sort_order')->get();
         return view('roles.form', [
             'role' => $role,
-            'modules' => Module::orderBy('sort_order')->get(),
+            'modules' => $modules,
+            'moduleGroups' => ModulePermissionCatalog::grouped($modules),
             'permissions' => $role->permissions()->get()->keyBy('module_id'),
         ]);
     }
@@ -82,14 +86,15 @@ class RoleController extends Controller
     {
         DB::transaction(function () use ($request, $role): void {
             foreach (Module::all() as $module) {
+                $supportedActions = ModulePermissionCatalog::actionsFor($module->code);
                 RolePermission::updateOrCreate(
                     ['role_id' => $role->id, 'module_id' => $module->id],
                     [
-                        'can_view' => $request->boolean("permissions.{$module->id}.view"),
-                        'can_create' => $request->boolean("permissions.{$module->id}.create"),
-                        'can_update' => $request->boolean("permissions.{$module->id}.update"),
-                        'can_delete' => $request->boolean("permissions.{$module->id}.delete"),
-                        'can_export' => $request->boolean("permissions.{$module->id}.export"),
+                        'can_view' => in_array('view', $supportedActions, true) && $request->boolean("permissions.{$module->id}.view"),
+                        'can_create' => in_array('create', $supportedActions, true) && $request->boolean("permissions.{$module->id}.create"),
+                        'can_update' => in_array('update', $supportedActions, true) && $request->boolean("permissions.{$module->id}.update"),
+                        'can_delete' => in_array('delete', $supportedActions, true) && $request->boolean("permissions.{$module->id}.delete"),
+                        'can_export' => in_array('export', $supportedActions, true) && $request->boolean("permissions.{$module->id}.export"),
                     ]
                 );
             }

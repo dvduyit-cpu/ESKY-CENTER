@@ -160,7 +160,7 @@ class LanguageDashboardController extends Controller
         $financial=[
             'receivable'=>(float)(clone $charges)->sum('payable_amount'),
             'collected'=>(float)(clone $tuitionPayments)->sum('amount'),
-            'outstanding'=>(float)(clone $charges)->selectRaw('COALESCE(SUM(GREATEST(payable_amount-paid_amount,0)),0) total')->value('total'),
+            'outstanding'=>(float)(clone $charges)->selectRaw('COALESCE(SUM(GREATEST(payable_amount-paid_amount-credit_amount,0)),0) total')->value('total'),
             'expense'=>(float)(clone $expenses)->sum('payment_amount'),
         ];
         $financial['net']=$financial['collected']-$financial['expense'];

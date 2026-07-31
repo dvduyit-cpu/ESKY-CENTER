@@ -15,3 +15,12 @@ body[data-theme=yellow]{--p:#d89b00;--pd:#8a6200}body[data-theme=red]{--p:#dc354
 @media(max-height:500px) and (orientation:landscape){.login-shell{display:block;padding:0;background:#fff}.login-panel{width:100%;max-width:none;min-height:100vh;min-height:100dvh;border:0;border-radius:0;box-shadow:none}.login-intro{display:none}.login-form-panel{min-height:100vh;min-height:100dvh;place-items:start center;padding:18px max(28px,env(safe-area-inset-right)) 22px max(28px,env(safe-area-inset-left))}.login-form-wrap{max-width:540px}.form-heading{margin:0 0 16px}.form-heading h2{font-size:24px}.login-form{gap:12px}.field-control{height:47px}.field-control input,.password-toggle{height:45px}.login-submit{height:48px}.login-help,.mobile-copyright{margin-top:14px}}
 .password-toggle{border-radius:9px}.password-toggle:hover,.password-toggle[aria-pressed="true"]{color:var(--p);background:rgba(37,99,235,.08)}.password-toggle:focus-visible{outline:2px solid var(--p);outline-offset:-4px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Use the same configured accent palette as the authenticated application. */
+body{--p:var(--primary,#2563eb);--pd:var(--primary-dark,#1749a4);--prgb:var(--primary-rgb,37,99,235)}
+.login-shell{background:radial-gradient(circle at 8% 10%,rgba(var(--prgb),.15),transparent 30%),radial-gradient(circle at 92% 90%,rgba(var(--prgb),.09),transparent 28%),#edf3fb}
+.login-intro{background:var(--theme-gradient,linear-gradient(145deg,var(--pd),color-mix(in srgb,var(--p) 72%,#0f172a)))}
+.field-control:focus-within{box-shadow:0 0 0 4px rgba(var(--prgb),.11)}
+.login-submit{color:var(--primary-contrast,#fff);box-shadow:0 10px 22px rgba(var(--prgb),.23)}
+.login-submit:hover{box-shadow:0 14px 28px rgba(var(--prgb),.3)}
+.password-toggle:hover,.password-toggle[aria-pressed="true"]{background:rgba(var(--prgb),.08)}

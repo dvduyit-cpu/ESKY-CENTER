@@ -13,8 +13,8 @@
     .test-card-head { padding:16px 18px; display:flex; align-items:center; gap:13px }
     .test-card-body { padding:2px 18px 17px; border-top:1px dashed #e5eaf1 }
     .status-icon { display:grid; place-items:center; flex:0 0 38px; height:38px; border-radius:12px; background:#f1f5f9; font-size:1.1rem }
-    .test-card[data-status="running"] { border-color:#60a5fa; box-shadow:0 0 0 3px rgba(59,130,246,.08) }
-    .test-card[data-status="running"] .status-icon { background:#dbeafe }
+    .test-card[data-status="running"] { border-color:var(--primary); box-shadow:0 0 0 3px rgba(var(--primary-rgb),.08) }
+    .test-card[data-status="running"] .status-icon { color:var(--primary-dark); background:var(--primary-soft) }
     .test-card[data-status="passed"] { border-left:4px solid #22c55e }
     .test-card[data-status="passed"] .status-icon { background:#dcfce7 }
     .test-card[data-status="failed"] { border-left:4px solid #ef4444 }
@@ -24,7 +24,7 @@
     .test-result.pass { color:#166534; background:#f0fdf4; border-color:#bbf7d0 }
     .capability { font-size:.72rem; font-weight:600; padding:4px 9px; border-radius:20px; background:#f1f5f9; color:#94a3b8 }
     .capability.enabled { background:#ecfdf5; color:#15803d }
-    [data-security-panel] { overflow:hidden }
+    [data-security-panel], [data-system-health-panel] { overflow:hidden }
     [data-database] { border:0; border-radius:14px }
     @media(max-width:767px){
         .test-card-head { flex-wrap:wrap }
@@ -40,7 +40,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
             <h1 class="page-title">Kiểm thử toàn bộ hệ thống</h1>
-            <div class="page-subtitle">Kiểm tra giao diện, CRUD, tìm kiếm, phân quyền và cấu hình bảo mật.</div>
+            <div class="page-subtitle">Kiểm tra giao diện, CRUD, tìm kiếm, phân quyền, môi trường PHP, dữ liệu đào tạo và màu cấu hình.</div>
         </div>
         <div class="d-flex gap-2 test-page-actions">
             <button class="btn btn-outline-success" type="button" data-export disabled><i class="bi bi-file-earmark-arrow-down me-1"></i>Xuất báo cáo</button>
@@ -75,6 +75,10 @@
     <div class="card card-soft mb-4 d-none" data-security-panel>
         <div class="card-header bg-white py-3"><strong><i class="bi bi-shield-lock me-2 text-primary"></i>Kiểm tra bảo mật và cấu hình</strong></div>
         <div class="card-body" data-security-results></div>
+    </div>
+    <div class="card card-soft mb-4 d-none" data-system-health-panel>
+        <div class="card-header bg-white py-3"><strong><i class="bi bi-activity me-2 text-primary"></i>Sức khỏe hệ thống và nghiệp vụ</strong></div>
+        <div class="card-body" data-system-health-results></div>
     </div>
     <div data-modules></div>
 </div>

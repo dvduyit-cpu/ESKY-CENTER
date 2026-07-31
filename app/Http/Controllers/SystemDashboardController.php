@@ -39,7 +39,7 @@ class SystemDashboardController extends Controller
         $periodLeads=(clone $leads)->whereBetween('created_at',[$start,$end]);
         $periodStudents=(clone $students)->whereBetween('registered_at',[$start,$end]);
         $registeredLeads=(clone $periodLeads)->where('status','registered')->count();
-        $financial=['receivable'=>(float)(clone $charges)->sum('payable_amount'),'collected'=>(float)(clone $receipts)->sum('amount'),'outstanding'=>(float)(clone $charges)->selectRaw('COALESCE(SUM(GREATEST(payable_amount-paid_amount,0)),0) total')->value('total'),'expense'=>(float)(clone $expenses)->sum('payment_amount')];
+        $financial=['receivable'=>(float)(clone $charges)->sum('payable_amount'),'collected'=>(float)(clone $receipts)->sum('amount'),'outstanding'=>(float)(clone $charges)->selectRaw('COALESCE(SUM(GREATEST(payable_amount-paid_amount-credit_amount,0)),0) total')->value('total'),'expense'=>(float)(clone $expenses)->sum('payment_amount')];
         $financial['net']=$financial['collected']-$financial['expense'];
         $workTasks=WorkTask::query()->whereBetween('created_at',[$start,$end]);
         if(!$canViewAll){

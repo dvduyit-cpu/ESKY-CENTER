@@ -11,7 +11,7 @@
 <div class="col-md-6"><label class="form-label">Tên khóa học</label><input class="form-control" name="name" value="{{old('name',$item->name)}}" required></div>
 <div class="col-md-6"><label class="form-label">Giáo trình</label><input class="form-control" name="textbook" value="{{old('textbook',$item->textbook)}}"></div>
 <div class="col-md-4"><label class="form-label">Học phí</label><input class="form-control" type="number" name="tuition" value="{{old('tuition',$item->tuition?:0)}}" required></div>
-<div class="col-md-4"><label class="form-label">Thời lượng (giờ)</label><input class="form-control" type="number" step="0.5" name="duration_hours" value="{{old('duration_hours',$item->duration_hours?:0)}}" required></div>
+<div class="col-md-4"><label class="form-label">Số tiết</label><input class="form-control" type="number" step="0.5" name="duration_hours" value="{{old('duration_hours',$item->duration_hours?:0)}}" required></div>
 <div class="col-md-4"><label class="form-label">Số buổi</label><input class="form-control" type="number" name="sessions" value="{{old('sessions',$item->sessions?:0)}}" required></div>
 <div class="col-12"><label class="form-label">Mô tả</label><textarea class="form-control" name="description">{{old('description',$item->description)}}</textarea></div>
 <div class="col-12"><label><input type="checkbox" name="active" value="1" @checked(old('active',$item->exists?$item->active:true))> Đang hoạt động</label></div>

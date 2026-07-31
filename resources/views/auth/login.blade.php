@@ -13,6 +13,7 @@
     <title>Đăng nhập · {{ $systemName }}</title>
     <link href="{{ asset('assets/vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/login.css') }}?v={{ filemtime(public_path('css/login.css')) }}" rel="stylesheet">
     <style>.field-control.email-field{grid-template-columns:45px minmax(80px,1fr) auto}.email-domain{padding:0 14px 0 8px;color:#64748b;font-size:14px;font-weight:700;white-space:nowrap}.email-field input{padding-right:4px}</style>
 </head>

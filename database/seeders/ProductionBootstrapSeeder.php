@@ -144,7 +144,10 @@ class ProductionBootstrapSeeder extends Seeder
             if ($module === 'teacher_classes') return array_replace($none, ['can_view'=>true,'can_update'=>true]);
             return $all;
         }
-        if ($role === 'teacher' && in_array($module, ['work_tasks','language_target_submissions','teacher_classes','reports'], true)) {
+        if ($role === 'teacher' && $module === 'teacher_classes') {
+            return array_replace($none, ['can_view'=>true,'can_update'=>true]);
+        }
+        if ($role === 'teacher' && in_array($module, ['work_tasks','language_target_submissions','reports'], true)) {
             return $all;
         }
         if ($role === 'staff' && $module === 'work_tasks') {

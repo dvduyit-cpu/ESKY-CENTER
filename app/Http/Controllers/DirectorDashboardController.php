@@ -14,12 +14,15 @@ use App\Models\Personnel;
 use App\Models\User;
 use App\Models\WorkTask;
 use App\Models\WorkTaskAssignee;
+use App\Support\SystemHealthMonitor;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class DirectorDashboardController extends Controller
 {
+    public function __construct(private readonly SystemHealthMonitor $healthMonitor) {}
+
     public function index(Request $request): View
     {
         abort_unless(
@@ -73,6 +76,7 @@ class DirectorDashboardController extends Controller
             'active' => Personnel::query()->where('active', true)->count(),
             'leaders' => Personnel::query()->where('active', true)->where('type', 'leader')->count(),
             'teachers' => Personnel::query()->where('active', true)->where('type', 'teacher')->count(),
+            'teaching_accounts' => User::query()->where('active', true)->instructors()->count(),
             'employees' => Personnel::query()->where('active', true)->where('type', 'employee')->count(),
             'collaborators' => Personnel::query()->where('active', true)->where('type', 'collaborator')->count(),
             'accounts' => User::query()->where('active', true)->count(),
@@ -106,11 +110,36 @@ class DirectorDashboardController extends Controller
             'receivable' => (float) (clone $periodCharges)->sum('payable_amount'),
             'collected' => (float) (clone $periodReceipts)->sum('amount'),
             'outstanding' => (float) LanguageTuitionCharge::query()
-                ->selectRaw('COALESCE(SUM(GREATEST(payable_amount - paid_amount, 0)), 0) AS total')
+                ->selectRaw('COALESCE(SUM(GREATEST(payable_amount - paid_amount - credit_amount, 0)), 0) AS total')
                 ->value('total'),
             'expense' => (float) (clone $periodExpenses)->sum('payment_amount'),
         ];
         $financialStats['net'] = $financialStats['collected'] - $financialStats['expense'];
+
+        $healthChecks = $this->healthMonitor->checks();
+        $systemHealth = $this->healthMonitor->summary($healthChecks);
+        $operationalAlerts = [
+            [
+                'label' => 'Lớp chưa phân công giáo viên',
+                'count' => LanguageClass::query()->whereIn('status', ['recruiting', 'upcoming', 'active'])->whereNull('teacher_user_id')->count(),
+                'icon' => 'bi-person-exclamation', 'tone' => 'warning', 'route' => 'language-classes.index',
+            ],
+            [
+                'label' => 'Lớp chờ giáo vụ đóng',
+                'count' => LanguageClass::query()->whereNotNull('completion_requested_at')->whereNotIn('status', ['completed', 'cancelled'])->count(),
+                'icon' => 'bi-hourglass-split', 'tone' => 'warning', 'route' => 'language-classes.index',
+            ],
+            [
+                'label' => 'Phiếu thu chờ xác nhận',
+                'count' => LanguageTuitionPayment::query()->where('receipt_status', 'pending')->count(),
+                'icon' => 'bi-receipt-cutoff', 'tone' => 'danger', 'route' => 'language-tuition.index',
+            ],
+            [
+                'label' => 'Khoản học phí còn nợ',
+                'count' => LanguageTuitionCharge::query()->whereRaw('(payable_amount - paid_amount - credit_amount) > 0')->count(),
+                'icon' => 'bi-cash-coin', 'tone' => 'danger', 'route' => 'language-tuition.index',
+            ],
+        ];
 
         $periodTargetRecords = LanguageMonthlyTargetRecord::query()
             ->whereHas('payment', fn ($query) => $query->whereBetween('paid_at', [$start, $end]));
@@ -149,6 +178,9 @@ class DirectorDashboardController extends Controller
             'trainingStats' => $trainingStats,
             'financialStats' => $financialStats,
             'targetStats' => $targetStats,
+            'systemHealth' => $systemHealth,
+            'healthChecks' => $healthChecks,
+            'operationalAlerts' => $operationalAlerts,
             'memberStats' => $memberStats,
             'tasks' => $tasks->with(['creator', 'assignees.user'])->latest('due_at')
                 ->paginate(15)

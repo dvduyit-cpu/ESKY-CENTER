@@ -13,11 +13,11 @@
 .dashboard-card-link:hover .card {
     transform: translateY(-3px);
     box-shadow: 0 14px 34px rgba(26, 44, 86, .14);
-    border-color: #bfdbfe;
+    border-color: rgba(var(--primary-rgb), .32);
 }
 
 .dashboard-card-link:focus-visible {
-    outline: 3px solid rgba(37, 99, 235, .3);
+    outline: 3px solid rgba(var(--primary-rgb), .3);
     outline-offset: 3px;
     border-radius: 18px;
 }

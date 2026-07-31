@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -15,7 +16,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'personnel_id', 'language_collaborator_id', 'role_id', 'name', 'email', 'password', 'active',
-        'must_change_password', 'notifications_enabled', 'theme_color', 'last_login_at', 'last_login_ip',
+        'must_change_password', 'notifications_enabled', 'is_registrar', 'is_instructor', 'theme_color', 'last_login_at', 'last_login_ip',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -23,7 +24,7 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'password' => 'hashed', 'active' => 'boolean',
+            'password' => 'hashed', 'active' => 'boolean', 'is_registrar' => 'boolean', 'is_instructor' => 'boolean',
             'must_change_password' => 'boolean', 'notifications_enabled' => 'boolean', 'last_login_at' => 'datetime',
         ];
     }
@@ -45,6 +46,29 @@ class User extends Authenticatable
         return $this->role?->code === 'director';
     }
 
+    public function isTeacher(): bool
+    {
+        return $this->role?->code === 'teacher';
+    }
+
+    public function canTeach(): bool
+    {
+        return $this->isTeacher() || $this->is_instructor;
+    }
+
+    public function scopeInstructors(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $candidate) => $candidate
+            ->where('is_instructor', true)
+            ->orWhereHas('role', fn (Builder $role) => $role->where('code', 'teacher'))
+        );
+    }
+
+    public function isRegistrar(): bool
+    {
+        return $this->isAdmin() || (! $this->isTeacher() && $this->is_registrar);
+    }
+
     public function isDeputyDirector(): bool
     {
         return $this->role?->code === 'deputy_director';
@@ -63,6 +87,22 @@ class User extends Authenticatable
     public function allowed(string $moduleCode, string $action = 'view'): bool
     {
         if ($this->isAdmin()) {
+            return true;
+        }
+
+        if ($this->isRegistrar()) {
+            $registrarPermissions = [
+                'language_students' => ['view', 'create', 'update'],
+                'language_classes' => ['view', 'update'],
+                'language_tuition' => ['view', 'create', 'update', 'export'],
+                'teacher_classes' => ['view'],
+            ];
+            if (in_array($action, $registrarPermissions[$moduleCode] ?? [], true)) {
+                return true;
+            }
+        }
+
+        if ($this->canTeach() && $moduleCode === 'teacher_classes' && in_array($action, ['view', 'update'], true)) {
             return true;
         }
 

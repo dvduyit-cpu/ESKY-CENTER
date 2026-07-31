@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\SystemHealthMonitor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route as LaravelRoute;
@@ -12,6 +13,8 @@ use Throwable;
 
 class AdminSystemTestController extends Controller
 {
+    public function __construct(private readonly SystemHealthMonitor $healthMonitor) {}
+
     private const MODULES = [
         ['group' => 'Tổng quan & công việc', 'name' => 'Tổng quan hệ thống', 'prefix' => 'dashboard', 'index' => 'dashboard'],
         ['group' => 'Tổng quan & công việc', 'name' => 'Trang chủ', 'prefix' => 'welcome', 'index' => 'welcome'],
@@ -96,6 +99,7 @@ class AdminSystemTestController extends Controller
             'generated_at' => now()->format('d/m/Y H:i:s'),
             'database' => $database,
             'security_checks' => $this->securityChecks($namedRoutes),
+            'system_checks' => $this->healthMonitor->checks(),
             'modules' => $modules,
         ]);
     }

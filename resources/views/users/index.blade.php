@@ -28,7 +28,7 @@
             @forelse($users as $u)
                 <tr>
                     <td><div class="d-flex gap-3 align-items-center"><span class="avatar">{{ mb_strtoupper(mb_substr($u->name,0,1)) }}</span><div><strong>{{ $u->name }}</strong><div class="small text-muted">{{ $u->email }}</div></div></div></td>
-                    <td><span class="badge-soft badge-info">{{ $u->role?->name }}</span></td>
+                    <td><span class="badge-soft badge-info">{{ $u->role?->name }}</span>@if($u->isRegistrar())<div class="mt-1"><span class="badge-soft badge-success"><i class="bi bi-person-check me-1"></i>Giáo vụ</span></div>@endif @if($u->is_instructor && !$u->isTeacher())<div class="mt-1"><span class="badge-soft badge-warning"><i class="bi bi-easel2 me-1"></i>Kiêm giảng dạy</span></div>@endif</td>
                     <td>{{ $u->personnel?->name ?: 'Chưa liên kết' }}</td>
                     <td>{{ $u->last_login_at?->format('d/m/Y H:i') ?: 'Chưa đăng nhập' }}<div class="small text-muted">{{ $u->last_login_ip }}</div></td>
                     <td>

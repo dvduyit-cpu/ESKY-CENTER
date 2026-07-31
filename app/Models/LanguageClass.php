@@ -12,5 +12,6 @@ class LanguageClass extends Model {
  public function completionRequester(){return $this->belongsTo(User::class,'completion_requested_by')->withTrashed();}
  public function completer(){return $this->belongsTo(User::class,'completed_by')->withTrashed();}
  public function enrollments(){return $this->hasMany(LanguageEnrollment::class);}
+ public function lessons(){return $this->hasMany(LanguageClassLesson::class);}
  public function isCompletionDue():bool{return ($this->expected_end_date&&$this->expected_end_date->isPast())||($this->expected_sessions>0&&$this->completed_sessions>=$this->expected_sessions);}
 }
