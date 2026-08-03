@@ -58,9 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingAction = null;
 
     const ask = (message, action, danger = false) => {
+        window.dispatchEvent(new Event('page-loading:hide'));
         messageElement.textContent = message || 'Bạn có chắc chắn muốn tiếp tục thao tác này?';
         acceptButton.classList.toggle('btn-danger', danger);
         acceptButton.classList.toggle('btn-primary', !danger);
+        acceptButton.disabled = false;
         pendingAction = action;
         modal.show();
     };
@@ -68,10 +70,18 @@ document.addEventListener('DOMContentLoaded', () => {
     acceptButton.addEventListener('click', () => {
         const action = pendingAction;
         pendingAction = null;
+        acceptButton.disabled = true;
         modal.hide();
-        if (action) window.setTimeout(action, 120);
+        if (action) window.setTimeout(() => {
+            acceptButton.disabled = false;
+            action();
+        }, 120);
     });
-    modalElement.addEventListener('hidden.bs.modal', () => { pendingAction = null; });
+    modalElement.addEventListener('hidden.bs.modal', () => {
+        pendingAction = null;
+        acceptButton.disabled = false;
+        window.dispatchEvent(new Event('page-loading:hide'));
+    });
 
     const formMessage = (form, submitter) => {
         const explicit = submitter?.dataset.confirm || form.dataset.confirm || form.dataset.bulkConfirm;
@@ -102,8 +112,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const submitter = event.submitter;
         ask(config.message, () => {
             form.dataset.confirmed = 'true';
-            if (submitter && !submitter.disabled) form.requestSubmit(submitter);
-            else form.requestSubmit();
+            if (submitter && !submitter.disabled) {
+                form.requestSubmit(submitter);
+                return;
+            }
+
+            let submitterValue = null;
+            if (submitter?.name) {
+                submitterValue = document.createElement('input');
+                submitterValue.type = 'hidden';
+                submitterValue.name = submitter.name;
+                submitterValue.value = submitter.value;
+                form.append(submitterValue);
+            }
+            form.requestSubmit();
+            window.setTimeout(() => submitterValue?.remove(), 0);
         }, config.danger);
     }, true);
 

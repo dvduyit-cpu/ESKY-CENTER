@@ -6,7 +6,7 @@
 @php($actionLabels=['create'=>'Tạo mới','update'=>'Cập nhật','delete'=>'Xóa','force_delete'=>'Xóa vĩnh viễn','restore'=>'Khôi phục','toggle'=>'Đổi trạng thái','permissions'=>'Phân quyền','reset_password'=>'Đặt lại mật khẩu','export'=>'Xuất dữ liệu','login_success'=>'Đăng nhập','login_failed'=>'Đăng nhập thất bại','logout'=>'Đăng xuất'])
 
 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
-    <div><h1 class="page-title">Nhật ký hệ thống</h1><div class="page-subtitle">Theo dõi chi tiết thao tác quản trị, đăng nhập và những dữ liệu đã thay đổi.</div></div>
+    <div><h1 class="page-title">Nhật ký hệ thống</h1><div class="page-subtitle">{{$canFilterUsers?'Admin có thể xem toàn bộ thao tác và đăng nhập của tất cả mọi người.':'Theo dõi chi tiết thao tác, đăng nhập và những dữ liệu đã thay đổi.'}}</div></div>
     <div class="log-period-badge"><i class="bi bi-calendar3"></i><div><small>Kỳ đang xem</small><strong>{{$month?'Tháng '.$month.' / ':''}}Năm {{$year}}</strong></div></div>
 </div>
 
@@ -18,6 +18,7 @@
 
 <form class="filter-panel row g-3 mb-4" method="GET">
     <input type="hidden" name="tab" value="{{$activeTab}}" data-log-tab-input>
+    @if($canFilterUsers)<div class="col-xl-3 col-md-6"><label class="form-label">Người thực hiện</label><select class="form-select" name="user_id" data-searchable-select data-search-placeholder="Tìm tên hoặc email..."><option value="">Tất cả mọi người</option>@foreach($logUsers as $logUser)<option value="{{$logUser->id}}" @selected($selectedUser?->id===$logUser->id)>{{$logUser->name}} · {{$logUser->email}}{{$logUser->trashed()?' · Đã xóa':''}}</option>@endforeach</select></div>@endif
     <div class="col-xl-3 col-md-6"><label class="form-label">Tìm kiếm</label><div class="input-group"><span class="input-group-text bg-white"><i class="bi bi-search"></i></span><input class="form-control" name="q" value="{{request('q')}}" placeholder="Mô tả, tài khoản, IP..."></div></div>
     <div class="col-xl-2 col-md-3 col-6"><label class="form-label">Năm</label><select class="form-select" name="year">@for($itemYear=now()->year;$itemYear>=2020;$itemYear--)<option value="{{$itemYear}}" @selected($year===$itemYear)>Năm {{$itemYear}}</option>@endfor</select></div>
     <div class="col-xl-2 col-md-3 col-6"><label class="form-label">Tháng</label><select class="form-select" name="month"><option value="">Cả năm</option>@for($itemMonth=1;$itemMonth<=12;$itemMonth++)<option value="{{$itemMonth}}" @selected($month===$itemMonth)>Tháng {{$itemMonth}}</option>@endfor</select></div>

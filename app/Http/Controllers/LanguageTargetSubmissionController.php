@@ -15,8 +15,30 @@ class LanguageTargetSubmissionController extends Controller
 {
     public function index(Request $request): View
     {
-        $query=LanguageTargetSubmission::with(['course','submitter','lead.consultant'])->where('submitted_by',$request->user()->id)->latest();
-        return view('language.target-submissions.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get()]);
+        $filters=$request->validate([
+            'date'=>['nullable','date'],
+            'month'=>['nullable','integer','between:1,12'],
+            'year'=>['nullable','integer','between:2020,2100'],
+        ]);
+        $mine=LanguageTargetSubmission::query()->where('submitted_by',$request->user()->id);
+        $years=(clone $mine)->selectRaw('YEAR(created_at) as year')->distinct()->pluck('year')
+            ->map(fn($year)=>(int)$year)->push((int)now()->year)->unique()->sortDesc()->values();
+        $query=(clone $mine)->with(['course','submitter','lead.consultant']);
+        $hasMonthOrYear=! empty($filters['month'])||! empty($filters['year']);
+        if (! $hasMonthOrYear && ! empty($filters['date'])) {
+            $query->whereDate('created_at',$filters['date']);
+        } else {
+            if (! empty($filters['year'])) $query->whereYear('created_at',$filters['year']);
+            if (! empty($filters['month'])) $query->whereMonth('created_at',$filters['month']);
+        }
+        $query->latest();
+        return view('language.target-submissions.index',[
+            'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get(),
+            'sources'=>LanguageTargetSubmission::SOURCE_LABELS,
+            'years'=>$years,
+            'hasHistoryFilter'=>filled($filters['date']??null)||filled($filters['month']??null)||filled($filters['year']??null),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -28,16 +50,25 @@ class LanguageTargetSubmissionController extends Controller
         } elseif ($request->filled('language_course_id')) {
             $request->merge(['course_choice' => 'existing']);
         }
+        if (! $request->boolean('is_walk_in')) {
+            $request->merge(['source' => null]);
+        }
 
         $data=$request->validate([
             'name'=>'required|string|max:255', 'phone'=>'required|string|max:30',
             'course_choice'=>['required',Rule::in(['existing','other'])],
             'language_course_id'=>'nullable|required_if:course_choice,existing|exists:language_courses,id',
             'other_course'=>'nullable|required_if:course_choice,other|string|max:255',
+            'is_walk_in'=>['nullable','boolean'],
+            'source'=>['nullable','required_if:is_walk_in,1',Rule::in(['fanpage','zalo','zalo_oa','web','hotline'])],
+            'note'=>'nullable|string|max:2000',
         ],[
             'name.required'=>'Vui lòng nhập họ và tên.', 'phone.required'=>'Vui lòng nhập số điện thoại.',
             'language_course_id.required_if'=>'Vui lòng chọn khóa học quan tâm.',
             'other_course.required_if'=>'Vui lòng nhập khóa học quan tâm khác.',
+            'source.required_if'=>'Vui lòng chọn nguồn tự đến của khách hàng.',
+            'source.in'=>'Nguồn khách hàng không hợp lệ.',
+            'note.max'=>'Ghi chú không được dài quá 2.000 ký tự.',
         ]);
         if ($data['course_choice']==='existing') $data['other_course']=null; else $data['language_course_id']=null;
         $data['phone_normalized']=preg_replace('/\D+/', '', $data['phone']) ?: trim($data['phone']);
@@ -77,16 +108,17 @@ class LanguageTargetSubmissionController extends Controller
         if (! $consultant) {
             throw ValidationException::withMessages(['phone'=>'Chưa có nhân sự nào được đánh dấu “Là nhân viên tư vấn” và liên kết tài khoản đang hoạt động. Vui lòng cấu hình nhân sự tư vấn trước.']);
         }
-        unset($data['course_choice']);
-        DB::transaction(function () use ($data,$sender,$consultant,$collaborator) {
+        unset($data['course_choice'],$data['is_walk_in']);
+        $sourceLabel=$data['source'] ? LanguageTargetSubmission::SOURCE_LABELS[$data['source']] : null;
+        DB::transaction(function () use ($data,$sender,$consultant,$collaborator,$sourceLabel) {
             $submission=LanguageTargetSubmission::create($data+['submitted_by'=>$sender->id]);
             $lead=LanguageLead::create([
                 'code'=>CenterCode::next('language_leads','KH'), 'name'=>$data['name'], 'phone'=>$data['phone'],
-                'source'=>'Gửi chỉ tiêu bởi '.$sender->name, 'received_at'=>now()->toDateString(),
+                'source'=>$sourceLabel, 'received_at'=>now()->toDateString(),
                 'language_course_id'=>$data['language_course_id'], 'consultant_user_id'=>$consultant->id,
                 'language_collaborator_id'=>$collaborator?->id,
                 'status'=>'new', 'consultation'=>$data['other_course'] ? 'Khóa học quan tâm khác: '.$data['other_course'] : null,
-                'note'=>'Tự động tạo từ trang Gửi chỉ tiêu.',
+                'note'=>($data['note'] ?? null) ?: 'Tự động tạo từ trang Gửi chỉ tiêu bởi '.$sender->name.'.',
             ]);
             $submission->update(['language_lead_id'=>$lead->id]);
         });

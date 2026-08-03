@@ -14,12 +14,50 @@ $tuitionCredit=(float)$item->tuitionCharges->sum('credit_amount');
 $tuitionRemaining=(float)$item->tuitionCharges->sum(fn($charge)=>$charge->remainingAmount());
 $tuitionLabels=['unpaid'=>'Chưa đóng','partial'=>'Đóng một phần','pending_receipt'=>'Chờ phiếu thu','paid'=>'Đã đóng đủ','transferred'=>'Đã quyết toán chuyển lớp'];
 $paymentMethods=['cash'=>'Tiền mặt','transfer'=>'Chuyển khoản','card'=>'Thẻ','other'=>'Khác'];
+$genderLabels=['male'=>'Nam','female'=>'Nữ','other'=>'Khác'];
+$guardianLabels=['father'=>'Cha','mother'=>'Mẹ','guardian'=>'Người giám hộ'];
 @endphp
 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4"><div><h1 class="page-title">{{$item->code}} – {{$item->name}}</h1><div class="page-subtitle">Hồ sơ cá nhân, lịch sử lớp học, điểm kiểm tra và đánh giá quá trình.</div></div><div class="d-flex gap-2"><a class="btn btn-light" href="{{route('language-students.index')}}"><i class="bi bi-arrow-left me-2"></i>Danh sách</a>@if(auth()->user()->allowed('language_students','update'))<a class="btn btn-primary" href="{{route('language-students.edit',$item)}}"><i class="bi bi-pencil me-2"></i>Chỉnh sửa</a>@endif</div></div>
 
 <div class="row g-3 mb-4"><div class="col-sm-6 col-xl-3"><div class="card card-soft h-100"><div class="card-body p-4"><div class="stat-label">Trạng thái</div><div class="fs-5 fw-bold mt-2">{{$studentStatuses[$item->status]??$item->status}}</div></div></div></div><div class="col-sm-6 col-xl-3"><div class="card card-soft h-100"><div class="card-body p-4"><div class="stat-label">Số lớp đã học</div><div class="stat-value">{{$item->enrollments->count()}}</div></div></div></div><div class="col-sm-6 col-xl-3"><div class="card card-soft h-100"><div class="card-body p-4"><div class="stat-label">Số bài kiểm tra</div><div class="stat-value">{{$allScores->count()}}</div></div></div></div><div class="col-sm-6 col-xl-3"><div class="card card-soft h-100"><div class="card-body p-4"><div class="stat-label">Điểm trung bình quy đổi</div><div class="stat-value text-primary">{{$average!==null?number_format($average,1).'/10':'—'}}</div></div></div></div></div>
 
-<div class="card card-soft mb-4"><div class="card-header bg-white p-4"><h5 class="mb-0"><i class="bi bi-person-vcard me-2"></i>Thông tin học viên</h5></div><div class="card-body p-4"><div class="row g-3"><div class="col-md-4"><span class="text-muted">Ngày sinh</span><strong class="d-block">{{$item->date_of_birth?->format('d/m/Y')?:'Chưa cập nhật'}}</strong></div><div class="col-md-4"><span class="text-muted">Điện thoại</span><strong class="d-block">{{$item->phone?:'Chưa cập nhật'}}</strong></div><div class="col-md-4"><span class="text-muted">Email</span><strong class="d-block">{{$item->email?:'Chưa cập nhật'}}</strong></div><div class="col-md-4"><span class="text-muted">Trường/lớp</span><strong class="d-block">{{trim(($item->school?:'').' '.($item->school_class?:''))?:'Chưa cập nhật'}}</strong></div><div class="col-md-4"><span class="text-muted">Khóa học</span><strong class="d-block">{{$item->course?->name?:'Chưa chọn'}}</strong></div><div class="col-md-4"><span class="text-muted">Ngày nhập học</span><strong class="d-block">{{$item->official_enrollment_date?->format('d/m/Y')?:'Chưa nhập học'}}</strong></div><div class="col-12"><span class="text-muted">Phụ huynh/người giám hộ</span><div>@forelse($item->guardians as $guardian)<span class="badge bg-light text-dark border me-2">{{$guardian->name}} · {{$guardian->phone}}</span>@empty Chưa cập nhật @endforelse</div></div></div></div></div>
+<div class="card card-soft mb-4">
+    <div class="card-header bg-white p-4"><h5 class="mb-0"><i class="bi bi-person-vcard me-2"></i>Thông tin học viên</h5></div>
+    <div class="card-body p-4">
+        <div class="row g-3 student-profile-grid">
+            <div class="col-md-4"><div class="student-profile-field"><span>Mã học viên</span><strong>{{$item->code}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Họ và tên</span><strong>{{$item->name}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Giới tính</span><strong>{{$genderLabels[$item->gender]??'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Ngày sinh</span><strong>{{$item->date_of_birth?->format('d/m/Y')?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Điện thoại học viên</span><strong>{{$item->phone?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Email học viên</span><strong>{{$item->email?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-8"><div class="student-profile-field"><span>Địa chỉ</span><strong>{{$item->address?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Nguồn tiếp nhận</span><strong>{{$item->source?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Trường đang học</span><strong>{{$item->school?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Lớp tại trường</span><strong>{{$item->school_class?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Khóa học trung tâm</span><strong>{{$item->course?->name?:'Chưa chọn'}}</strong>@if($item->course?->code)<small>{{$item->course->code}}</small>@endif</div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Ngày đăng ký</span><strong>{{$item->registered_at?->format('d/m/Y')?:'Chưa cập nhật'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Ngày nhập học chính thức</span><strong>{{$item->official_enrollment_date?->format('d/m/Y')?:'Chưa nhập học'}}</strong></div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Đối tượng miễn giảm</span><strong>{{$item->discountPolicy?->name?:'Không miễn giảm'}}</strong>@if($item->discountPolicy)<small>{{$item->discountPolicy->percentage}}%</small>@endif</div></div>
+            <div class="col-12"><div class="student-profile-field"><span>Ghi chú hồ sơ</span><strong class="fw-normal">{!!$item->note?nl2br(e($item->note)):'Chưa cập nhật'!!}</strong></div></div>
+        </div>
+
+        <hr class="my-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-people-fill me-2 text-primary"></i>Cha, mẹ và người giám hộ</h6>
+        @if($item->guardians->isEmpty())
+            <div class="alert alert-light border mb-0">Chưa cập nhật thông tin phụ huynh/người giám hộ.</div>
+        @else
+            <div class="row g-3">
+                @foreach($item->guardians->sortByDesc('is_primary') as $guardian)
+                    <div class="col-md-6 col-xl-4"><div class="student-guardian-card h-100">
+                        <div class="d-flex justify-content-between align-items-start gap-2"><div><span class="student-guardian-type">{{$guardianLabels[$guardian->relationship]??($guardian->relationship?:'Người giám hộ')}}</span><strong class="d-block mt-1">{{$guardian->name?:'Chưa cập nhật họ tên'}}</strong></div>@if($guardian->is_primary)<span class="badge-soft badge-success">Liên hệ chính</span>@endif</div>
+                        <div class="student-guardian-contact"><span><i class="bi bi-telephone"></i>{{$guardian->phone?:'Chưa có số điện thoại'}}</span><span><i class="bi bi-envelope"></i>{{$guardian->email?:'Chưa có email'}}</span>@if($guardian->zalo)<span><i class="bi bi-chat-dots"></i>Zalo: {{$guardian->zalo}}</span>@endif</div>
+                    </div></div>
+                @endforeach
+            </div>
+        @endif
+    </div>
+</div>
 
 <div class="card card-soft mb-4"><div class="card-header bg-white p-4 d-flex flex-wrap justify-content-between align-items-center gap-2"><div><h5 class="mb-1"><i class="bi bi-cash-coin me-2 text-success"></i>Tình hình đóng học phí</h5><div class="small text-muted">Tự động cập nhật từ các phiếu thu và lịch sử chuyển lớp.</div></div>@if(auth()->user()->allowed('language_tuition','create'))<a class="btn btn-sm btn-outline-success" href="{{route('language-tuition.create',['student'=>$item->id,'course'=>$item->language_course_id])}}"><i class="bi bi-plus-circle me-1"></i>Lập khoản thu</a>@endif</div><div class="card-body p-4"><div class="row g-3"><div class="col-md-3"><div class="tuition-student-summary"><span>Tổng phải đóng</span><strong>{{number_format($tuitionPayable)}}đ</strong></div></div><div class="col-md-3"><div class="tuition-student-summary paid"><span>Đã thu tiền</span><strong>{{number_format($tuitionPaid)}}đ</strong></div></div><div class="col-md-3"><div class="tuition-student-summary paid"><span>Học phí chuyển sang</span><strong>{{number_format($tuitionCredit)}}đ</strong></div></div><div class="col-md-3"><div class="tuition-student-summary {{$tuitionRemaining>0?'due':'complete'}}"><span>Còn phải đóng</span><strong>{{number_format($tuitionRemaining)}}đ</strong></div></div></div>@if($item->tuitionCharges->isEmpty())<div class="alert alert-light border mt-3 mb-0">Học viên chưa được lập khoản thu học phí.</div>@elseif($tuitionRemaining<=0)<div class="alert alert-success mt-3 mb-0"><i class="bi bi-check-circle-fill me-2"></i>Học viên đã hoàn thành toàn bộ học phí đã lập.</div>@endif</div></div>
 

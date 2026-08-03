@@ -29,13 +29,20 @@ class LanguageLeadController extends Controller
     public function consulting(Request $request): View
     {
         $canViewAll=$request->user()->isAdmin() || $request->user()->allowed('language_dashboard_all');
-        $query = LanguageLead::with(['program','course','collaborator','consultant','targetSubmissions'])
+        $pendingQuery=LanguageLead::query()
             ->when(! $canViewAll,fn($builder)=>$builder->where('consultant_user_id',$request->user()->id))
-            ->whereNotIn('status', ['registered','not_interested'])
+            ->whereNotIn('status', ['registered','not_interested']);
+        $pendingCount=(clone $pendingQuery)->count();
+        $query = (clone $pendingQuery)
+            ->with(['program','course','collaborator','consultant','targetSubmissions'])
             ->orderByDesc('created_at')->orderByDesc('id');
         if ($request->filled('status')) $query->where('status', $request->status);
         $this->applyReceivedFilter($query, $request);
-        return view('language.leads.consulting', ['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'canViewAll'=>$canViewAll]);
+        return view('language.leads.consulting', [
+            'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'canViewAll'=>$canViewAll,
+            'pendingCount'=>$pendingCount,
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -67,14 +74,14 @@ class LanguageLeadController extends Controller
 
     public function convert(LanguageLead $languageLead): RedirectResponse
     {
-        if ($languageLead->converted_student_id) return redirect()->route('language-tuition.create', ['lead'=>$languageLead->id,'student'=>$languageLead->converted_student_id]);
+        if ($languageLead->converted_student_id) return redirect()->route('language-students.show',$languageLead->converted_student_id);
         if ($languageLead->status !== 'registered') {
             return back()->withErrors(['status'=>'Chỉ có thể chuyển thành học viên khi trạng thái tư vấn là “Đã đăng ký”.']);
         }
-        $student = LanguageStudent::create(['code'=>CenterCode::next('language_students','HV'),'name'=>$languageLead->name,'date_of_birth'=>$languageLead->date_of_birth,'phone'=>$languageLead->phone,'email'=>$languageLead->email,'registered_at'=>now()->toDateString(),'source'=>$languageLead->source,'status'=>'new','note'=>'Chuyển từ khách hàng '.$languageLead->code]);
+        $student = LanguageStudent::create(['code'=>CenterCode::next('language_students','HV'),'name'=>$languageLead->name,'date_of_birth'=>$languageLead->date_of_birth,'phone'=>$languageLead->phone,'email'=>$languageLead->email,'registered_at'=>now()->toDateString(),'source'=>$languageLead->source,'status'=>'new','note'=>'Chuyển từ khách hàng '.$languageLead->name]);
         $student->update(['language_course_id'=>$languageLead->language_course_id]);
         $languageLead->update(['converted_student_id'=>$student->id,'status'=>'registered']);
-        return redirect()->route('language-tuition.create', ['lead'=>$languageLead->id,'student'=>$student->id,'course'=>$languageLead->language_course_id])->with('success', 'Đã tạo học viên. Vui lòng lập khoản thu học phí.');
+        return redirect()->route('language-students.show',$student)->with('success', 'Đã chuyển thành học viên và mở hồ sơ học viên.');
     }
 
     public function export()

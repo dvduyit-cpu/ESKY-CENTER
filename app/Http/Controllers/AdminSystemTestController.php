@@ -118,7 +118,9 @@ class AdminSystemTestController extends Controller
             'Hai endpoint đều xác minh user có vai trò admin trong controller.'
         );
 
-        $unprotected = $namedRoutes->filter(function (LaravelRoute $route, string $name) {
+        $applicationRoutes=$namedRoutes->reject(fn(LaravelRoute $route,string $name)=>$this->isFrameworkUtilityRoute($route,$name));
+
+        $unprotected = $applicationRoutes->filter(function (LaravelRoute $route, string $name) {
             if (in_array($name, ['login', 'login.submit'], true)) return false;
             return !in_array('auth', $route->gatherMiddleware(), true);
         });
@@ -128,7 +130,7 @@ class AdminSystemTestController extends Controller
             $unprotected->isEmpty() ? 'Tất cả route nghiệp vụ yêu cầu đăng nhập.' : 'Route thiếu auth: '.$unprotected->keys()->implode(', ')
         );
 
-        $mutations = $namedRoutes->filter(fn (LaravelRoute $route) => count(array_intersect($route->methods(), ['POST', 'PUT', 'PATCH', 'DELETE'])) > 0);
+        $mutations = $applicationRoutes->filter(fn (LaravelRoute $route) => count(array_intersect($route->methods(), ['POST', 'PUT', 'PATCH', 'DELETE'])) > 0);
         $withoutWeb = $mutations->filter(fn (LaravelRoute $route) => !in_array('web', $route->gatherMiddleware(), true));
         $add(
             'CSRF cho thao tác ghi dữ liệu',
@@ -164,6 +166,14 @@ class AdminSystemTestController extends Controller
         );
 
         return $checks;
+    }
+
+    private function isFrameworkUtilityRoute(LaravelRoute $route,string $name): bool
+    {
+        if (str_starts_with($name,'generated::')) return true;
+
+        return in_array($name,['storage.local','storage.local.upload'],true)
+            && $route->getActionName()==='Closure';
     }
 
     private function capabilities(array $operations): array

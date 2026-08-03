@@ -6,6 +6,8 @@ use App\Models\{LanguageClass, LanguageCourse, LanguageDiscountPolicy, LanguageE
 use App\Support\ActivityLogger;
 use App\Support\LanguageStudentSpreadsheet;
 use App\Support\LanguageEnrollmentManager;
+use App\Support\LanguageStudentMergeService;
+use App\Support\TextNormalizer;
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -14,10 +16,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LanguageStudentController extends Controller
 {
-    public function __construct(private readonly LanguageEnrollmentManager $enrollmentManager) {}
+    public function __construct(
+        private readonly LanguageEnrollmentManager $enrollmentManager,
+        private readonly LanguageStudentMergeService $studentMergeService,
+    ) {}
 
     public function index(Request $request): View
     {
+        $duplicateIds = $this->duplicateStudentIds();
         $query = LanguageStudent::with([
             'guardians' => fn ($guardians) => $guardians->orderByDesc('is_primary')->orderBy('id'),
         ])->latest();
@@ -33,32 +39,288 @@ class LanguageStudentController extends Controller
             });
         }
         if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->boolean('duplicates')) {
+            $query->whereIn('id', $duplicateIds)->reorder()->orderBy('name')->orderBy('id');
+        }
         return view('language.students.index', [
             'items' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'totalStudents' => LanguageStudent::count(),
+            'duplicateStudentCount' => count($duplicateIds),
+            'duplicateIdLookup' => array_fill_keys($duplicateIds, true),
         ]);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function duplicateStudentIds(): array
+    {
+        return collect($this->duplicateStudentGroups())
+            ->flatten(1)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<int, LanguageStudent>>
+     */
+    private function duplicateStudentGroups(): array
+    {
+        $studentsByName = [];
+        $students = LanguageStudent::query()
+            ->with('guardians:id,language_student_id,phone')
+            ->withCount(['enrollments', 'tuitionCharges'])
+            ->get();
+
+        foreach ($students as $student) {
+            $name = TextNormalizer::name($student->name);
+            if ($name === '') {
+                continue;
+            }
+
+            $studentsByName[$name][] = $student;
+        }
+
+        $groups = [];
+        foreach ($studentsByName as $studentsWithSameName) {
+            if (count($studentsWithSameName) > 1) {
+                usort($studentsWithSameName, fn ($left, $right) => $left->id <=> $right->id);
+                $groups[] = $studentsWithSameName;
+            }
+        }
+
+        usort($groups, fn ($left, $right) => strcasecmp($left[0]->name, $right[0]->name));
+
+        return $groups;
+    }
+
+    public function duplicates(): View
+    {
+        $groups = $this->duplicateStudentGroups();
+
+        return view('language.students.duplicates', [
+            'groups' => $groups,
+            'duplicateRecordCount' => collect($groups)->flatten(1)->count(),
+            'recommendedPrimaryIds' => collect($groups)
+                ->map(fn ($group) => $this->preferredPrimary($group)->id)
+                ->all(),
+            'multipleContactGroupCount' => collect($groups)
+                ->filter(fn ($group) => $this->groupContactPhones($group)->count() > 1)
+                ->count(),
+        ]);
+    }
+
+    public function mergeAllDuplicates(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'confirm_all' => ['required', Rule::in(['yes'])],
+        ], [
+            'confirm_all.required' => 'Vui lòng xác nhận thao tác gộp tất cả.',
+            'confirm_all.in' => 'Xác nhận gộp tất cả không hợp lệ.',
+        ]);
+        $groups = $this->duplicateStudentGroups();
+        if ($groups === []) {
+            return redirect()->route('language-students.duplicates')
+                ->with('warning', 'Không còn nhóm học viên trùng để gộp.');
+        }
+
+        [$mergedGroups, $mergedRecords] = DB::transaction(function () use ($groups): array {
+            $mergedGroups = 0;
+            $mergedRecords = 0;
+            foreach ($groups as $group) {
+                $primary = $this->preferredPrimary($group);
+                $sourceIds = collect($group)
+                    ->pluck('id')
+                    ->reject(fn ($id) => (int) $id === (int) $primary->id)
+                    ->map(fn ($id) => (int) $id)
+                    ->values()
+                    ->all();
+                $mergedRecords += $this->studentMergeService->merge($primary, $sourceIds);
+                $mergedGroups++;
+            }
+
+            return [$mergedGroups, $mergedRecords];
+        });
+
+        ActivityLogger::log(
+            'language_students',
+            'merge_all',
+            "Gộp tất cả {$mergedGroups} nhóm trùng; xóa mềm {$mergedRecords} hồ sơ phụ"
+        );
+
+        return redirect()->route('language-students.duplicates')->with(
+            'success',
+            "Đã gộp {$mergedGroups} nhóm và chuyển dữ liệu từ {$mergedRecords} hồ sơ phụ."
+        );
+    }
+
+    public function mergeDuplicates(Request $request, LanguageStudent $languageStudent): RedirectResponse
+    {
+        $data = $request->validate([
+            'duplicate_ids' => ['required', 'array', 'min:1'],
+            'duplicate_ids.*' => ['required', 'integer', 'distinct', 'exists:language_students,id'],
+        ]);
+        $sourceIds = collect($data['duplicate_ids'])->map(fn ($id) => (int) $id)->values();
+        $group = collect($this->duplicateStudentGroups())->first(
+            fn ($items) => collect($items)->contains('id', $languageStudent->id)
+        );
+        $groupIds = collect($group ?? [])->pluck('id')->map(fn ($id) => (int) $id);
+        if (! $group || $sourceIds->contains($languageStudent->id) || $sourceIds->diff($groupIds)->isNotEmpty()) {
+            return back()->withErrors([
+                'duplicate_ids' => 'Các hồ sơ đã chọn không còn thuộc cùng một nhóm trùng.',
+            ]);
+        }
+
+        $merged = $this->studentMergeService->merge($languageStudent, $sourceIds->all());
+        ActivityLogger::log(
+            'language_students',
+            'merge',
+            "Gộp {$merged} hồ sơ trùng vào học viên {$languageStudent->name}",
+            $languageStudent
+        );
+
+        return redirect()->route('language-students.duplicates')
+            ->with('success', "Đã gộp {$merged} hồ sơ vào {$languageStudent->name}.");
+    }
+
+    /**
+     * @param array<int, LanguageStudent> $group
+     */
+    private function preferredPrimary(array $group): LanguageStudent
+    {
+        usort($group, function (LanguageStudent $left, LanguageStudent $right): int {
+            $leftRank = $this->primaryRank($left);
+            $rightRank = $this->primaryRank($right);
+            foreach (array_keys($leftRank) as $index) {
+                if ($leftRank[$index] !== $rightRank[$index]) {
+                    return $rightRank[$index] <=> $leftRank[$index];
+                }
+            }
+
+            return 0;
+        });
+
+        return $group[0];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function primaryRank(LanguageStudent $student): array
+    {
+        $completeFields = collect([
+            $student->phone, $student->email, $student->date_of_birth, $student->school,
+            $student->school_class, $student->address, $student->registered_at,
+            $student->official_enrollment_date, $student->language_course_id,
+            $student->language_discount_policy_id, $student->note,
+        ])->filter(fn ($value) => filled($value))->count();
+        $guardianContacts = $student->guardians
+            ->filter(fn ($guardian) => filled($guardian->phone) || filled($guardian->email))
+            ->count();
+
+        return [
+            (int) $student->enrollments_count + (int) $student->tuition_charges_count,
+            $completeFields,
+            $guardianContacts,
+            (int) $student->id,
+        ];
+    }
+
+    /**
+     * @param array<int, LanguageStudent> $group
+     */
+    private function groupContactPhones(array $group): \Illuminate\Support\Collection
+    {
+        return collect($group)
+            ->flatMap(fn ($student) => [$student->phone, ...$student->guardians->pluck('phone')])
+            ->map(fn ($phone) => TextNormalizer::phone($phone))
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     public function create(): View { return $this->form(new LanguageStudent); }
 
-    public function import(Request $request, LanguageStudentSpreadsheet $spreadsheet): RedirectResponse
+    public function import(Request $request, LanguageStudentSpreadsheet $spreadsheet): RedirectResponse|StreamedResponse|\Illuminate\Http\JsonResponse
     {
         abort_unless($request->user()?->isRegistrar(), 403, 'Chỉ giáo vụ hoặc quản trị viên được nhập danh sách và xếp lớp học viên.');
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls', 'max:10240'],
+            'duplicate_action' => ['nullable', Rule::in(['skip', 'overwrite'])],
         ], [
             'file.required' => 'Vui lòng chọn file Excel.',
             'file.mimes' => 'File tải lên phải có định dạng .xlsx hoặc .xls.',
             'file.max' => 'File Excel không được lớn hơn 10 MB.',
+            'duplicate_action.in' => 'Cách xử lý hồ sơ trùng không hợp lệ.',
         ]);
 
+        $streamProgress = $request->header('X-Import-Progress') === 'stream';
         if (! class_exists(\ZipArchive::class)) {
+            if ($streamProgress) {
+                return response()->json([
+                    'message' => 'Máy chủ chưa bật PHP ZipArchive nên chưa thể đọc file Excel. Vui lòng liên hệ quản trị viên để bật extension=zip.',
+                ], 422);
+            }
+
             return redirect()->route('language-students.index')->withErrors([
                 'file' => 'Máy chủ chưa bật PHP ZipArchive nên chưa thể đọc file Excel. Vui lòng liên hệ quản trị viên để bật extension=zip.',
             ]);
         }
 
+        if ($streamProgress) {
+            $file = $request->file('file');
+            $overwriteExisting = $request->input('duplicate_action') === 'overwrite';
+
+            return response()->stream(function () use ($spreadsheet, $file, $overwriteExisting): void {
+                $emit = static function (array $event): void {
+                    echo json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n";
+                    if (ob_get_level() > 0) {
+                        @ob_flush();
+                    }
+                    flush();
+                };
+
+                $emit([
+                    'type' => 'preparing',
+                    'message' => 'Đang đọc và kiểm tra file Excel...',
+                ]);
+
+                try {
+                    $result = $spreadsheet->import($file, $overwriteExisting, $emit);
+
+                    ActivityLogger::log(
+                        'language_students',
+                        'import',
+                        "Nhập {$result['success']}/{$result['total']} học viên từ Excel; tạo {$result['created']}, ghi đè {$result['updated']}, bỏ qua {$result['skipped']}"
+                    );
+
+                    $emit([
+                        'type' => 'complete',
+                        'message' => "Đã xử lý {$result['total']} dòng: thêm {$result['created']}, ghi đè {$result['updated']}, bỏ qua {$result['skipped']}, lỗi {$result['failed']}.",
+                        'result' => $result,
+                    ]);
+                } catch (\Throwable $exception) {
+                    $emit([
+                        'type' => 'error',
+                        'message' => 'Không thể nhập file: '.$exception->getMessage(),
+                    ]);
+                }
+            }, 200, [
+                'Content-Type' => 'application/x-ndjson; charset=UTF-8',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'X-Accel-Buffering' => 'no',
+            ]);
+        }
+
         try {
-            $result = $spreadsheet->import($request->file('file'));
+            $result = $spreadsheet->import(
+                $request->file('file'),
+                $request->input('duplicate_action') === 'overwrite'
+            );
         } catch (\Throwable $exception) {
             return back()->withErrors(['file' => 'Không thể nhập file: '.$exception->getMessage()]);
         }
@@ -66,15 +328,18 @@ class LanguageStudentController extends Controller
         ActivityLogger::log(
             'language_students',
             'import',
-            "Nhập {$result['success']}/{$result['total']} học viên từ Excel"
+            "Nhập {$result['success']}/{$result['total']} học viên từ Excel; tạo {$result['created']}, ghi đè {$result['updated']}, bỏ qua {$result['skipped']}"
         );
 
         $redirect = redirect()->route('language-students.index')->with(
-            $result['failed'] > 0 ? 'warning' : 'success',
-            "Đã nhập {$result['success']}/{$result['total']} học viên. Có {$result['failed']} dòng lỗi."
+            $result['failed'] > 0 || $result['skipped'] > 0 ? 'warning' : 'success',
+            "Đã tạo {$result['created']}, ghi đè {$result['updated']}, bỏ qua {$result['skipped']} hồ sơ trùng. Có {$result['failed']} dòng lỗi."
         );
         if ($result['errors']) {
             $redirect->with('student_import_errors', $result['errors']);
+        }
+        if ($result['warnings']) {
+            $redirect->with('student_import_warnings', $result['warnings']);
         }
 
         return $redirect;
@@ -167,8 +432,23 @@ class LanguageStudentController extends Controller
         ])['guardians'] ?? [];
         $student->guardians()->delete();
         foreach ($rows as $index => $row) {
-            if (blank($row['name'] ?? null)) continue;
-            $student->guardians()->create($row + ['phone'=>$row['phone'] ?? '', 'is_primary'=>$index === 0]);
+            $name = trim((string) ($row['name'] ?? ''));
+            $phone = trim((string) ($row['phone'] ?? ''));
+            $email = trim((string) ($row['email'] ?? ''));
+            if ($name === '' && $phone === '' && $email === '') continue;
+            if ($name === '') {
+                $name = match ($row['relationship'] ?? 'guardian') {
+                    'father' => 'Cha',
+                    'mother' => 'Mẹ',
+                    default => 'Người giám hộ',
+                };
+            }
+            $student->guardians()->create(array_merge($row, [
+                'name'=>$name,
+                'phone'=>$phone,
+                'email'=>$email !== '' ? $email : null,
+                'is_primary'=>$index === 0,
+            ]));
         }
     }
 

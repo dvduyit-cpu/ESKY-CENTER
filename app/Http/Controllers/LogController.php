@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\LoginLog;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -15,9 +16,19 @@ class LogController extends Controller
         $month = $request->filled('month') ? max(1, min(12, $request->integer('month'))) : null;
         $perPage = \App\Support\Pagination::perPage();
         $activeTab = $request->input('tab', $request->filled('login_page') ? 'login' : 'activity');
+        $canFilterUsers=$request->user()->isAdmin();
+        $selectedUser=$canFilterUsers&&$request->integer('user_id')>0
+            ? User::withTrashed()->find($request->integer('user_id'))
+            : null;
 
         $activity = ActivityLog::with('user')->latest('created_at');
         $login = LoginLog::with('user')->latest('created_at');
+
+        if ($selectedUser) {
+            $activity->where('user_id',$selectedUser->id);
+            $login->where(fn($query)=>$query->where('user_id',$selectedUser->id)
+                ->orWhere('email',$selectedUser->email));
+        }
 
         foreach ([$activity, $login] as $query) {
             $query->whereYear('created_at', $year);
@@ -61,6 +72,11 @@ class LogController extends Controller
             'loginCount' => $loginCount,
             'loginSuccess' => $loginSuccess,
             'loginFailed' => $loginCount - $loginSuccess,
+            'canFilterUsers'=>$canFilterUsers,
+            'selectedUser'=>$selectedUser,
+            'logUsers'=>$canFilterUsers
+                ? User::withTrashed()->orderBy('name')->orderBy('email')->get(['id','name','email','deleted_at'])
+                : collect(),
         ]);
     }
 }

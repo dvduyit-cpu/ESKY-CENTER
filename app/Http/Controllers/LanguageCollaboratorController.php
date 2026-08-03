@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{LanguageCollaborator,User};
+use App\Models\{LanguageCollaborator,LanguageLead,User};
 use App\Support\{CenterCode,ExcelExporter};
 use Illuminate\Http\{JsonResponse,RedirectResponse,Request};
 use Illuminate\Support\Facades\DB;
@@ -13,12 +13,36 @@ class LanguageCollaboratorController extends Controller
 {
     public function index(Request $request): View
     {
-        $query=LanguageCollaborator::with(['user'])->withCount('leads')->latest();
+        $filters=$request->validate([
+            'q'=>['nullable','string','max:255'],
+            'date'=>['nullable','date'],
+            'month'=>['nullable','integer','between:1,12'],
+            'year'=>['nullable','integer','between:2020,2100'],
+        ]);
+        $applyLeadPeriod=function ($query) use ($filters): void {
+            $hasMonthOrYear=! empty($filters['month'])||! empty($filters['year']);
+            if (! $hasMonthOrYear && ! empty($filters['date'])) {
+                $query->whereDate('received_at',$filters['date']);
+                return;
+            }
+            if (! empty($filters['year'])) $query->whereYear('received_at',$filters['year']);
+            if (! empty($filters['month'])) $query->whereMonth('received_at',$filters['month']);
+        };
+        $query=LanguageCollaborator::with(['user'])
+            ->withCount(['leads as referred_students_count'=>$applyLeadPeriod])
+            ->latest();
         if ($request->filled('q')) {
-            $search=$request->string('q');
+            $search=trim((string)$request->input('q'));
             $query->where(fn($builder)=>$builder->where('name','like',"%{$search}%")->orWhere('phone','like',"%{$search}%"));
         }
-        return view('language.collaborators.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
+        $years=LanguageLead::query()->whereNotNull('language_collaborator_id')->whereNotNull('received_at')
+            ->selectRaw('YEAR(received_at) as year')->distinct()->pluck('year')
+            ->map(fn($year)=>(int)$year)->push((int)now()->year)->unique()->sortDesc()->values();
+        return view('language.collaborators.index',[
+            'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'years'=>$years,
+            'hasPeriodFilter'=>filled($filters['date']??null)||filled($filters['month']??null)||filled($filters['year']??null),
+        ]);
     }
 
     public function create(): View { return $this->form(new LanguageCollaborator); }

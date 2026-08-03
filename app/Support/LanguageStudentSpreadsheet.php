@@ -24,6 +24,38 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LanguageStudentSpreadsheet
 {
+    private const MAX_IMPORT_ROWS = 5000;
+
+    private const HEADER_ALIASES = [
+        'HO TEN PHU HUYNH' => [
+            'TEN PHU HUYNH',
+            'HO TEN NGUOI GIAM HO',
+            'TEN NGUOI GIAM HO',
+        ],
+        'SDT PHU HUYNH' => [
+            'SO DIEN THOAI PHU HUYNH',
+            'DIEN THOAI PHU HUYNH',
+            'SDT NGUOI GIAM HO',
+            'SO DT PHU HUYNH',
+            'SO DT NGUOI GIAM HO',
+            'SO DIEN THOAI NGUOI GIAM HO',
+            'DIEN THOAI NGUOI GIAM HO',
+        ],
+        'EMAIL PHU HUYNH' => [
+            'EMAIL NGUOI GIAM HO',
+        ],
+        'QUAN HE' => [
+            'MOI QUAN HE',
+            'QUAN HE PHU HUYNH',
+            'QUAN HE NGUOI GIAM HO',
+        ],
+    ];
+
+    /**
+     * @var array<string, array<int, array{student:LanguageStudent,phones:array<string, true>}>>
+     */
+    private array $studentIdentityIndex = [];
+
     public function __construct(private readonly LanguageEnrollmentManager $enrollmentManager) {}
 
     private const HEADERS = [
@@ -52,20 +84,29 @@ class LanguageStudentSpreadsheet
     ];
 
     /**
-     * @return array{total:int,success:int,failed:int,errors:array<int,string>}
+     * @return array{total:int,success:int,created:int,updated:int,skipped:int,failed:int,errors:array<int,string>,warnings:array<int,string>}
      */
-    public function import(UploadedFile $file): array
+    public function import(
+        UploadedFile $file,
+        bool $overwriteExisting = false,
+        ?callable $progress = null
+    ): array
     {
         $spreadsheet = IOFactory::load($file->getRealPath());
         $sheet = $spreadsheet->getSheetByName('HOC VIEN') ?? $spreadsheet->getActiveSheet();
-        $rows = $sheet->toArray(null, true, true, false);
+        $highestDataRow = $sheet->getHighestDataRow();
+        $highestDataColumn = $sheet->getHighestDataColumn();
+        $rows = $sheet->rangeToArray(
+            "A1:{$highestDataColumn}{$highestDataRow}",
+            null,
+            true,
+            true,
+            false
+        );
         $spreadsheet->disconnectWorksheets();
 
         if (count($rows) < 2) {
             throw new \RuntimeException('File không có dữ liệu học viên.');
-        }
-        if (count($rows) > 5001) {
-            throw new \RuntimeException('Mỗi lần chỉ được nhập tối đa 5.000 dòng học viên.');
         }
 
         $headers = [];
@@ -82,39 +123,104 @@ class LanguageStudentSpreadsheet
             }
         }
 
-        $result = ['total' => 0, 'success' => 0, 'failed' => 0, 'errors' => []];
+        $dataRows = [];
 
         foreach (array_slice($rows, 1) as $offset => $row) {
             if (! $this->rowHasData($row, $headers)) {
                 continue;
             }
 
-            $rowNumber = $offset + 2;
-            $result['total']++;
-
-            try {
-                DB::transaction(fn () => $this->importRow($row, $headers));
-                $result['success']++;
-            } catch (\Throwable $exception) {
-                $result['failed']++;
-                if (count($result['errors']) < 100) {
-                    $name = trim((string) $this->cell($row, $headers, 'HO TEN'));
-                    $context = $name !== '' ? " ({$name})" : '';
-                    $message = $exception instanceof QueryException
-                        ? 'Không thể lưu do dữ liệu bị trùng hoặc không hợp lệ.'
-                        : $exception->getMessage();
-                    $result['errors'][] = "Dòng {$rowNumber}{$context}: {$message}";
-                }
+            $dataRows[] = ['number' => $offset + 2, 'values' => $row];
+            if (count($dataRows) > self::MAX_IMPORT_ROWS) {
+                throw new \RuntimeException('Mỗi lần chỉ được nhập tối đa 5.000 dòng học viên.');
             }
         }
 
-        if ($result['total'] === 0) {
+        $result = [
+            'total' => 0,
+            'success' => 0,
+            'created' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+            'errors' => [],
+            'warnings' => [],
+        ];
+        if ($dataRows === []) {
             throw new \RuntimeException('File không có dòng học viên nào để nhập.');
+        }
+
+        $this->buildStudentIdentityIndex();
+        $rowTotal = count($dataRows);
+        if ($progress !== null) {
+            $progress([
+                'type' => 'start',
+                'total' => $rowTotal,
+            ]);
+        }
+
+        foreach ($dataRows as $dataRow) {
+            $rowNumber = $dataRow['number'];
+            $row = $dataRow['values'];
+            $result['total']++;
+            $name = trim((string) $this->cell($row, $headers, 'HO TEN'));
+            $context = $name !== '' ? " ({$name})" : '';
+            $status = 'failed';
+            $rowMessage = '';
+
+            try {
+                $outcome = DB::transaction(
+                    fn () => $this->importRow($row, $headers, $overwriteExisting)
+                );
+                $status = $outcome;
+                $result[$outcome]++;
+                if ($outcome === 'skipped') {
+                    $rowMessage = "Dòng {$rowNumber}{$context}: Hồ sơ đã tồn tại nên không được ghi đè.";
+                    if (count($result['warnings']) < 100) {
+                        $result['warnings'][] = $rowMessage;
+                    }
+                } else {
+                    $result['success']++;
+                    $rowMessage = $outcome === 'updated'
+                        ? "Dòng {$rowNumber}{$context}: Đã ghi đè hồ sơ trùng."
+                        : "Dòng {$rowNumber}{$context}: Đã thêm học viên.";
+                }
+            } catch (\Throwable $exception) {
+                $result['failed']++;
+                $message = $exception instanceof QueryException
+                    ? 'Không thể lưu do dữ liệu bị trùng hoặc không hợp lệ.'
+                    : $exception->getMessage();
+                $rowMessage = "Dòng {$rowNumber}{$context}: {$message}";
+                if (count($result['errors']) < 100) {
+                    $result['errors'][] = $rowMessage;
+                }
+            }
+
+            if ($progress !== null) {
+                $progress([
+                    'type' => 'row',
+                    'processed' => $result['total'],
+                    'total' => $rowTotal,
+                    'row' => $rowNumber,
+                    'name' => $name,
+                    'status' => $status,
+                    'message' => $rowMessage,
+                    'created' => $result['created'],
+                    'updated' => $result['updated'],
+                    'skipped' => $result['skipped'],
+                    'failed' => $result['failed'],
+                ]);
+            }
         }
 
         if ($result['failed'] > count($result['errors'])) {
             $remaining = $result['failed'] - count($result['errors']);
             $result['errors'][] = "Còn {$remaining} dòng lỗi khác chưa hiển thị.";
+        }
+
+        if ($result['skipped'] > count($result['warnings'])) {
+            $remaining = $result['skipped'] - count($result['warnings']);
+            $result['warnings'][] = "Còn {$remaining} hồ sơ trùng khác đã được bỏ qua.";
         }
 
         return $result;
@@ -241,7 +347,7 @@ class LanguageStudentSpreadsheet
      * @param array<int, mixed> $row
      * @param array<string, int> $headers
      */
-    private function importRow(array $row, array $headers): void
+    private function importRow(array $row, array $headers, bool $overwriteExisting): string
     {
         $course = $this->findByCode(
             LanguageCourse::class,
@@ -286,8 +392,29 @@ class LanguageStudentSpreadsheet
             'note' => $this->nullableString($this->cell($row, $headers, 'GHI CHU')),
         ];
 
+        $guardianPhone = $this->phone($this->cell($row, $headers, 'SDT PHU HUYNH'));
+        $student = $this->findMatchingStudent(
+            $studentData['name'],
+            [$studentData['phone'], $guardianPhone]
+        );
+
+        if ($student && ! $overwriteExisting) {
+            return 'skipped';
+        }
+
+        $outcome = $student ? 'updated' : 'created';
+        if ($student) {
+            $studentData = $this->mergeStudentData($student, $studentData, $row, $headers);
+        }
+
         $validator = Validator::make($studentData, [
-            'code' => ['nullable', 'max:30', Rule::unique('language_students', 'code')],
+            'code' => [
+                'nullable',
+                'max:30',
+                $student
+                    ? Rule::unique('language_students', 'code')->ignore($student)
+                    : Rule::unique('language_students', 'code'),
+            ],
             'name' => ['required', 'max:255'],
             'gender' => ['nullable', Rule::in(['male', 'female', 'other'])],
             'date_of_birth' => ['nullable', 'date'],
@@ -317,8 +444,12 @@ class LanguageStudentSpreadsheet
             throw new \RuntimeException($validator->errors()->first());
         }
 
-        $student = LanguageStudent::create($validator->validated());
-        $this->createGuardian($student, $row, $headers);
+        if ($student) {
+            $student->update($validator->validated());
+        } else {
+            $student = LanguageStudent::create($validator->validated());
+        }
+        $this->mergeGuardian($student, $row, $headers);
 
         if ($class) {
             $this->enrollmentManager->enroll(
@@ -331,24 +462,35 @@ class LanguageStudentSpreadsheet
                     : 'studying'
             );
         }
+
+        $this->indexStudent($student, [$guardianPhone]);
+
+        return $outcome;
     }
 
     /**
      * @param array<int, mixed> $row
      * @param array<string, int> $headers
      */
-    private function createGuardian(LanguageStudent $student, array $row, array $headers): void
+    private function mergeGuardian(LanguageStudent $student, array $row, array $headers): void
     {
         $name = trim((string) $this->cell($row, $headers, 'HO TEN PHU HUYNH'));
-        if ($name === '') {
+        $phone = $this->phone($this->cell($row, $headers, 'SDT PHU HUYNH'));
+        $email = $this->nullableString($this->cell($row, $headers, 'EMAIL PHU HUYNH'));
+        if ($name === '' && $phone === null && $email === null) {
             return;
+        }
+
+        $relationship = $this->relationship($this->cell($row, $headers, 'QUAN HE'));
+        if ($name === '') {
+            $name = $this->guardianDefaultName($relationship);
         }
 
         $data = [
             'name' => $name,
-            'relationship' => $this->relationship($this->cell($row, $headers, 'QUAN HE')),
-            'phone' => $this->phone($this->cell($row, $headers, 'SDT PHU HUYNH')) ?? '',
-            'email' => $this->nullableString($this->cell($row, $headers, 'EMAIL PHU HUYNH')),
+            'relationship' => $relationship,
+            'phone' => $phone ?? '',
+            'email' => $email,
             'is_primary' => true,
         ];
         $validator = Validator::make($data, [
@@ -364,8 +506,135 @@ class LanguageStudentSpreadsheet
             throw new \RuntimeException($validator->errors()->first());
         }
 
-        $student->guardians()->create($validator->validated());
+        $guardian = null;
+        $phone = TextNormalizer::phone($data['phone']);
+        if ($phone !== null) {
+            $guardian = $student->guardians()->get()->first(
+                fn ($item) => TextNormalizer::phone($item->phone) === $phone
+            );
+        }
+
+        if ($guardian) {
+            $guardian->update($this->mergeNonBlank(
+                $guardian->only(array_keys($data)),
+                $validator->validated()
+            ));
+        } else {
+            $student->guardians()->create($validator->validated());
+        }
     }
+
+    /**
+     * @param array<string, mixed> $incoming
+     * @param array<int, mixed> $row
+     * @param array<string, int> $headers
+     * @return array<string, mixed>
+     */
+    private function mergeStudentData(
+        LanguageStudent $student,
+        array $incoming,
+        array $row,
+        array $headers
+    ): array {
+        $incoming['code'] = $student->code;
+        if (trim((string) $this->cell($row, $headers, 'TRANG THAI')) === '') {
+            $incoming['status'] = null;
+        }
+
+        return $this->mergeNonBlank(
+            $student->only(array_keys($incoming)),
+            $incoming
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $current
+     * @param array<string, mixed> $incoming
+     * @return array<string, mixed>
+     */
+    private function mergeNonBlank(array $current, array $incoming): array
+    {
+        foreach ($incoming as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $current[$key] = $value;
+            }
+        }
+
+        return $current;
+    }
+
+    private function buildStudentIdentityIndex(): void
+    {
+        $this->studentIdentityIndex = [];
+
+        LanguageStudent::query()
+            ->with('guardians:id,language_student_id,phone')
+            ->get()
+            ->each(fn (LanguageStudent $student) => $this->indexStudent($student));
+    }
+
+    /**
+     * @param array<int, mixed> $extraPhones
+     */
+    private function indexStudent(LanguageStudent $student, array $extraPhones = []): void
+    {
+        $name = TextNormalizer::name($student->name);
+        if ($name === '') {
+            return;
+        }
+
+        $phones = $this->studentIdentityIndex[$name][$student->id]['phones'] ?? [];
+        foreach ([$student->phone, ...$extraPhones] as $phone) {
+            $normalized = TextNormalizer::phone($phone);
+            if ($normalized !== null) {
+                $phones[$normalized] = true;
+            }
+        }
+        if ($student->relationLoaded('guardians')) {
+            foreach ($student->guardians as $guardian) {
+                $normalized = TextNormalizer::phone($guardian->phone);
+                if ($normalized !== null) {
+                    $phones[$normalized] = true;
+                }
+            }
+        }
+
+        $this->studentIdentityIndex[$name][$student->id] = [
+            'student' => $student,
+            'phones' => $phones,
+        ];
+    }
+
+    /**
+     * @param array<int, mixed> $phones
+     */
+    private function findMatchingStudent(string $name, array $phones): ?LanguageStudent
+    {
+        $name = TextNormalizer::name($name);
+        $phones = array_values(array_filter(array_map(
+            fn ($phone) => TextNormalizer::phone($phone),
+            $phones
+        )));
+        if ($name === '' || $phones === []) {
+            return null;
+        }
+
+        $matches = [];
+        foreach ($this->studentIdentityIndex[$name] ?? [] as $identity) {
+            if (array_intersect($phones, array_keys($identity['phones'])) !== []) {
+                $matches[$identity['student']->id] = $identity['student'];
+            }
+        }
+
+        if (count($matches) > 1) {
+            throw new \RuntimeException(
+                'Có nhiều hồ sơ học viên trùng họ tên và số điện thoại. Vui lòng gộp thủ công trước khi nhập lại.'
+            );
+        }
+
+        return $matches ? reset($matches)->fresh() : null;
+    }
+
 
     private function findByCode(string $model, string $code, string $label): ?object
     {
@@ -489,6 +758,15 @@ class LanguageStudentSpreadsheet
         };
     }
 
+    private function guardianDefaultName(string $relationship): string
+    {
+        return match ($relationship) {
+            'father' => 'Cha',
+            'mother' => 'Mẹ',
+            default => 'Người giám hộ',
+        };
+    }
+
     private function nullableUpper(mixed $value): ?string
     {
         $value = trim((string) $value);
@@ -539,7 +817,13 @@ class LanguageStudentSpreadsheet
      */
     private function cell(array $row, array $headers, string $header): mixed
     {
-        return $row[$headers[$header] ?? -1] ?? null;
+        foreach ([$header, ...(self::HEADER_ALIASES[$header] ?? [])] as $candidate) {
+            if (array_key_exists($candidate, $headers)) {
+                return $row[$headers[$candidate]] ?? null;
+            }
+        }
+
+        return null;
     }
 
     /**

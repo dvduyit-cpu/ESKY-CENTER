@@ -1,3 +1,82 @@
+const showBulkDeleteProgress = total => {
+    const modalElement = document.createElement('div');
+    modalElement.className = 'modal fade';
+    modalElement.tabIndex = -1;
+    modalElement.setAttribute('aria-hidden', 'true');
+    modalElement.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-body p-4">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <span class="spinner-border text-danger" data-delete-progress-spinner aria-hidden="true"></span>
+                        <div>
+                            <h5 class="mb-1" data-delete-progress-title>Đang xóa dữ liệu</h5>
+                            <div class="small text-muted" data-delete-progress-label>Chuẩn bị xóa 0/${total} dòng đã chọn...</div>
+                        </div>
+                    </div>
+                    <div class="progress" role="progressbar" aria-label="Tiến trình xóa" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="height:10px">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-danger" data-delete-progress-bar style="width:0%"></div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-2 small">
+                        <span data-delete-progress-count>0/${total} dòng</span>
+                        <strong data-delete-progress-percent>0%</strong>
+                    </div>
+                    <p class="small text-muted mb-0 mt-3" data-delete-progress-note>Vui lòng giữ nguyên trang cho đến khi hoàn tất.</p>
+                </div>
+                <div class="modal-footer border-0 pt-0 d-none" data-delete-progress-footer>
+                    <button type="button" class="btn btn-primary w-100" data-delete-progress-reload>Tải lại danh sách</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.append(modalElement);
+
+    const modal = new bootstrap.Modal(modalElement, {backdrop: 'static', keyboard: false});
+    const bar = modalElement.querySelector('[data-delete-progress-bar]');
+    const progressRoot = bar.closest('[role="progressbar"]');
+    const label = modalElement.querySelector('[data-delete-progress-label]');
+    const count = modalElement.querySelector('[data-delete-progress-count]');
+    const percent = modalElement.querySelector('[data-delete-progress-percent]');
+    const title = modalElement.querySelector('[data-delete-progress-title]');
+    const note = modalElement.querySelector('[data-delete-progress-note]');
+    const spinner = modalElement.querySelector('[data-delete-progress-spinner]');
+    const footer = modalElement.querySelector('[data-delete-progress-footer]');
+
+    const update = completed => {
+        const value = total > 0 ? Math.round((completed / total) * 100) : 100;
+        bar.style.width = `${value}%`;
+        progressRoot.setAttribute('aria-valuenow', String(value));
+        label.textContent = `Đang xóa ${completed}/${total} dòng đã chọn...`;
+        count.textContent = `${completed}/${total} dòng`;
+        percent.textContent = `${value}%`;
+    };
+
+    modalElement.querySelector('[data-delete-progress-reload]').addEventListener('click', () => window.location.reload());
+    modalElement.addEventListener('hidden.bs.modal', () => modalElement.remove(), {once: true});
+    modal.show();
+
+    return {
+        update,
+        complete(completed) {
+            update(completed);
+            spinner.className = 'bi bi-check-circle-fill text-success fs-2';
+            title.textContent = 'Xóa dữ liệu hoàn tất';
+            label.textContent = `Đã xóa ${completed}/${total} dòng đã chọn.`;
+            note.textContent = 'Đang tải lại danh sách...';
+            bar.classList.remove('progress-bar-animated', 'bg-danger');
+            bar.classList.add('bg-success');
+        },
+        fail(completed, message) {
+            update(completed);
+            spinner.className = 'bi bi-exclamation-triangle-fill text-danger fs-2';
+            title.textContent = 'Xóa dữ liệu chưa hoàn tất';
+            label.textContent = `Đã xóa ${completed}/${total} dòng đã chọn.`;
+            note.textContent = message || 'Có dòng không thể xóa hoặc kết nối mạng bị gián đoạn.';
+            bar.classList.remove('progress-bar-animated');
+            footer.classList.remove('d-none');
+        },
+    };
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     const csvCell = value => `"${String(value ?? '').replace(/\s+/g, ' ').trim().replaceAll('"', '""')}"`;
     const downloadCsv = (table, rows) => {
@@ -99,24 +178,34 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteButton?.addEventListener('click', async () => {
             const selected = selectedRows();
             if (!selected.length || !confirm(`Xóa ${selected.length} dòng đã chọn?`)) return;
+            if (deleteButton.dataset.submitting === 'true') return;
+            deleteButton.dataset.submitting = 'true';
             deleteButton.disabled = true;
-            let failed = false;
-            for (const row of selected) {
-                const form = deleteForms(row)[0];
-                const response = await fetch(form.action, {
-                    method: 'POST',
-                    body: new FormData(form),
-                    headers: {'X-Requested-With': 'XMLHttpRequest'},
-                    redirect: 'manual',
-                });
-                if (!response.ok && response.type !== 'opaqueredirect') {
-                    failed = true;
-                    alert('Có dòng không thể xóa do phân quyền hoặc đang được sử dụng.');
-                    break;
+            deleteButton.setAttribute('aria-busy', 'true');
+            deleteButton.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Đang xóa 0/${selected.length}`;
+            const progress = showBulkDeleteProgress(selected.length);
+            let deletedCount = 0;
+            try {
+                for (const row of selected) {
+                    const form = deleteForms(row)[0];
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        headers: {'X-Requested-With': 'XMLHttpRequest'},
+                        redirect: 'manual',
+                    });
+                    if (!response.ok && response.type !== 'opaqueredirect') {
+                        throw new Error('Có dòng không thể xóa do phân quyền hoặc đang được sử dụng.');
+                    }
+                    deletedCount++;
+                    progress.update(deletedCount);
+                    deleteButton.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Đang xóa ${deletedCount}/${selected.length}`;
                 }
+                progress.complete(deletedCount);
+                window.setTimeout(() => window.location.reload(), 700);
+            } catch (error) {
+                progress.fail(deletedCount, error.message);
             }
-            if (!failed) window.location.reload();
-            else refresh();
         });
         refresh();
     });
@@ -168,8 +257,8 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteButton.dataset.submitting = 'true';
         deleteButton.disabled = true;
         deleteButton.setAttribute('aria-busy', 'true');
-        deleteButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Đang xóa...';
-        window.dispatchEvent(new Event('page-loading:show'));
+        deleteButton.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Đang xóa 0/${list.length}`;
+        const progress = showBulkDeleteProgress(list.length);
 
         let deletedCount = 0;
         try {
@@ -185,19 +274,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error('Không thể xóa công việc.');
                 }
                 deletedCount++;
+                progress.update(deletedCount);
+                deleteButton.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Đang xóa ${deletedCount}/${list.length}`;
             }
-            location.reload();
+            progress.complete(deletedCount);
+            window.setTimeout(() => window.location.reload(), 700);
         } catch (error) {
-            alert('Có công việc không thể xóa hoặc kết nối mạng bị gián đoạn.');
-            if (deletedCount > 0) {
-                location.reload();
-                return;
-            }
-            deleteButton.dataset.submitting = 'false';
-            deleteButton.removeAttribute('aria-busy');
-            deleteButton.innerHTML = '<i class="bi bi-trash me-1"></i>Xóa đã chọn';
-            window.dispatchEvent(new Event('page-loading:hide'));
-            refresh();
+            progress.fail(deletedCount, 'Có công việc không thể xóa hoặc kết nối mạng bị gián đoạn.');
         }
     });
     refresh();
