@@ -162,6 +162,8 @@ class LanguageClassController extends Controller
         $this->authorizeManagement($request,$languageClass);
         abort_unless((int)$lesson->language_class_id===(int)$languageClass->id,404);
 
+        $returnMonth=(string)$request->input('return_month',$lesson->lesson_date->format('Y-m'));
+        if(!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/',$returnMonth))$returnMonth=$lesson->lesson_date->format('Y-m');
         $attendanceMonth=$lesson->lesson_date->copy()->startOfMonth()->toDateString();
         DB::transaction(fn()=> $lesson->delete());
         $this->syncMonthlyAttendance($languageClass,$attendanceMonth,$request->user()->id);
@@ -169,7 +171,8 @@ class LanguageClassController extends Controller
             'completed_sessions'=>$languageClass->lessons()->whereNotNull('attendance_marked_at')->whereDate('lesson_date','<=',today())->count(),
         ]);
 
-        return back()->with('success','Đã xóa buổi học, dữ liệu điểm danh và cập nhật lại chuyên cần.');
+        return redirect()->route('teacher-classes.gradebook',[$languageClass,'month'=>$returnMonth])
+            ->with('success','Đã xóa buổi học, dữ liệu điểm danh và cập nhật lại chuyên cần.');
     }
 
     public function updateCompletedSessions(Request $request, LanguageClass $languageClass): RedirectResponse

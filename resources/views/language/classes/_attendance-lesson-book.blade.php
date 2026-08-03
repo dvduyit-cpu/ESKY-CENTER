@@ -58,7 +58,7 @@
                             @if($canManageLessons)
                                 <a class="btn btn-sm btn-outline-success" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$lesson->lesson_date->format('Y-m'),'lesson'=>$lesson->id,'open'=>'attendance'])}}" title="Sửa điểm danh"><i class="bi bi-person-check me-1"></i>Sửa điểm danh</a>
                                 <a class="btn btn-sm btn-outline-primary" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$lesson->lesson_date->format('Y-m'),'lesson'=>$lesson->id,'open'=>'lesson-book'])}}" title="Sửa sổ đầu bài"><i class="bi bi-journal-text me-1"></i>Sửa sổ</a>
-                                <form class="d-inline" method="POST" action="{{route('teacher-classes.lessons.destroy',[$languageClass,$lesson])}}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" data-confirm="Xóa buổi học {{$lesson->lesson_date->format('d/m/Y')}}? Toàn bộ điểm danh và sổ đầu bài của buổi này cũng sẽ bị xóa."><i class="bi bi-trash me-1"></i>Xóa</button></form>
+                                <form class="d-inline" method="POST" action="{{route('teacher-classes.lessons.destroy',[$languageClass,$lesson])}}">@csrf @method('DELETE')<input type="hidden" name="return_month" value="{{$month->format('Y-m')}}"><button class="btn btn-sm btn-outline-danger" data-confirm="Xóa buổi học {{$lesson->lesson_date->format('d/m/Y')}}? Toàn bộ điểm danh và sổ đầu bài của buổi này cũng sẽ bị xóa."><i class="bi bi-trash me-1"></i>Xóa</button></form>
                             @endif
                         </td>
                     </tr>
