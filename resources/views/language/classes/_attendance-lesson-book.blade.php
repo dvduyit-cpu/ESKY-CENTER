@@ -65,6 +65,29 @@
             </table>
         </div>
     </div>
+
+    @if($previousLessons->isNotEmpty())
+        <div class="card card-soft mt-3">
+            <div class="lesson-history-head"><strong>Các buổi đã điểm danh trước tháng {{$month->format('m/Y')}}</strong><span>{{$previousLessons->count()}} buổi trước đó</span></div>
+            <div class="table-responsive">
+                <table class="table table-modern mb-0 lesson-history-table">
+                    <thead><tr><th>Ngày / giờ</th><th>Điểm danh</th><th>Nội dung giảng dạy</th><th>Tháng</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach($previousLessons as $previousLesson)
+                        @php($previousPresentCount=$previousLesson->attendances->whereIn('status',['present','late'])->count())
+                        <tr>
+                            <td class="text-nowrap"><strong>{{$previousLesson->lesson_date->format('d/m/Y')}}</strong><div class="small text-muted">{{substr((string)$previousLesson->start_time,0,5)}}–{{substr((string)$previousLesson->end_time,0,5)}}</div></td>
+                            <td><span class="badge-soft badge-success">{{$previousPresentCount}}/{{$previousLesson->attendances->count()}} tham gia</span></td>
+                            <td><div class="lesson-content-preview">{{$previousLesson->content?:'Chưa ghi sổ đầu bài'}}</div></td>
+                            <td><span class="badge-soft badge-info">{{$previousLesson->lesson_date->format('m/Y')}}</span></td>
+                            <td class="text-end"><a class="btn btn-sm btn-outline-success text-nowrap" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$previousLesson->lesson_date->format('Y-m'),'lesson'=>$previousLesson->id,'open'=>'attendance'])}}"><i class="bi bi-eye me-1"></i>Xem điểm danh</a></td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
 </section>
 
 @foreach($lessons as $lesson)

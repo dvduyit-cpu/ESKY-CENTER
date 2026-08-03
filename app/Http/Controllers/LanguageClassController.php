@@ -38,10 +38,17 @@ class LanguageClassController extends Controller
         $month=$request->date('month')?->startOfMonth()?:now()->startOfMonth();
         $languageClass->load(['program','level','teacher','enrollments'=>fn($q)=>$q->where('status','!=','dropped')->with(['student','monthlyProgress'=>fn($p)=>$p->whereDate('month',$month),'scores'=>fn($s)=>$s->whereYear('test_date',$month->year)->whereMonth('test_date',$month->month)->orderBy('test_date')])->orderBy('enrolled_at')]);
         $lessons=$languageClass->lessons()->with(['teacher','attendances.enrollment.student'])->whereYear('lesson_date',$month->year)->whereMonth('lesson_date',$month->month)->orderByDesc('lesson_date')->orderByDesc('start_time')->get();
+        $previousLessons=$languageClass->lessons()
+            ->with(['teacher','attendances.enrollment.student'])
+            ->whereNotNull('attendance_marked_at')
+            ->whereDate('lesson_date','<',$month->toDateString())
+            ->orderByDesc('lesson_date')
+            ->orderByDesc('start_time')
+            ->get();
         $selectedLesson=$request->filled('lesson')?$languageClass->lessons()->with('attendances')->findOrFail($request->integer('lesson')):null;
         $availableStudents=LanguageStudent::with('guardians')->whereIn('status',['new','waiting_class','studying','dropped'])->whereDoesntHave('enrollments',fn($q)=>$q->where('language_class_id',$languageClass->id)->where('status','!=','dropped'))->orderBy('name')->get();
         $tuitionCheck=$this->tuitionCompletionCheck($languageClass);
-        return view('language.classes.gradebook',compact('languageClass','month','lessons','selectedLesson','availableStudents','tuitionCheck'));
+        return view('language.classes.gradebook',compact('languageClass','month','lessons','previousLessons','selectedLesson','availableStudents','tuitionCheck'));
     }
 
     public function printLessonBook(Request $request, LanguageClass $languageClass): View
