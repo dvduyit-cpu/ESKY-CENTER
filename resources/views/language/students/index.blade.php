@@ -110,11 +110,12 @@
 <div class="card card-soft student-list-card">
     <div class="table-responsive d-none d-lg-block">
         <table class="table table-modern align-middle mb-0">
-            <thead><tr><th>Học viên</th><th>SĐT học viên</th><th>Phụ huynh / người giám hộ</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead>
+            <thead><tr><th>STT</th><th>Học viên</th><th>SĐT học viên</th><th>Phụ huynh / người giám hộ</th><th>Trạng thái</th><th class="text-end">Thao tác</th></tr></thead>
             <tbody>
             @forelse($items as $item)
                 @php($primaryGuardian=$item->guardians->firstWhere('is_primary',true) ?: $item->guardians->first())
                 <tr>
+                    <td class="fw-bold text-muted">{{($items->firstItem()??1)+$loop->index}}</td>
                     <td><a class="student-identity text-decoration-none text-body" href="{{route('language-students.show',$item)}}"><span class="student-avatar">{{mb_strtoupper(mb_substr($item->name,0,1))}}</span><span><strong class="d-block">{{$item->name}} @if(isset($duplicateIdLookup[$item->id]))<span class="badge text-bg-warning ms-1">Có thể trùng</span>@endif</strong><span class="small text-muted">{{$item->code}}</span></span></a></td>
                     <td><strong>{{$item->phone?:'Chưa cập nhật'}}</strong></td>
                     <td>@if($primaryGuardian)<strong>{{$primaryGuardian->name}}</strong><div class="small text-muted">{{$primaryGuardian->phone?:'Chưa có SĐT'}}</div>@else<span class="text-muted">Chưa cập nhật</span>@endif</td>
@@ -126,7 +127,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="5"><div class="empty-state">Chưa có học viên phù hợp với tìm kiếm.</div></td></tr>
+                <tr><td colspan="6"><div class="empty-state">Chưa có học viên phù hợp với tìm kiếm.</div></td></tr>
             @endforelse
             </tbody>
         </table>
@@ -136,7 +137,7 @@
         @forelse($items as $item)
             @php($primaryGuardian=$item->guardians->firstWhere('is_primary',true) ?: $item->guardians->first())
             <article class="student-mobile-card">
-                <div class="student-mobile-head"><div class="student-identity"><span class="student-avatar">{{mb_strtoupper(mb_substr($item->name,0,1))}}</span><div><strong>{{$item->name}}</strong>@if(isset($duplicateIdLookup[$item->id]))<div><span class="badge text-bg-warning">Có thể trùng</span></div>@endif<div class="small text-muted">{{$item->code}}</div></div></div><span class="badge-soft badge-info">{{$labels[$item->status]??$item->status}}</span></div>
+                <div class="student-mobile-head"><div class="student-identity"><span class="student-avatar">{{mb_strtoupper(mb_substr($item->name,0,1))}}</span><div><div class="small text-muted">STT {{($items->firstItem()??1)+$loop->index}}</div><strong>{{$item->name}}</strong>@if(isset($duplicateIdLookup[$item->id]))<div><span class="badge text-bg-warning">Có thể trùng</span></div>@endif<div class="small text-muted">Mã hồ sơ: {{$item->code}}</div></div></div><span class="badge-soft badge-info">{{$labels[$item->status]??$item->status}}</span></div>
                 <div class="student-mobile-grid"><div><span>SĐT học viên</span><strong>{{$item->phone?:'Chưa cập nhật'}}</strong></div><div><span>Phụ huynh / người giám hộ</span><strong>{{$primaryGuardian?->name?:'Chưa cập nhật'}}</strong><small class="d-block text-muted">{{$primaryGuardian?->phone}}</small></div></div>
                 <div class="student-mobile-actions">
                     <a class="btn btn-outline-dark flex-grow-1 w-auto px-3" href="{{route('language-students.show',$item)}}" title="Xem hồ sơ và lớp học"><i class="bi bi-eye me-2"></i>Xem hồ sơ và lớp học</a>
