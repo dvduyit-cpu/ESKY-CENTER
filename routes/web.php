@@ -103,6 +103,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/teacher-classes/{languageClass}/enrollments',[LanguageClassController::class,'teacherEnroll'])->middleware('permission:language_classes,update')->name('teacher-classes.enrollments.store');
         Route::post('/teacher-classes/{languageClass}/attendance',[LanguageClassController::class,'storeAttendance'])->middleware('permission:teacher_classes,update')->name('teacher-classes.attendance.store');
         Route::post('/teacher-classes/{languageClass}/lesson-book',[LanguageClassController::class,'storeLessonBook'])->middleware('permission:teacher_classes,update')->name('teacher-classes.lesson-book.store');
+        Route::delete('/teacher-classes/{languageClass}/lessons/{lesson}',[LanguageClassController::class,'destroyLesson'])->middleware('permission:teacher_classes,update')->name('teacher-classes.lessons.destroy');
         Route::put('/teacher-classes/{languageClass}/progress',[LanguageClassController::class,'saveMonthlyProgress'])->middleware('permission:teacher_classes,update')->name('teacher-classes.progress.update');
         Route::patch('/teacher-classes/{languageClass}/sessions',[LanguageClassController::class,'updateCompletedSessions'])->middleware('permission:teacher_classes,update')->name('teacher-classes.sessions.update');
         Route::patch('/teacher-classes/{languageClass}/completion-request',[LanguageClassController::class,'requestCompletion'])->middleware('permission:teacher_classes,update')->name('teacher-classes.completion.request');

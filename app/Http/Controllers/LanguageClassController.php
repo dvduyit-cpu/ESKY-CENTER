@@ -37,18 +37,11 @@ class LanguageClassController extends Controller
         $this->authorizeManagement($request,$languageClass);
         $month=$request->date('month')?->startOfMonth()?:now()->startOfMonth();
         $languageClass->load(['program','level','teacher','enrollments'=>fn($q)=>$q->where('status','!=','dropped')->with(['student','monthlyProgress'=>fn($p)=>$p->whereDate('month',$month),'scores'=>fn($s)=>$s->whereYear('test_date',$month->year)->whereMonth('test_date',$month->month)->orderBy('test_date')])->orderBy('enrolled_at')]);
-        $lessons=$languageClass->lessons()->with(['teacher','attendances.enrollment.student'])->whereYear('lesson_date',$month->year)->whereMonth('lesson_date',$month->month)->orderByDesc('lesson_date')->orderByDesc('start_time')->get();
-        $previousLessons=$languageClass->lessons()
-            ->with(['teacher','attendances.enrollment.student'])
-            ->whereNotNull('attendance_marked_at')
-            ->whereDate('lesson_date','<',$month->toDateString())
-            ->orderByDesc('lesson_date')
-            ->orderByDesc('start_time')
-            ->get();
+        $lessons=$languageClass->lessons()->with(['teacher','attendances.enrollment.student'])->orderByDesc('lesson_date')->orderByDesc('start_time')->get();
         $selectedLesson=$request->filled('lesson')?$languageClass->lessons()->with('attendances')->findOrFail($request->integer('lesson')):null;
         $availableStudents=LanguageStudent::with('guardians')->whereIn('status',['new','waiting_class','studying','dropped'])->whereDoesntHave('enrollments',fn($q)=>$q->where('language_class_id',$languageClass->id)->where('status','!=','dropped'))->orderBy('name')->get();
         $tuitionCheck=$this->tuitionCompletionCheck($languageClass);
-        return view('language.classes.gradebook',compact('languageClass','month','lessons','previousLessons','selectedLesson','availableStudents','tuitionCheck'));
+        return view('language.classes.gradebook',compact('languageClass','month','lessons','selectedLesson','availableStudents','tuitionCheck'));
     }
 
     public function printLessonBook(Request $request, LanguageClass $languageClass): View
@@ -162,6 +155,21 @@ class LanguageClassController extends Controller
         }
 
         return redirect()->route('teacher-classes.gradebook',[$languageClass,'month'=>$lesson->lesson_date->format('Y-m')])->with('success','Đã lưu sổ đầu bài của buổi học.');
+    }
+
+    public function destroyLesson(Request $request, LanguageClass $languageClass, LanguageClassLesson $lesson): RedirectResponse
+    {
+        $this->authorizeManagement($request,$languageClass);
+        abort_unless((int)$lesson->language_class_id===(int)$languageClass->id,404);
+
+        $attendanceMonth=$lesson->lesson_date->copy()->startOfMonth()->toDateString();
+        DB::transaction(fn()=> $lesson->delete());
+        $this->syncMonthlyAttendance($languageClass,$attendanceMonth,$request->user()->id);
+        $languageClass->update([
+            'completed_sessions'=>$languageClass->lessons()->whereNotNull('attendance_marked_at')->whereDate('lesson_date','<=',today())->count(),
+        ]);
+
+        return back()->with('success','Đã xóa buổi học, dữ liệu điểm danh và cập nhật lại chuyên cần.');
     }
 
     public function updateCompletedSessions(Request $request, LanguageClass $languageClass): RedirectResponse

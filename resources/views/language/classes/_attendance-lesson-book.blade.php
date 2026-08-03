@@ -3,6 +3,7 @@
     $attendanceColors = ['present'=>'success','late'=>'warning','excused'=>'info','absent'=>'danger'];
     $attendanceEnrollments = $languageClass->enrollments->whereIn('status', ['studying','paused','reserved']);
     $attendanceRows = $selectedLesson?->attendances?->keyBy('language_enrollment_id') ?? collect();
+    $canManageLessons = auth()->user()->allowed('teacher_classes','update');
     $defaultLessonDate = $selectedLesson?->lesson_date?->format('Y-m-d')
         ?? ($month->isSameMonth(now()) ? now()->format('Y-m-d') : $month->copy()->endOfMonth()->format('Y-m-d'));
     $defaultStartTime = $selectedLesson ? substr((string) $selectedLesson->start_time, 0, 5) : '18:00';
@@ -10,7 +11,7 @@
 @endphp
 
 <section class="mb-4">
-    <div class="gradebook-section-heading"><div><span>01</span><div><h4>Theo dõi buổi học tháng {{$month->format('m/Y')}}</h4><p>Điểm danh và sổ đầu bài được lưu chung theo đúng ngày, giờ của từng buổi học.</p></div></div></div>
+    <div class="gradebook-section-heading"><div><span>01</span><div><h4>Theo dõi toàn bộ buổi học</h4><p>Hiển thị tất cả buổi của lớp; điểm danh và sổ đầu bài được lưu chung theo đúng ngày, giờ.</p></div></div></div>
     <div class="card card-soft lesson-action-panel">
         <div class="card-body p-4">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
@@ -40,7 +41,7 @@
                 </div>
             </div>
         </div>
-        <div class="lesson-history-head"><strong>Các buổi trong tháng</strong><span>{{$lessons->count()}} buổi đã tạo · {{$lessons->whereNotNull('attendance_marked_at')->count()}} buổi đã điểm danh</span></div>
+        <div class="lesson-history-head"><strong>Tất cả các buổi học</strong><span>{{$lessons->count()}} buổi đã tạo · {{$lessons->whereNotNull('attendance_marked_at')->count()}} buổi đã điểm danh</span></div>
         <div class="table-responsive">
             <table class="table table-modern mb-0 lesson-history-table">
                 <thead><tr><th>Ngày / giờ</th><th>Điểm danh</th><th>Nội dung giảng dạy</th><th>Chữ ký</th><th></th></tr></thead>
@@ -53,41 +54,22 @@
                         <td><div class="lesson-content-preview">{{$lesson->content?:'Chưa ghi sổ đầu bài'}}</div>@if($lesson->evaluation)<small class="text-muted">Đánh giá: {{$lesson->evaluation}}</small>@endif</td>
                         <td>{{$lesson->teacher_signature?:'—'}}</td>
                         <td class="text-end text-nowrap">
-                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#lessonDetailModal{{$lesson->id}}" title="Xem buổi học" aria-label="Xem buổi học"><i class="bi bi-eye"></i></button>
-                            <a class="btn btn-sm btn-outline-success" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$month->format('Y-m'),'lesson'=>$lesson->id,'open'=>'attendance'])}}" title="Điểm danh"><i class="bi bi-person-check"></i></a>
-                            <a class="btn btn-sm btn-outline-primary" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$month->format('Y-m'),'lesson'=>$lesson->id,'open'=>'lesson-book'])}}" title="Sổ đầu bài"><i class="bi bi-journal-text"></i></a>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#lessonDetailModal{{$lesson->id}}" title="Xem buổi học"><i class="bi bi-eye me-1"></i>Xem</button>
+                            @if($canManageLessons)
+                                <a class="btn btn-sm btn-outline-success" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$lesson->lesson_date->format('Y-m'),'lesson'=>$lesson->id,'open'=>'attendance'])}}" title="Sửa điểm danh"><i class="bi bi-person-check me-1"></i>Sửa điểm danh</a>
+                                <a class="btn btn-sm btn-outline-primary" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$lesson->lesson_date->format('Y-m'),'lesson'=>$lesson->id,'open'=>'lesson-book'])}}" title="Sửa sổ đầu bài"><i class="bi bi-journal-text me-1"></i>Sửa sổ</a>
+                                <form class="d-inline" method="POST" action="{{route('teacher-classes.lessons.destroy',[$languageClass,$lesson])}}">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" data-confirm="Xóa buổi học {{$lesson->lesson_date->format('d/m/Y')}}? Toàn bộ điểm danh và sổ đầu bài của buổi này cũng sẽ bị xóa."><i class="bi bi-trash me-1"></i>Xóa</button></form>
+                            @endif
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="5"><div class="empty-state py-4">Tháng này chưa có buổi học nào.</div></td></tr>
+                    <tr><td colspan="5"><div class="empty-state py-4">Lớp chưa có buổi học nào.</div></td></tr>
                 @endforelse
                 </tbody>
             </table>
         </div>
     </div>
 
-    @if($previousLessons->isNotEmpty())
-        <div class="card card-soft mt-3">
-            <div class="lesson-history-head"><strong>Các buổi đã điểm danh trước tháng {{$month->format('m/Y')}}</strong><span>{{$previousLessons->count()}} buổi trước đó</span></div>
-            <div class="table-responsive">
-                <table class="table table-modern mb-0 lesson-history-table">
-                    <thead><tr><th>Ngày / giờ</th><th>Điểm danh</th><th>Nội dung giảng dạy</th><th>Tháng</th><th></th></tr></thead>
-                    <tbody>
-                    @foreach($previousLessons as $previousLesson)
-                        @php($previousPresentCount=$previousLesson->attendances->whereIn('status',['present','late'])->count())
-                        <tr>
-                            <td class="text-nowrap"><strong>{{$previousLesson->lesson_date->format('d/m/Y')}}</strong><div class="small text-muted">{{substr((string)$previousLesson->start_time,0,5)}}–{{substr((string)$previousLesson->end_time,0,5)}}</div></td>
-                            <td><span class="badge-soft badge-success">{{$previousPresentCount}}/{{$previousLesson->attendances->count()}} tham gia</span></td>
-                            <td><div class="lesson-content-preview">{{$previousLesson->content?:'Chưa ghi sổ đầu bài'}}</div></td>
-                            <td><span class="badge-soft badge-info">{{$previousLesson->lesson_date->format('m/Y')}}</span></td>
-                            <td class="text-end"><a class="btn btn-sm btn-outline-success text-nowrap" href="{{route('teacher-classes.gradebook',[$languageClass,'month'=>$previousLesson->lesson_date->format('Y-m'),'lesson'=>$previousLesson->id,'open'=>'attendance'])}}"><i class="bi bi-eye me-1"></i>Xem điểm danh</a></td>
-                        </tr>
-                    @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    @endif
 </section>
 
 @foreach($lessons as $lesson)
