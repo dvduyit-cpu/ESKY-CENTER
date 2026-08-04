@@ -13,6 +13,7 @@ class ModulePermissionCatalog
         'kpi_dashboard_all' => ['view'],
         'language_dashboard_all' => ['view', 'export'],
         'work_tasks' => ['view', 'create', 'update', 'delete'],
+        'administration' => ['view', 'create', 'update', 'delete', 'export'],
         'personnel' => ['view', 'create', 'update', 'delete'],
         'language_consulting' => ['view'],
         'language_target_submissions' => ['view', 'create'],
@@ -39,7 +40,7 @@ class ModulePermissionCatalog
 
     private const GROUPS = [
         'Tổng quan' => ['system_dashboard', 'kpi_dashboard_all', 'language_dashboard_all'],
-        'Công việc & hệ thống' => ['work_tasks', 'personnel', 'users', 'roles', 'logs', 'software_settings'],
+        'Công việc & hệ thống' => ['work_tasks', 'administration', 'personnel', 'users', 'roles', 'logs', 'software_settings'],
         'Tuyển sinh' => ['language_consulting', 'language_target_submissions', 'language_leads', 'language_collaborators'],
         'Học viên & điều hành trung tâm' => ['language_students', 'language_tuition', 'language_discounts', 'language_targets'],
         'Đào tạo' => ['teacher_classes', 'language_classes', 'language_programs', 'language_courses'],

@@ -47,6 +47,7 @@ class ProductionBootstrapSeeder extends Seeder
             });
 
             $modules = collect([
+                ['administration','Hành chính - báo cáo & văn thư','bi-building-check',5],
                 ['system_dashboard','Tổng quan toàn hệ thống','bi-speedometer2',1],
                 ['kpi_dashboard_all','Tổng quan KPI toàn hệ thống','bi-graph-up',2],
                 ['language_dashboard_all','Tổng quan trung tâm toàn hệ thống','bi-building',3],
@@ -143,6 +144,9 @@ class ProductionBootstrapSeeder extends Seeder
             if ($module === 'work_tasks') return array_replace($all, ['can_export'=>false]);
             if ($module === 'teacher_classes') return array_replace($none, ['can_view'=>true,'can_update'=>true]);
             return $all;
+        }
+        if (in_array($role, ['teacher', 'staff'], true) && $module === 'administration') {
+            return array_replace($none, ['can_view'=>true,'can_create'=>true,'can_update'=>true]);
         }
         if ($role === 'teacher' && $module === 'teacher_classes') {
             return array_replace($none, ['can_view'=>true,'can_update'=>true]);

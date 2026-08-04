@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\ExcessPayment;
+use App\Models\AdministrativeWeeklyPeriod;
+use App\Models\AdministrativeWeeklyReport;
 use App\Models\LanguageClass;
 use App\Models\LanguageLead;
 use App\Models\LanguageMonthlyTargetRecord;
@@ -80,6 +82,29 @@ class DirectorDashboardController extends Controller
             'employees' => Personnel::query()->where('active', true)->where('type', 'employee')->count(),
             'collaborators' => Personnel::query()->where('active', true)->where('type', 'collaborator')->count(),
             'accounts' => User::query()->where('active', true)->count(),
+        ];
+
+        $weeklyPeriods = AdministrativeWeeklyPeriod::query()
+            ->with('assignedUsers:id')
+            ->whereDate('week_start', '<=', today())
+            ->orderBy('week_start')
+            ->get();
+        $weeklyReportsByWeek = AdministrativeWeeklyReport::query()
+            ->whereIn('week_start', $weeklyPeriods->pluck('week_start')->map->toDateString())
+            ->where('status', 'submitted')
+            ->get(['week_start', 'user_id'])
+            ->groupBy(fn (AdministrativeWeeklyReport $report) => $report->week_start->toDateString());
+        $missingByWeek = $weeklyPeriods->mapWithKeys(function (AdministrativeWeeklyPeriod $weeklyPeriod) use ($weeklyReportsByWeek) {
+            $weekKey = $weeklyPeriod->week_start->toDateString();
+            $submittedUserIds = $weeklyReportsByWeek->get($weekKey, collect())->pluck('user_id');
+
+            return [$weekKey => $weeklyPeriod->assignedUsers->pluck('id')->diff($submittedUserIds)->values()];
+        });
+        $weeklyReportStats = [
+            'missing_submissions' => $missingByWeek->sum(fn ($userIds) => $userIds->count()),
+            'missing_people' => $missingByWeek->flatten()->unique()->count(),
+            'incomplete_weeks' => $missingByWeek->filter(fn ($userIds) => $userIds->isNotEmpty())->count(),
+            'tracked_weeks' => $weeklyPeriods->count(),
         ];
 
         $recruitmentStats = [
@@ -174,6 +199,7 @@ class DirectorDashboardController extends Controller
             'period' => $period,
             'taskStats' => $taskStats,
             'personnelStats' => $personnelStats,
+            'weeklyReportStats' => $weeklyReportStats,
             'recruitmentStats' => $recruitmentStats,
             'trainingStats' => $trainingStats,
             'financialStats' => $financialStats,

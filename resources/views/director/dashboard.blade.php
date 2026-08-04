@@ -211,6 +211,32 @@
             <div class="card-footer bg-white border-0 p-4 pt-0"><a class="btn btn-outline-primary w-100" href="{{route('tasks.index')}}">Xem công việc <i class="bi bi-arrow-right ms-1"></i></a></div>
         </div>
     </div>
+
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-soft h-100 weekly-report-module-card">
+            <div class="card-header bg-white p-4 d-flex align-items-center gap-3">
+                <div class="stat-icon bg-primary-subtle text-primary"><i class="bi bi-clipboard2-data-fill"></i></div>
+                <div><h5 class="mb-0 fw-bold">Theo dõi báo cáo tuần</h5><small class="text-muted">Tình hình gửi báo cáo các tuần đã bắt đầu</small></div>
+            </div>
+            <div class="card-body p-4">
+                @php
+                    $missingDetailUrl = route('administration.weekly.index', ['filter_type'=>'all','show_missing'=>1]).'#weekly-missing-detail';
+                @endphp
+                @foreach([
+                    ['Lượt báo cáo còn thiếu',$weeklyReportStats['missing_submissions'],'text-danger','Tính cả người thiếu nhiều tuần'],
+                    ['Người còn thiếu',$weeklyReportStats['missing_people'],'text-warning','Không đếm trùng người'],
+                    ['Tuần chưa hoàn tất',$weeklyReportStats['incomplete_weeks'],'text-primary','Trên '.$weeklyReportStats['tracked_weeks'].' tuần đã tạo']
+                ] as [$label,$value,$class,$note])
+                    @if(auth()->user()->allowed('administration', 'update'))
+                    <a class="weekly-dashboard-detail-link" href="{{$missingDetailUrl}}"><span>{{$label}}<small>{{$note}}</small></span><strong class="{{$class}}">{{number_format($value)}}</strong><i class="bi bi-chevron-right"></i></a>
+                    @else
+                    <div class="weekly-dashboard-detail-link is-static"><span>{{$label}}<small>{{$note}}</small></span><strong class="{{$class}}">{{number_format($value)}}</strong></div>
+                    @endif
+                @endforeach
+            </div>
+            @if(auth()->user()->allowed('administration', 'update'))<div class="card-footer bg-white border-0 p-4 pt-0"><a class="btn btn-outline-primary w-100" href="{{$missingDetailUrl}}">Xem chi tiết những ai chưa gửi <i class="bi bi-arrow-right ms-1"></i></a></div>@endif
+        </div>
+    </div>
 </div>
 
 <div class="system-section-title"><span><i class="bi bi-people-fill"></i></span><div><h5>Mọi người đang làm gì</h5><small>Tổng hợp khối lượng và tiến độ theo từng thành viên</small></div></div>

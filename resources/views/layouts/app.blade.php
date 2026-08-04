@@ -22,6 +22,7 @@
     <link href="{{ asset('css/pagination.css') }}?v={{ filemtime(public_path('css/pagination.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/responsive-actions.css') }}?v={{ filemtime(public_path('css/responsive-actions.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/work-tasks.css') }}?v={{ filemtime(public_path('css/work-tasks.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/administration.css') }}?v={{ filemtime(public_path('css/administration.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/list-selection.css') }}?v={{ filemtime(public_path('css/list-selection.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
     @stack('styles')
@@ -41,11 +42,14 @@
         </nav>
         @php
             $me = auth()->user();
+            $showWeeklyReportMenu = $me->isLeader() || \App\Models\AdministrativeWeeklyPeriod::query()->activeNow()->exists();
         @endphp
         <div class="sidebar-label">Công việc</div>
         <nav class="sidebar-nav nav flex-column">
             <a class="nav-link {{ request()->routeIs('plans.*') ? 'active' : '' }}" href="{{ route('plans.index') }}"><i class="bi bi-calendar2-week-fill"></i> Kế hoạch & lịch cá nhân</a>
             @if($me->allowed('work_tasks'))<a class="nav-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}" href="{{ route('tasks.index') }}"><i class="bi bi-list-check"></i> Giao & theo dõi công việc</a>@endif
+            @if($me->allowed('administration') && $showWeeklyReportMenu)<a class="nav-link {{ request()->routeIs('administration.weekly.*') ? 'active' : '' }}" href="{{ route('administration.weekly.index') }}"><i class="bi bi-calendar2-check"></i> Báo cáo tuần</a>@endif
+            @if($me->allowed('administration'))<a class="nav-link {{ request()->routeIs('administration.documents.*') ? 'active' : '' }}" href="{{ route('administration.documents.index') }}"><i class="bi bi-archive"></i> Lưu trữ văn thư</a>@endif
         </nav>
         @if($me->allowed('language_consulting') || $me->allowed('language_target_submissions') || $me->allowed('language_leads') || $me->allowed('language_collaborators'))
         <div class="sidebar-label">Tư vấn & tuyển sinh</div>
@@ -162,6 +166,7 @@
             $generalSection = match (true) {
                 $routeName === 'welcome' => 'Tổng quan',
                 str_starts_with($routeName, 'plans.'), str_starts_with($routeName, 'tasks.') => 'Công việc',
+                str_starts_with($routeName, 'administration.') => 'Hành chính',
                 $routeName === 'guide' => 'Trợ giúp',
                 $routeName === 'dashboard' => 'Tổng quan',
                 str_starts_with($routeName, 'director.') => 'Điều hành',
@@ -174,6 +179,8 @@
                 $routeName === 'welcome' => 'Trang chủ',
                 str_starts_with($routeName, 'plans.') => 'Kế hoạch & lịch',
                 str_starts_with($routeName, 'tasks.') => 'Giao task',
+                str_starts_with($routeName, 'administration.weekly') => 'Báo cáo tuần',
+                str_starts_with($routeName, 'administration.documents') => 'Lưu trữ văn thư',
                 $routeName === 'guide' => 'Hướng dẫn sử dụng',
                 $routeName === 'dashboard' => 'Tổng quan hệ thống',
                 str_starts_with($routeName, 'director.') => 'Tổng quan toàn Trung tâm',

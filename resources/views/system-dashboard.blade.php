@@ -8,6 +8,30 @@
 @php($tuitionLabels=['unpaid'=>'Chưa thu','partial'=>'Thu một phần','pending_receipt'=>'Chờ bổ sung phiếu thu','paid'=>'Đã thu đủ','transferred'=>'Đã quyết toán chuyển lớp'])
 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4"><div><h1 class="page-title">{{$canViewAll?'Tổng quan toàn hệ thống':'Tổng quan cá nhân'}}</h1><div class="page-subtitle">Toàn bộ vận hành E-SKY CENTER trong {{$period}}.</div></div>@if(auth()->user()->allowed('system_dashboard','export'))<a class="btn btn-outline-success" href="{{route('dashboard.export',request()->query())}}"><i class="bi bi-file-earmark-excel"></i>Xuất Excel</a>@endif</div>
 
+@if($weeklyReportCard)
+<div class="weekly-report-prompt mb-4">
+    <div class="weekly-report-prompt-icon"><i class="bi bi-file-earmark-text"></i></div>
+    <div class="flex-grow-1">
+        <div class="small text-uppercase fw-semibold opacity-75">Báo cáo tuần {{ $weeklyReportCard['week_start']->format('d/m') }} – {{ $weeklyReportCard['week_end']->format('d/m/Y') }}</div>
+        @if($weeklyReportCard['mode'] === 'management')
+            <h5 class="mb-1">Theo dõi báo cáo tuần của toàn bộ nhân sự</h5>
+            <div class="small">Trạng thái: <strong>{{ $weeklyReportCard['is_active'] ? 'Đang hoạt động' : 'Đã tắt' }}</strong> · Đã gửi: <strong>{{ $weeklyReportCard['submitted_count'] }}</strong> · Chưa gửi: <strong>{{ $weeklyReportCard['missing_count'] }}</strong></div>
+        @else
+            <h5 class="mb-1">{{ $weeklyReportCard['report']?->status === 'submitted' ? 'Báo cáo tuần đã được gửi' : 'Admin đã mở kỳ báo cáo tuần' }}</h5>
+            <div class="small">Thẻ hiển thị trong thời gian admin bật hoạt động; dữ liệu đã lưu vẫn được giữ lại khi admin tắt.</div>
+        @endif
+    </div>
+    @if($weeklyReportCard['mode'] === 'management')
+        <div class="d-flex flex-wrap gap-2">
+            @if(!auth()->user()->isAdmin() && $weeklyReportCard['is_assigned'])<a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['week'=>$weeklyReportCard['week_start']->toDateString(),'open'=>1]) }}">{{ $weeklyReportCard['report']?->status === 'submitted' ? 'Xem báo cáo của tôi' : 'Báo cáo của tôi' }}</a>@endif
+            <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index') }}">Xem các tuần <i class="bi bi-arrow-right ms-1"></i></a>
+        </div>
+    @else
+        <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['week'=>$weeklyReportCard['week_start']->toDateString(),'open'=>1]) }}">{{ $weeklyReportCard['report'] ? 'Xem báo cáo' : 'Báo cáo ngay' }} <i class="bi bi-arrow-right ms-1"></i></a>
+    @endif
+</div>
+@endif
+
 <form class="filter-panel row g-3 mb-4" data-system-period-filter>
 <div class="col-lg-2"><label class="form-label">Kiểu thời gian</label><select class="form-select" name="period_type" data-period-mode><option value="range" @selected($periodType==='range')>Khoảng ngày</option><option value="week" @selected($periodType==='week')>Theo tuần</option><option value="month" @selected($periodType==='month')>Theo tháng</option><option value="quarter" @selected($periodType==='quarter')>Theo quý</option><option value="year" @selected($periodType==='year')>Theo năm</option></select></div>
 <div class="col-lg-2"><label class="form-label">Năm</label><input class="form-control" type="number" name="year" value="{{$year}}"></div>
@@ -92,4 +116,4 @@
 
 <div class="row g-4">@if($canViewAll)<div class="col-xl-7">@if(auth()->user()->allowed('logs'))<a class="dashboard-card-link" href="{{route('logs.index')}}">@endif<div class="card card-soft"><div class="card-header bg-white p-4"><h5 class="mb-0 fw-bold">Hoạt động gần đây</h5></div><div class="table-responsive"><table class="table table-modern"><thead><tr><th>Người thực hiện</th><th>Nội dung</th><th>Thời gian</th></tr></thead><tbody>@forelse($recentActivities as $log)<tr><td><strong>{{$log->user?->name?:'Hệ thống'}}</strong></td><td>{{$log->description}}</td><td>{{$log->created_at?->format('d/m/Y H:i')}}</td></tr>@empty<tr><td colspan="3"><div class="empty-state">Không có hoạt động trong kỳ.</div></td></tr>@endforelse</tbody></table></div></div>@if(auth()->user()->allowed('logs'))</a>@endif</div>@endif<div class="{{$canViewAll?'col-xl-5':'col-12'}}">@if(auth()->user()->allowed('imports'))<a class="dashboard-card-link" href="{{route('imports.index')}}">@endif<div class="card card-soft h-100"><div class="card-header bg-white p-4"><h5 class="mb-0 fw-bold">Dữ liệu nhập gần đây</h5></div><div class="card-body">@forelse($recentImports as $batch)<div class="d-flex gap-3 border-bottom py-3"><div class="stat-icon bg-primary-subtle text-primary"><i class="bi bi-file-earmark-spreadsheet"></i></div><div><strong>{{$batch->original_name}}</strong><div class="small text-muted">{{$batch->user?->name}} · {{$batch->created_at?->format('d/m/Y H:i')}}</div></div></div>@empty<div class="empty-state">Không có dữ liệu nhập trong kỳ.</div>@endforelse</div></div>@if(auth()->user()->allowed('imports'))</a>@endif</div></div>
 @endsection
-@push('scripts')<script>document.addEventListener('DOMContentLoaded',()=>{const form=document.querySelector('[data-system-period-filter]'),mode=form?.querySelector('[data-period-mode]');if(!form||!mode)return;const update=()=>form.querySelectorAll('[data-period-field]').forEach(field=>field.classList.toggle('d-none',field.dataset.periodField!==mode.value));mode.addEventListener('change',update);update()});</script>@endpush
+@push('scripts')<script>document.addEventListener('DOMContentLoaded',()=>{const form=document.querySelector('[data-system-period-filter]'),mode=form?.querySelector('[data-period-mode]');if(form&&mode){const update=()=>form.querySelectorAll('[data-period-field]').forEach(field=>field.classList.toggle('d-none',field.dataset.periodField!==mode.value));mode.addEventListener('change',update);update()}});</script>@endpush

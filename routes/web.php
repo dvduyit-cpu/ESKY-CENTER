@@ -31,6 +31,8 @@ use App\Http\Controllers\LanguageTargetSubmissionController;
 use App\Http\Controllers\RealtimeController;
 use App\Http\Controllers\PersonalSettingsController;
 use App\Http\Controllers\AdminSystemTestController;
+use App\Http\Controllers\AdministrativeDocumentController;
+use App\Http\Controllers\AdministrativeWeeklyReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -66,6 +68,26 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/tasks/{task}/attachments/{attachment}', [WorkTaskController::class, 'downloadAttachment'])->middleware('permission:work_tasks,view')->name('tasks.attachments.download');
         Route::delete('/tasks/{task}/attachments/{attachment}', [WorkTaskController::class, 'destroyAttachment'])->middleware('permission:work_tasks,update')->name('tasks.attachments.destroy');
         Route::delete('/tasks/{task}', [WorkTaskController::class, 'destroy'])->middleware('permission:work_tasks,delete')->name('tasks.destroy');
+        Route::get('/administration/weekly-reports', [AdministrativeWeeklyReportController::class, 'index'])->middleware('permission:administration,view')->name('administration.weekly.index');
+        Route::post('/administration/weekly-periods', [AdministrativeWeeklyReportController::class, 'storePeriod'])->middleware('permission:administration,update')->name('administration.weekly.periods.store');
+        Route::put('/administration/weekly-periods/{period}', [AdministrativeWeeklyReportController::class, 'updatePeriod'])->middleware('permission:administration,update')->name('administration.weekly.periods.update');
+        Route::delete('/administration/weekly-periods/{period}', [AdministrativeWeeklyReportController::class, 'destroyPeriod'])->middleware('permission:administration,delete')->name('administration.weekly.periods.destroy');
+        Route::patch('/administration/weekly-periods/{period}/activity', [AdministrativeWeeklyReportController::class, 'togglePeriod'])->middleware('permission:administration,update')->name('administration.weekly.periods.toggle');
+        Route::patch('/administration/weekly-report-items/{item}/work-area', [AdministrativeWeeklyReportController::class, 'updateWorkArea'])->middleware('permission:administration,update')->name('administration.weekly.items.work-area');
+        Route::post('/administration/weekly-reports', [AdministrativeWeeklyReportController::class, 'save'])->middleware('permission:administration,create')->name('administration.weekly.save');
+        Route::delete('/administration/weekly-reports/{report}', [AdministrativeWeeklyReportController::class, 'destroyReport'])->middleware('permission:administration,view')->name('administration.weekly.destroy');
+        Route::post('/administration/weekly-reports/check', [AdministrativeWeeklyReportController::class, 'check'])->middleware('permission:administration,view')->name('administration.weekly.check');
+        Route::get('/administration/weekly-summary', [AdministrativeWeeklyReportController::class, 'summary'])->middleware('permission:administration,update')->name('administration.weekly.summary');
+        Route::post('/administration/weekly-summary', [AdministrativeWeeklyReportController::class, 'compile'])->middleware('permission:administration,update')->name('administration.weekly.compile');
+        Route::get('/administration/documents/{document}/attachments/{attachment}', [AdministrativeDocumentController::class, 'download'])->middleware('permission:administration,view')->name('administration.documents.attachments.download');
+        Route::delete('/administration/documents/{document}/attachments/{attachment}', [AdministrativeDocumentController::class, 'destroyAttachment'])->middleware('permission:administration,update')->name('administration.documents.attachments.destroy');
+        Route::resource('/administration/documents', AdministrativeDocumentController::class)
+            ->except('show')
+            ->names('administration.documents')
+            ->middleware('permission:administration,view')
+            ->middlewareFor(['create', 'store'], 'permission:administration,create')
+            ->middlewareFor(['edit', 'update'], 'permission:administration,update')
+            ->middlewareFor('destroy', 'permission:administration,delete');
         Route::get('/guide', [WelcomeController::class, 'guide'])->name('guide');
         Route::post('/plans', [WelcomeController::class, 'store'])->name('plans.store');
         Route::put('/plans/{plan}', [WelcomeController::class, 'update'])->name('plans.update');
@@ -79,8 +101,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-dashboard', [LanguageDashboardController::class, 'index'])->name('language-dashboard.index');
         Route::get('/language-dashboard-export', [LanguageDashboardController::class, 'export'])->middleware('permission:language_dashboard_all,export')->name('language-dashboard.export');
         Route::redirect('/settings/theme', '/settings/appearance');
-        Route::get('/settings/{section}', [ThemeController::class, 'section'])->middleware('permission:software_settings,view')->whereIn('section', ['general','appearance','payment'])->name('settings.edit');
-        Route::put('/settings/{section}', [ThemeController::class, 'updateSection'])->middleware('permission:software_settings,update')->whereIn('section', ['general','appearance','payment'])->name('settings.update');
+        Route::get('/settings/{section}', [ThemeController::class, 'section'])->middleware('permission:software_settings,view')->whereIn('section', ['general','appearance','payment','ai'])->name('settings.edit');
+        Route::put('/settings/{section}', [ThemeController::class, 'updateSection'])->middleware('permission:software_settings,update')->whereIn('section', ['general','appearance','payment','ai'])->name('settings.update');
 
         Route::get('/language-leads-export', [LanguageLeadController::class,'export'])->middleware('permission:language_leads,export')->name('language-leads.export');
         Route::get('/language-consulting', [LanguageLeadController::class,'consulting'])->middleware('permission:language_consulting,view')->name('language-consulting.index');

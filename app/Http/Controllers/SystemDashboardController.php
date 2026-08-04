@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{ActivityLog,ExcessPayment,ImportBatch,LanguageClass,LanguageLead,LanguageStudent,LanguageTuitionCharge,LanguageTuitionPayment,Personnel,User,WorkTask,WorkTaskAssignee};
+use App\Models\{ActivityLog,AdministrativeWeeklyPeriod,AdministrativeWeeklyReport,ExcessPayment,ImportBatch,LanguageClass,LanguageLead,LanguageStudent,LanguageTuitionCharge,LanguageTuitionPayment,Personnel,User,WorkTask,WorkTaskAssignee};
 use App\Support\{ExcelExporter,KpiCalculator};
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -72,6 +72,32 @@ class SystemDashboardController extends Controller
                 ->get()
             : collect();
 
+        $weeklyReportCard=null;
+        if($user->allowed('administration')){
+            $weeklyPeriod=AdministrativeWeeklyPeriod::query()
+                ->with('assignedUsers:id,name,email')
+                ->when(!$user->isLeader(),fn($query)=>$query->activeNow()->whereHas('assignedUsers',fn($users)=>$users->whereKey($user->id)))
+                ->orderByDesc('is_active')->latest('week_start')->first();
+            $weeklyStart=$weeklyPeriod?->week_start;
+            if($user->isLeader()){
+                if($weeklyPeriod){
+                    $eligibleUserIds=$weeklyPeriod->assignedUsers->pluck('id');
+                    $submittedCount=AdministrativeWeeklyReport::query()->whereDate('week_start',$weeklyStart)->where('status','submitted')->whereIn('user_id',$eligibleUserIds)->count();
+                    $weeklyReport=$user->isAdmin()||!$eligibleUserIds->contains($user->id)?null:AdministrativeWeeklyReport::query()->where('user_id',$user->id)->whereDate('week_start',$weeklyStart)->first();
+                    $weeklyReportCard=[
+                        'mode'=>'management','week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,'is_active'=>$weeklyPeriod->isCurrentlyActive(),
+                        'submitted_count'=>$submittedCount,'missing_count'=>max(0,$eligibleUserIds->count()-$submittedCount),'report'=>$weeklyReport,'is_assigned'=>$eligibleUserIds->contains($user->id),
+                    ];
+                }
+            }elseif($weeklyPeriod){
+                $weeklyReport=AdministrativeWeeklyReport::query()->where('user_id',$user->id)->whereDate('week_start',$weeklyStart)->first();
+                $weeklyReportCard=[
+                    'mode'=>'personal','week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,
+                    'report'=>$weeklyReport,
+                ];
+            }
+        }
+
         return view('system-dashboard',[
             'year'=>$year,'periodType'=>$request->input('period_type','year'),'period'=>$period,'start'=>$start,'end'=>$end,'canViewAll'=>$canViewAll,'currentUser'=>$user,
             'kpiTotals'=>$report['totals'],'activeUsers'=>$canViewAll?User::where('active',true)->count():1,'activePersonnel'=>$canViewAll?Personnel::where('active',true)->count():($user->personnel_id?1:0),
@@ -82,7 +108,7 @@ class SystemDashboardController extends Controller
             'studentStatuses'=>(clone $periodStudents)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'classStatuses'=>(clone $classes)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'tuitionStatuses'=>(clone $charges)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
-            'financial'=>$financial,'workTaskStats'=>$workTaskStats,'taskRecipientStats'=>$taskRecipientStats,
+            'financial'=>$financial,'workTaskStats'=>$workTaskStats,'taskRecipientStats'=>$taskRecipientStats,'weeklyReportCard'=>$weeklyReportCard,
             'recentActivities'=>$canViewAll?$activities->limit(8)->get():collect(),'recentImports'=>$imports->limit(6)->get(),
         ]);
     }

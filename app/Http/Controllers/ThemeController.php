@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\SystemSetting;
 use App\Support\ActivityLogger;
+use App\Support\OpenAiSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -17,6 +19,7 @@ class ThemeController extends Controller
     public function section(Request $request, string $section): View
     {
         abort_unless($request->user()->allowed('software_settings','view'), 403);
+        $openAi = app(OpenAiSettings::class);
         return view('settings.section', [
             'section' => $section,
             'theme' => SystemSetting::valueOf('theme_color', 'blue'),
@@ -32,6 +35,11 @@ class ThemeController extends Controller
             'bankAccountNumber' => SystemSetting::valueOf('bank_account_number', ''),
             'bankAccountName' => SystemSetting::valueOf('bank_account_name', ''),
             'bankBranch' => SystemSetting::valueOf('bank_branch', ''),
+            'openAiEnabled' => $openAi->enabled(),
+            'openAiKeyConfigured' => $openAi->hasApiKey(),
+            'openAiKeyStored' => $openAi->hasStoredApiKey(),
+            'openAiModel' => $openAi->model(),
+            'openAiTimeout' => $openAi->timeout(),
         ]);
     }
 
@@ -56,7 +64,27 @@ class ThemeController extends Controller
         } elseif ($section === 'appearance') {
             $data = $request->validate(['theme_color'=>['required',Rule::in(self::THEMES)], 'loading_style'=>['required',Rule::in(['center','top'])], 'visual_effect'=>['required',Rule::in(['standard','soft','glass','glow'])]]);
             $this->saveSettings($data);
-        } else {
+        } elseif ($section === 'ai') {
+            $data = $request->validate([
+                'openai_enabled' => 'nullable|boolean',
+                'openai_api_key' => 'nullable|string|max:500',
+                'remove_openai_api_key' => 'nullable|boolean',
+                'openai_report_model' => ['required', Rule::in(OpenAiSettings::MODELS)],
+                'openai_timeout' => 'required|integer|in:15,30,45,60,90',
+            ]);
+
+            $settings = [
+                'openai_enabled' => $request->boolean('openai_enabled') ? '1' : '0',
+                'openai_report_model' => $data['openai_report_model'],
+                'openai_timeout' => (string) $data['openai_timeout'],
+            ];
+            if ($request->boolean('remove_openai_api_key')) {
+                $settings['openai_api_key_encrypted'] = '';
+            } elseif (trim((string) ($data['openai_api_key'] ?? '')) !== '') {
+                $settings['openai_api_key_encrypted'] = Crypt::encryptString(trim($data['openai_api_key']));
+            }
+            $this->saveSettings($settings);
+        } elseif ($section === 'payment') {
             $data = $request->validate([
                 'bank_enabled'=>'nullable|boolean', 'bank_bin'=>'nullable|required_if:bank_enabled,1|digits:6',
                 'bank_name'=>'nullable|required_if:bank_enabled,1|string|max:100',
