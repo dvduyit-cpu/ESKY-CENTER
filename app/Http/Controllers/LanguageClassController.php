@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{LanguageClass, LanguageClassLesson, LanguageCourse, LanguageEnrollment, LanguageLevel, LanguageProgram, LanguageStudent, LanguageStudentMonthlyProgress, LanguageStudentScore, User};
+use App\Models\{LanguageClass, LanguageClassLesson, LanguageCourse, LanguageDiscountPolicy, LanguageEnrollment, LanguageLevel, LanguageProgram, LanguageStudent, LanguageStudentMonthlyProgress, LanguageStudentScore, LanguageTuitionCharge, User};
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Illuminate\Validation\ValidationException;
-use App\Support\LanguageEnrollmentManager;
+use App\Support\{LanguageDiscountResolver, LanguageEnrollmentManager};
 
 class LanguageClassController extends Controller
 {
@@ -16,7 +16,7 @@ class LanguageClassController extends Controller
 
     public function index(Request $request): View
     {
-        $query=LanguageClass::with(['program','level','teacher'])->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')])->latest();
+        $query=LanguageClass::with(['program','level','teacher','discountPolicy'])->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')])->latest();
         if($request->user()->isTeacher())$query->where('teacher_user_id',$request->user()->id);
         if($request->filled('q')){$search=$request->string('q');$query->where(fn($q)=>$q->where('name','like',"%{$search}%")->orWhere('code','like',"%{$search}%"));}
         if($request->filled('status'))$query->where('status',$request->status);
@@ -271,8 +271,91 @@ class LanguageClassController extends Controller
     public function create():View{return $this->form(new LanguageClass);}
     public function store(Request $r):RedirectResponse{LanguageClass::create($this->data($r));return redirect()->route('language-classes.index')->with('success','Đã tạo lớp học.');}
     public function edit(Request $request,LanguageClass $languageClass):View{$this->authorizeManagement($request,$languageClass);return $this->form($languageClass->load(['enrollments'=>fn($q)=>$q->where('status','!=','dropped')->with('student')]));}
-    public function update(Request $r,LanguageClass $languageClass):RedirectResponse{$this->authorizeManagement($r,$languageClass);$languageClass->update($this->data($r,$languageClass));return redirect()->route('language-classes.index')->with('success','Đã cập nhật lớp học.');}
+    public function update(Request $r,LanguageClass $languageClass):RedirectResponse
+    {
+        $this->authorizeManagement($r,$languageClass);
+        $data=$this->data($r,$languageClass);
+        $skipped=DB::transaction(function()use($languageClass,$data){
+            $lockedClass=LanguageClass::query()->lockForUpdate()->findOrFail($languageClass->id);
+            $lockedClass->update($data);
+            $classDiscount=$lockedClass->language_discount_policy_id
+                ? LanguageDiscountPolicy::find($lockedClass->language_discount_policy_id)
+                : null;
+            $skipped=0;
+            $charges=LanguageTuitionCharge::query()
+                ->where('language_class_id',$lockedClass->id)
+                ->whereDoesntHave('outgoingTransfers')
+                ->with('student')
+                ->lockForUpdate()
+                ->get();
+            foreach($charges as $charge){
+                if($charge->status==='transferred')continue;
+                $studentDiscount=$charge->student?->language_discount_policy_id
+                    ? LanguageDiscountPolicy::find($charge->student->language_discount_policy_id)
+                    : null;
+                $discount=LanguageDiscountResolver::highest($classDiscount,$studentDiscount);
+                $percentage=(float)($discount?->percentage??0);
+                $discountAmount=round((float)$charge->original_amount*$percentage/100,2);
+                $payableAmount=max(0,round((float)$charge->original_amount-$discountAmount,2));
+                $settledAmount=(float)$charge->paid_amount+(float)$charge->credit_amount;
+                if($payableAmount+0.001<$settledAmount){$skipped++;continue;}
+                $pending=$charge->payments()->where('receipt_status','pending')->exists();
+                $status=$pending?'pending_receipt':($settledAmount+0.001>=$payableAmount?'paid':($settledAmount>0?'partial':'unpaid'));
+                $charge->update(['language_discount_policy_id'=>$discount?->id,'discount_percentage'=>$percentage,'discount_amount'=>$discountAmount,'payable_amount'=>$payableAmount,'status'=>$status]);
+            }
+            return $skipped;
+        });
+        $message='Đã cập nhật lớp và áp dụng mức miễn giảm cao nhất giữa lớp với từng học viên, không cộng dồn.';
+        if($skipped)$message.=' Có '.$skipped.' khoản đã thu vượt mức mới nên được giữ nguyên để bảo toàn chứng từ.';
+        return redirect()->route('language-classes.index')->with('success',$message);
+    }
     public function destroy(Request $request,LanguageClass $languageClass):RedirectResponse{$this->authorizeManagement($request,$languageClass);$languageClass->delete();return back()->with('success','Đã xóa lớp học.');}
+    public function duplicate(Request $request,LanguageClass $languageClass):RedirectResponse
+    {
+        $this->authorizeRegistrar($request);
+        $data=$request->validate([
+            'new_code'=>['required','string','max:30',Rule::unique('language_classes','code')],
+            'new_name'=>'required|string|max:255',
+            'new_start_date'=>'required|date',
+            'new_expected_end_date'=>'nullable|date|after_or_equal:new_start_date',
+            'new_status'=>['required',Rule::in(['planned','recruiting','upcoming','active'])],
+        ],['new_code.unique'=>'Mã lớp mới đã tồn tại. Vui lòng chọn mã khác.']);
+        $classData=[
+            'code'=>$data['new_code'],
+            'name'=>$data['new_name'],
+            'start_date'=>$data['new_start_date'],
+            'expected_end_date'=>$data['new_expected_end_date']??null,
+            'status'=>$data['new_status'],
+        ];
+
+        [$newClass,$studentCount]=DB::transaction(function()use($languageClass,$classData,$request){
+            $source=LanguageClass::query()->lockForUpdate()->findOrFail($languageClass->id);
+            $newClass=$source->replicate([
+                'completed_sessions','completion_requested_at','completion_requested_by','completion_note',
+                'completed_at','completed_by','created_at','updated_at','deleted_at',
+            ]);
+            $newClass->fill($classData+[
+                'completed_sessions'=>0,
+                'completion_requested_at'=>null,
+                'completion_requested_by'=>null,
+                'completion_note'=>null,
+                'completed_at'=>null,
+                'completed_by'=>null,
+                'note'=>trim(($source->note ? $source->note."\n" : '').'Sao chép từ lớp '.$source->code.'.'),
+            ]);
+            $newClass->save();
+
+            $enrollments=$source->enrollments()->where('status','studying')->with('student')->orderBy('id')->get();
+            foreach($enrollments as $enrollment){
+                if(!$enrollment->student||$enrollment->student->trashed())continue;
+                $this->enrollmentManager->enroll($newClass,$enrollment->student,$classData['start_date'],$request->user()->id);
+            }
+
+            return [$newClass,$newClass->enrollments()->where('status','studying')->count()];
+        });
+
+        return redirect()->route('language-classes.edit',$newClass)->with('success','Đã sao chép lớp '.$languageClass->code.' thành '.$newClass->code.', chuyển '.$studentCount.' học viên đang học và tạo khoản thu mới theo mã lớp mới.');
+    }
     public function enroll(Request $r,LanguageClass $languageClass):RedirectResponse{$this->authorizeRegistrar($r);$count=$this->enrollSelectedStudents($r,$languageClass);return back()->with('success','Đã xếp '.$count.' học viên vào lớp và đồng bộ khoản thu học phí.');}
     public function unenroll(Request $request,LanguageClass $languageClass,LanguageEnrollment $enrollment):RedirectResponse{$this->authorizeRegistrar($request);$chargeDeleted=$this->enrollmentManager->unenroll($languageClass,$enrollment);$message=$chargeDeleted?'Đã đưa học viên khỏi lớp và xóa khoản học phí chưa thu.':'Đã đưa học viên khỏi lớp. Khoản đã thu hoặc học phí chuyển sang được giữ để quyết toán.';return back()->with('success',$message);}
 
@@ -353,7 +436,7 @@ class LanguageClassController extends Controller
         abort_unless($allowed,403,'Bạn không được phân công quản lý lớp này.');
     }
     private function authorizeRegistrar(Request $request):void{$user=$request->user();abort_unless($user->isRegistrar(),403,'Chỉ tài khoản được đánh dấu Giáo vụ hoặc quản trị viên mới được xếp và chuyển học viên.');}
-    private function form(LanguageClass $item):View{$students=LanguageStudent::with('guardians')->whereIn('status',['new','waiting_class','studying','dropped']);if($item->exists)$students->whereDoesntHave('enrollments',fn($q)=>$q->where('language_class_id',$item->id)->where('status','!=','dropped'));$teachers=User::query()->where(fn($query)=>$query->where(fn($active)=>$active->where('active',1)->instructors())->when($item->teacher_user_id,fn($query,$teacherId)=>$query->orWhere('id',$teacherId)))->orderBy('name')->get();return view('language.classes.form',compact('item','teachers')+['courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_course_id))->with(['program','level'])->orderBy('name')->get(),'students'=>$students->orderBy('name')->get()]);}
+    private function form(LanguageClass $item):View{$students=LanguageStudent::with('guardians')->whereIn('status',['new','waiting_class','studying','dropped']);if($item->exists)$students->whereDoesntHave('enrollments',fn($q)=>$q->where('language_class_id',$item->id)->where('status','!=','dropped'));$teachers=User::query()->where(fn($query)=>$query->where(fn($active)=>$active->where('active',1)->instructors())->when($item->teacher_user_id,fn($query,$teacherId)=>$query->orWhere('id',$teacherId)))->orderBy('name')->get();return view('language.classes.form',compact('item','teachers')+['courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_course_id))->with(['program','level'])->orderBy('name')->get(),'discounts'=>LanguageDiscountPolicy::where(fn($query)=>$query->where('active',1)->when($item->language_discount_policy_id,fn($active,$id)=>$active->orWhere('id',$id)))->orderBy('name')->get(),'students'=>$students->orderBy('name')->get()]);}
 
     private function enrollSelectedStudents(Request $request,LanguageClass $languageClass):int
     {
@@ -365,5 +448,5 @@ class LanguageClassController extends Controller
         DB::transaction(function()use($ids,$students,$languageClass,$data,$request){foreach($ids as $id)$this->enrollmentManager->enroll($languageClass,$students->get($id),$data['enrolled_at'],$request->user()->id);});
         return $ids->count();
     }
-    private function data(Request $r,?LanguageClass $m=null):array{$data=$r->validate(['code'=>['required','max:30',Rule::unique('language_classes')->ignore($m)],'name'=>'required|max:255','language_course_id'=>'required|exists:language_courses,id','teacher_user_id'=>'nullable|exists:users,id','room'=>'nullable|max:255','start_date'=>'nullable|date','expected_end_date'=>'nullable|date|after_or_equal:start_date','max_students'=>'required|integer|min:1','status'=>['required',Rule::in(['planned','recruiting','upcoming','active','paused','completed','cancelled'])],'schedule_note'=>'nullable','note'=>'nullable']);if(!empty($data['teacher_user_id'])&&(int)$data['teacher_user_id']!==(int)$m?->teacher_user_id){$teacher=User::findOrFail($data['teacher_user_id']);if(!$teacher->active||!$teacher->canTeach())throw ValidationException::withMessages(['teacher_user_id'=>'Chỉ được phân công tài khoản Giáo viên hoặc nhân viên đã bật Kiêm giảng dạy.']);}$course=LanguageCourse::with('level')->findOrFail($data['language_course_id']);if(!$course->language_program_id||!$course->language_level_id)throw ValidationException::withMessages(['language_course_id'=>'Khóa học chưa được liên kết đầy đủ với chương trình và cấp độ.']);return $data+['language_program_id'=>$course->language_program_id,'language_level_id'=>$course->language_level_id,'expected_sessions'=>$course->sessions,'default_tuition'=>$course->tuition];}
+    private function data(Request $r,?LanguageClass $m=null):array{$data=$r->validate(['code'=>['required','max:30',Rule::unique('language_classes')->ignore($m)],'name'=>'required|max:255','language_course_id'=>'required|exists:language_courses,id','default_tuition'=>'required|numeric|min:0|max:999999999999.99','language_discount_policy_id'=>'nullable|exists:language_discount_policies,id','teacher_user_id'=>'nullable|exists:users,id','room'=>'nullable|max:255','start_date'=>'nullable|date','expected_end_date'=>'nullable|date|after_or_equal:start_date','max_students'=>'required|integer|min:1','status'=>['required',Rule::in(['planned','recruiting','upcoming','active','paused','completed','cancelled'])],'schedule_note'=>'nullable','note'=>'nullable']);if(!empty($data['teacher_user_id'])&&(int)$data['teacher_user_id']!==(int)$m?->teacher_user_id){$teacher=User::findOrFail($data['teacher_user_id']);if(!$teacher->active||!$teacher->canTeach())throw ValidationException::withMessages(['teacher_user_id'=>'Chỉ được phân công tài khoản Giáo viên hoặc nhân viên đã bật Kiêm giảng dạy.']);}$course=LanguageCourse::with('level')->findOrFail($data['language_course_id']);if(!$course->language_program_id||!$course->language_level_id)throw ValidationException::withMessages(['language_course_id'=>'Khóa học chưa được liên kết đầy đủ với chương trình và cấp độ.']);return $data+['language_program_id'=>$course->language_program_id,'language_level_id'=>$course->language_level_id,'expected_sessions'=>$course->sessions];}
 }

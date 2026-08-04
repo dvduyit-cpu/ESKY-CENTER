@@ -48,12 +48,18 @@ class AppServiceProvider extends ServiceProvider
         $theme = $settings->get('theme_color', 'blue');
         $systemTheme = in_array($theme, ThemeController::THEMES, true) ? $theme : 'blue';
         $systemVisualEffect = in_array($settings->get('visual_effect'), ['standard','soft','glass','glow'], true) ? $settings->get('visual_effect') : 'standard';
+        $logoPath = $settings->get('logo_path');
+        $systemLogo = is_string($logoPath)
+            && str_starts_with($logoPath, 'uploads/branding/')
+            && is_file(public_path($logoPath))
+                ? $logoPath
+                : null;
 
         View::share([
             'systemTheme' => $systemTheme,
             'defaultSystemTheme' => $systemTheme,
             'systemName' => $settings->get('software_name') ?: 'E-SKY CENTER',
-            'systemLogo' => $settings->get('logo_path') ?: null,
+            'systemLogo' => $systemLogo,
             'systemLoadingStyle' => in_array($settings->get('loading_style'), ['center', 'top'], true) ? $settings->get('loading_style') : 'center',
             'systemVisualEffect' => $systemVisualEffect,
             'systemCopyright' => e($settings->get('footer_text') ?: '© 2026 E-sky center v1.0.0 | Phát triển bởi Đặng Việt Duy'),

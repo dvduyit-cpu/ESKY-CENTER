@@ -30,7 +30,7 @@
                     <div class="col-md-6"><div class="small text-muted">Học viên</div><strong>{{$item->student->code}} – {{$item->student->name}}</strong></div>
                     <div class="col-md-6"><div class="small text-muted">Khóa học / lớp</div><strong>{{$item->course->name}} / {{$item->languageClass?->code?:'Chưa xếp lớp'}}</strong></div>
                     <div class="col-6 col-md-3"><div class="small text-muted">Học phí</div><strong>{{number_format($item->original_amount)}}đ</strong></div>
-                    <div class="col-6 col-md-3"><div class="small text-muted">Miễn giảm</div><strong>{{$item->discount_percentage}}%</strong></div>
+                    <div class="col-6 col-md-3"><div class="small text-muted">Miễn giảm áp dụng</div><strong>{{$item->discount_percentage}}%</strong><div class="small text-muted">{{$item->discount?->name?:'Không miễn giảm'}} · mức cao nhất</div></div>
                     <div class="col-6 col-md-3"><div class="small text-muted">Đã thu</div><strong class="text-success">{{number_format($item->paid_amount)}}đ</strong></div>
                     <div class="col-6 col-md-3"><div class="small text-muted">Học phí chuyển sang</div><strong class="text-primary">{{number_format($item->credit_amount)}}đ</strong></div>
                     <div class="col-6 col-md-3"><div class="small text-muted">Còn lại</div><strong class="text-danger">{{number_format($remaining)}}đ</strong></div>
@@ -70,6 +70,12 @@
                 </div>
             @else
                 <div class="alert alert-warning mb-4"><strong>Chưa cấu hình tài khoản ngân hàng.</strong><div class="small mt-1">Vào Cấu hình phần mềm để bật nhận học phí qua chuyển khoản.</div></div>
+            @endif
+
+            @if(auth()->user()->allowed('language_tuition','update')&&!$item->outgoingTransfers->count())
+                <form method="POST" action="{{route('language-tuition.discount.update',$item)}}" class="card card-soft mb-4">@csrf @method('PATCH')
+                    <div class="card-header"><h5>Chế độ miễn giảm</h5></div><div class="card-body p-4"><div class="alert alert-light border small">Miễn giảm của lớp {{$item->languageClass?->code}}: <strong>{{$item->languageClass?->discountPolicy?->name?:'Không có'}}@if($item->languageClass?->discountPolicy) – {{$item->languageClass->discountPolicy->percentage}}%@endif</strong></div><label class="form-label">Miễn giảm riêng của học viên</label><select class="form-select @error('language_discount_policy_id') is-invalid @enderror" name="language_discount_policy_id"><option value="">Không miễn giảm riêng</option>@foreach($discounts as $discount)<option value="{{$discount->id}}" @selected((int)old('language_discount_policy_id',$item->student?->language_discount_policy_id)===$discount->id)>{{$discount->name}} – giảm {{$discount->percentage}}%</option>@endforeach</select>@error('language_discount_policy_id')<div class="invalid-feedback">{{$message}}</div>@enderror<div class="form-text">Hệ thống so sánh mức của lớp và mức riêng của học viên, chỉ lấy phần trăm cao hơn và không cộng dồn.</div><button class="btn btn-outline-primary w-100 mt-3" data-confirm="So sánh và áp dụng mức miễn giảm cao nhất?"><i class="bi bi-percent me-1"></i>Áp dụng mức cao nhất</button></div>
+                </form>
             @endif
 
             @foreach($item->payments->where('receipt_status','pending') as $pendingPayment)

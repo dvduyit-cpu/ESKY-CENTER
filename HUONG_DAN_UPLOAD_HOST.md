@@ -24,6 +24,24 @@ php artisan optimize
 
 7. Kiểm tra `https://ten-mien-cua-ban/up`, sau đó mở trang đăng nhập.
 
+## Cập nhật host đã có dữ liệu
+
+Phần này dùng cho website đang vận hành. Việc cập nhật mã nguồn phải giữ nguyên database, cấu hình và các tệp người dùng đã tải lên.
+
+1. Sao lưu database và thư mục `public/uploads` trước khi cập nhật.
+2. Chỉ upload/đồng bộ mã nguồn mới; **không ghi đè tệp `.env` trên host**.
+3. **Không import lại** `database/host.sql`, `database/demo.sql` hoặc các tệp SQL sao lưu. Những tệp này chỉ dùng khi cài mới hoặc khôi phục có chủ đích.
+4. Giữ nguyên thư mục `public/uploads/branding` để logo tùy chỉnh không bị mất khi thay mã nguồn.
+5. Chạy các lệnh cập nhật an toàn:
+
+```bash
+php artisan optimize:clear
+php artisan migrate --force
+php artisan optimize
+```
+
+`php artisan migrate --force` chỉ chạy các migration chưa có. Không dùng `migrate:fresh`, `migrate:refresh`, `db:wipe` hoặc chạy seeder trên host đang có dữ liệu.
+
 ## Reverb
 
 Mẫu production mặc định dùng `BROADCAST_CONNECTION=null`, phù hợp shared hosting. Nếu dùng VPS và muốn thông báo tức thời, cấu hình Reverb theo `deploy/REVERB_UBUNTU.md` rồi đổi sang `BROADCAST_CONNECTION=reverb`.

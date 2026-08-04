@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\{LanguageClass, LanguageCourse, LanguageDiscountPolicy, LanguageEnrollment, LanguageLead, LanguageMonthlyTargetRecord, LanguageStudent, LanguageTuitionCharge, LanguageTuitionPayment};
-use App\Support\{CenterCode, ExcelExporter};
+use App\Support\{CenterCode, ExcelExporter, LanguageDiscountResolver};
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -23,11 +23,18 @@ class LanguageTuitionController extends Controller
         $query = LanguageTuitionCharge::with(['student','course','languageClass','discount','payments'])->withSum('payments','amount')->latest();
         if ($request->filled('q')) {
             $search = $request->string('q');
-            $query->where(fn ($builder) => $builder->where('code','like',"%{$search}%")->orWhereHas('student',fn ($student) => $student->where('name','like',"%{$search}%")));
+            $query->where(fn ($builder) => $builder->where('code','like',"%{$search}%")
+                ->orWhereHas('student',fn ($student) => $student->where('name','like',"%{$search}%"))
+                ->orWhereHas('languageClass',fn ($class) => $class->where('code','like',"%{$search}%")->orWhere('name','like',"%{$search}%")));
         }
+        if ($request->filled('class')) $query->where('language_class_id',$request->integer('class'));
         if ($request->filled('status')) $query->where('status',$request->status);
         $this->applyPeriod($query,$request);
-        return view('language.tuition.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),'filterYear'=>$request->integer('year',now()->year)]);
+        return view('language.tuition.index',[
+            'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'filterYear'=>$request->integer('year',now()->year),
+            'classes'=>LanguageClass::whereHas('tuitionCharges')->orderBy('code')->get(['id','code','name']),
+        ]);
     }
 
     public function monthly(Request $request): View
@@ -86,9 +93,18 @@ class LanguageTuitionController extends Controller
 
     public function show(LanguageTuitionCharge $languageTuition): View
     {
+        $languageTuition->load(['student','course','languageClass.program','languageClass.level','languageClass.discountPolicy','discount','payments','incomingTransfers.fromClass','outgoingTransfers.toClass']);
+        $keptDiscountIds=array_filter([
+            $languageTuition->language_discount_policy_id,
+            $languageTuition->student?->language_discount_policy_id,
+            $languageTuition->languageClass?->language_discount_policy_id,
+        ]);
         return view('language.tuition.show', [
-            'item' => $languageTuition->load(['student','course','languageClass.program','languageClass.level','discount','payments','incomingTransfers.fromClass','outgoingTransfers.toClass']),
+            'item' => $languageTuition,
             'bank' => self::bankSettings(),
+            'discounts' => LanguageDiscountPolicy::query()
+                ->where(fn ($query) => $query->where('active',1)->when($keptDiscountIds,fn ($active,$ids) => $active->orWhereIn('id',$ids)))
+                ->orderBy('name')->get(),
         ]);
     }
 
@@ -102,13 +118,52 @@ class LanguageTuitionController extends Controller
         if(! $class->language_course_id) throw ValidationException::withMessages(['language_class_id'=>'Lớp chưa được liên kết với khóa học.']);
         $data['language_course_id']=$class->language_course_id;
         $course=LanguageCourse::findOrFail($data['language_course_id']);
+        $student=LanguageStudent::findOrFail($data['language_student_id']);
         if (empty($data['language_lead_id'])) $data['language_lead_id']=$this->resolveLeadId((int)$data['language_student_id'],(int)$data['language_course_id']);
-        $discount=!empty($data['language_discount_policy_id'])?LanguageDiscountPolicy::find($data['language_discount_policy_id']):null;
-        $percentage=(float)($discount?->percentage??0); $amount=(float)$course->tuition;
-        $data+=['code'=>CenterCode::next('language_tuition_charges','HP'),'original_amount'=>$amount,'discount_percentage'=>$percentage,'discount_amount'=>round($amount*$percentage/100,2),'payable_amount'=>round($amount*(100-$percentage)/100,2),'paid_amount'=>0,'credit_amount'=>0,'status'=>'unpaid','created_by'=>$request->user()->id];
+        $personalDiscountId=$data['language_discount_policy_id']??$student->language_discount_policy_id;
+        $studentDiscount=$personalDiscountId?LanguageDiscountPolicy::findOrFail($personalDiscountId):null;
+        $classDiscount=$class->language_discount_policy_id?LanguageDiscountPolicy::find($class->language_discount_policy_id):null;
+        $discount=LanguageDiscountResolver::highest($classDiscount,$studentDiscount);
+        $data['language_discount_policy_id']=$discount?->id;
+        $percentage=(float)($discount?->percentage??0); $amount=(float)$class->default_tuition;
+        $payableAmount=round($amount*(100-$percentage)/100,2);
+        $data+=['code'=>CenterCode::next('language_tuition_charges','HP'),'original_amount'=>$amount,'discount_percentage'=>$percentage,'discount_amount'=>round($amount*$percentage/100,2),'payable_amount'=>$payableAmount,'paid_amount'=>0,'credit_amount'=>0,'status'=>$payableAmount>0?'unpaid':'paid','created_by'=>$request->user()->id];
         LanguageTuitionCharge::create($data);
-        LanguageStudent::whereKey($data['language_student_id'])->update(['language_course_id'=>$data['language_course_id'],'language_discount_policy_id'=>$data['language_discount_policy_id'] ?? null]);
+        $student->update(['language_course_id'=>$data['language_course_id'],'language_discount_policy_id'=>$personalDiscountId]);
         return redirect()->route('language-tuition.index')->with('success','Đã lập khoản thu học phí.');
+    }
+
+    public function updateDiscount(Request $request, LanguageTuitionCharge $languageTuition): RedirectResponse
+    {
+        $data=$request->validate(['language_discount_policy_id'=>'nullable|integer|exists:language_discount_policies,id']);
+        DB::transaction(function()use($data,$languageTuition){
+            $charge=LanguageTuitionCharge::lockForUpdate()->findOrFail($languageTuition->id);
+            if($charge->outgoingTransfers()->exists())throw ValidationException::withMessages(['language_discount_policy_id'=>'Khoản thu đã quyết toán chuyển lớp nên không thể đổi chế độ miễn giảm.']);
+            $personalDiscount=!empty($data['language_discount_policy_id'])?LanguageDiscountPolicy::findOrFail($data['language_discount_policy_id']):null;
+            if($personalDiscount&&!$personalDiscount->active&&(int)$personalDiscount->id!==(int)$charge->student?->language_discount_policy_id)throw ValidationException::withMessages(['language_discount_policy_id'=>'Chế độ miễn giảm đã ngừng hoạt động.']);
+            $classDiscount=$charge->languageClass?->language_discount_policy_id
+                ? LanguageDiscountPolicy::find($charge->languageClass->language_discount_policy_id)
+                : null;
+            $discount=LanguageDiscountResolver::highest($classDiscount,$personalDiscount);
+
+            $percentage=(float)($discount?->percentage??0);
+            $discountAmount=round((float)$charge->original_amount*$percentage/100,2);
+            $payableAmount=max(0,round((float)$charge->original_amount-$discountAmount,2));
+            $settledAmount=(float)$charge->paid_amount+(float)$charge->credit_amount;
+            if($payableAmount+0.001<$settledAmount)throw ValidationException::withMessages(['language_discount_policy_id'=>'Không thể áp dụng vì số đã thu/chuyển sang lớn hơn học phí sau miễn giảm.']);
+            $hasPendingReceipt=$charge->payments()->where('receipt_status','pending')->exists();
+            $status=$hasPendingReceipt?'pending_receipt':($settledAmount+0.001>=$payableAmount?'paid':($settledAmount>0?'partial':'unpaid'));
+            $charge->update([
+                'language_discount_policy_id'=>$discount?->id,
+                'discount_percentage'=>$percentage,
+                'discount_amount'=>$discountAmount,
+                'payable_amount'=>$payableAmount,
+                'status'=>$status,
+            ]);
+            LanguageStudent::whereKey($charge->language_student_id)->update(['language_discount_policy_id'=>$personalDiscount?->id]);
+        });
+
+        return back()->with('success','Đã so sánh miễn giảm của lớp và học viên, chỉ áp dụng mức cao hơn để tính lại học phí.');
     }
 
     public function pay(Request $request, LanguageTuitionCharge $languageTuition): RedirectResponse
@@ -157,7 +212,7 @@ class LanguageTuitionController extends Controller
     public function receiptPdf(LanguageTuitionPayment $languageTuitionPayment)
     {
         $data=$this->receiptData($languageTuitionPayment)+['pdfMode'=>true,'autoPrint'=>false];
-        $options=new Options(); $options->set('defaultFont','DejaVu Sans'); $options->set('isRemoteEnabled',false); $options->setChroot(public_path());
+        $options=new Options(); $options->set('defaultFont','DejaVu Sans'); $options->set('isFontSubsettingEnabled',true); $options->set('isRemoteEnabled',false); $options->setChroot(public_path());
         $dompdf=new Dompdf($options); $dompdf->loadHtml(view('language.tuition.receipt',$data)->render(),'UTF-8'); $dompdf->setPaper('A5','landscape'); $dompdf->render();
         $receiptLabel=$languageTuitionPayment->receipt_code ?: 'tam-'.$languageTuitionPayment->id;
         $filename='phieu-thu-'.preg_replace('/[^A-Za-z0-9_-]/','-',$receiptLabel).'.pdf';
@@ -166,10 +221,50 @@ class LanguageTuitionController extends Controller
 
     private function receiptData(LanguageTuitionPayment $payment): array
     {
-        $payment->load(['collector','charge.student','charge.course','charge.languageClass']);
+        $payment->load(['collector','charge.student.guardians','charge.course','charge.languageClass','charge.discount']);
+        $charge=$payment->charge;
+        $student=$charge->student;
+        $previousPayments=$charge->payments()
+            ->where(function($query)use($payment){
+                $query->where('paid_at','<',$payment->paid_at)
+                    ->orWhere(fn($sameTime)=>$sameTime->where('paid_at',$payment->paid_at)->where('id','<',$payment->id));
+            });
+        $paymentSequence=(clone $previousPayments)->count()+1;
+        $primaryGuardian=$student->guardians->firstWhere('is_primary',true)??$student->guardians->first();
+        $receiptFonts=[];
+        foreach(['regular'=>'DejaVuSans.ttf','bold'=>'DejaVuSans-Bold.ttf'] as $style=>$filename){
+            $fontPath=base_path('vendor/dompdf/dompdf/lib/fonts/'.$filename);
+            if(is_file($fontPath))$receiptFonts[$style]='data:font/truetype;base64,'.base64_encode(file_get_contents($fontPath));
+        }
         $logoPath=SystemSetting::valueOf('logo_path'); $logoData=null;
-        if($logoPath&&str_starts_with($logoPath,'uploads/branding/')){$fullPath=public_path($logoPath);if(is_file($fullPath))$logoData='data:'.(mime_content_type($fullPath)?:'image/png').';base64,'.base64_encode(file_get_contents($fullPath));}
-        return ['payment'=>$payment,'charge'=>$payment->charge,'student'=>$payment->charge->student,'softwareName'=>SystemSetting::valueOf('software_name','E-SKY CENTER'),'logoData'=>$logoData,'totalAmount'=>(float)$payment->amount+(float)$payment->book_amount,'amountInWords'=>$this->amountInVietnameseWords((int)round((float)$payment->amount+(float)$payment->book_amount))];
+        if(!$logoPath||!str_starts_with($logoPath,'uploads/branding/')||!is_file(public_path($logoPath))){
+            $logoPath='uploads/branding/logo-20260722101948.png';
+        }
+        if(str_starts_with($logoPath,'uploads/branding/')){
+            $fullPath=public_path($logoPath);
+            if(is_file($fullPath)){
+                $logoBinary=file_get_contents($fullPath);
+                if(function_exists('imagecreatefromstring')&&$logoImage=@imagecreatefromstring($logoBinary)){
+                    $logoWidth=imagesx($logoImage); $logoHeight=imagesy($logoImage);
+                    $logoCanvas=imagecreatetruecolor($logoWidth,$logoHeight);
+                    $white=imagecolorallocate($logoCanvas,255,255,255);
+                    imagefill($logoCanvas,0,0,$white);
+                    imagealphablending($logoCanvas,true);
+                    imagesavealpha($logoCanvas,false);
+                    imagecopy($logoCanvas,$logoImage,0,0,0,0,$logoWidth,$logoHeight);
+                    imagefilter($logoCanvas,IMG_FILTER_GRAYSCALE);
+                    ob_start(); imagepng($logoCanvas); $logoBinary=ob_get_clean();
+                    imagedestroy($logoCanvas); imagedestroy($logoImage);
+                    $logoMime='image/png';
+                }else $logoMime=mime_content_type($fullPath)?:'image/png';
+                $logoData='data:'.$logoMime.';base64,'.base64_encode($logoBinary);
+            }
+        }
+        $totalAmount=(float)$payment->amount+(float)$payment->book_amount;
+        return compact('payment','charge','student','primaryGuardian','paymentSequence','receiptFonts','logoData','totalAmount')+[
+            'softwareName'=>SystemSetting::valueOf('software_name','E-SKY CENTER'),
+            'amountInWords'=>$this->amountInVietnameseWords((int)round($totalAmount)),
+        ];
     }
 
     private function amountInVietnameseWords(int $number): string
@@ -181,8 +276,17 @@ class LanguageTuitionController extends Controller
     }
     public function export(Request $request)
     {
-        $query=LanguageTuitionCharge::with(['student','course']); $this->applyPeriod($query,$request);
-        return ExcelExporter::download('thu-hoc-phi-'.date('Ymd').'.xlsx',['Mã khoản thu','Học viên','Khóa học','Học phí','Giảm %','Phải thu','Đã thu','Chuyển sang','Còn lại','Trạng thái','Hạn đóng'],$query->get()->map(fn($item)=>[$item->code,$item->student->name,$item->course->name,$item->original_amount,$item->discount_percentage,$item->payable_amount,$item->paid_amount,$item->credit_amount,$item->remainingAmount(),$item->status,$item->due_date?->format('d/m/Y')]));
+        $query=LanguageTuitionCharge::with(['student','course','languageClass']);
+        if($request->filled('q')){
+            $search=$request->string('q');
+            $query->where(fn($builder)=>$builder->where('code','like',"%{$search}%")
+                ->orWhereHas('student',fn($student)=>$student->where('name','like',"%{$search}%"))
+                ->orWhereHas('languageClass',fn($class)=>$class->where('code','like',"%{$search}%")->orWhere('name','like',"%{$search}%")));
+        }
+        if($request->filled('class'))$query->where('language_class_id',$request->integer('class'));
+        if($request->filled('status'))$query->where('status',$request->status);
+        $this->applyPeriod($query,$request);
+        return ExcelExporter::download('thu-hoc-phi-'.date('Ymd').'.xlsx',['Mã khoản thu','Học viên','Khóa học','Mã lớp','Học phí','Giảm %','Phải thu','Đã thu','Chuyển sang','Còn lại','Trạng thái','Hạn đóng'],$query->get()->map(fn($item)=>[$item->code,$item->student->name,$item->course->name,$item->languageClass?->code,$item->original_amount,$item->discount_percentage,$item->payable_amount,$item->paid_amount,$item->credit_amount,$item->remainingAmount(),$item->status,$item->due_date?->format('d/m/Y')]));
     }
 
     public function downloadQr(Request $request, LanguageTuitionCharge $languageTuition)

@@ -44,7 +44,7 @@ class LanguageEnrollmentManager
             }
 
             $course = LanguageCourse::findOrFail($lockedClass->language_course_id);
-            $tuition = (float) ($lockedClass->default_tuition ?: $course->tuition);
+            $tuition = (float) $lockedClass->default_tuition;
             $enrollment = LanguageEnrollment::updateOrCreate(
                 ['language_class_id' => $lockedClass->id, 'language_student_id' => $student->id],
                 [
@@ -148,7 +148,7 @@ class LanguageEnrollmentManager
                 ->first();
             if (! $sourceCharge && $lockedSourceClass->language_course_id) {
                 $sourceCourse = LanguageCourse::findOrFail($lockedSourceClass->language_course_id);
-                $sourceTuition = (float) ($lockedSourceClass->default_tuition ?: $sourceCourse->tuition);
+                $sourceTuition = (float) $lockedSourceClass->default_tuition;
                 $sourceCharge = $this->ensureTuitionCharge($lockedSourceClass, $student, $sourceCourse, $sourceTuition, $lockedEnrollment->enrolled_at, $createdBy);
             }
             if ($sourceCharge?->payments()->where('receipt_status', 'pending')->exists()) {
@@ -156,7 +156,7 @@ class LanguageEnrollmentManager
             }
 
             $targetCourse = LanguageCourse::findOrFail($lockedTargetClass->language_course_id);
-            $targetTuition = (float) ($lockedTargetClass->default_tuition ?: $targetCourse->tuition);
+            $targetTuition = (float) $lockedTargetClass->default_tuition;
             $targetEnrollment = LanguageEnrollment::create([
                 'language_class_id' => $lockedTargetClass->id,
                 'language_student_id' => $student->id,
@@ -256,9 +256,13 @@ class LanguageEnrollmentManager
             return $existing;
         }
 
-        $discount = $student->language_discount_policy_id
+        $studentDiscount = $student->language_discount_policy_id
             ? LanguageDiscountPolicy::find($student->language_discount_policy_id)
             : null;
+        $classDiscount = $class->language_discount_policy_id
+            ? LanguageDiscountPolicy::find($class->language_discount_policy_id)
+            : null;
+        $discount = LanguageDiscountResolver::highest($classDiscount, $studentDiscount);
         $percentage = (float) ($discount?->percentage ?? 0);
         $discountAmount = round($tuition * $percentage / 100, 2);
         $leadId = LanguageLead::query()
@@ -266,6 +270,8 @@ class LanguageEnrollmentManager
             ->orderByRaw('language_course_id = ? desc', [$course->id])
             ->latest('id')
             ->value('id');
+
+        $payableAmount = max(0, $tuition - $discountAmount);
 
         return LanguageTuitionCharge::create([
             'code' => CenterCode::next('language_tuition_charges', 'HP'),
@@ -277,11 +283,11 @@ class LanguageEnrollmentManager
             'original_amount' => $tuition,
             'discount_percentage' => $percentage,
             'discount_amount' => $discountAmount,
-            'payable_amount' => max(0, $tuition - $discountAmount),
+            'payable_amount' => $payableAmount,
             'paid_amount' => 0,
             'credit_amount' => 0,
             'due_date' => $enrolledAt->toDateString(),
-            'status' => 'unpaid',
+            'status' => $payableAmount > 0 ? 'unpaid' : 'paid',
             'note' => 'Tự động tạo khi xếp học viên vào lớp '.$class->code.'.',
             'created_by' => $createdBy,
         ]);

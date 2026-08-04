@@ -6,6 +6,7 @@
     @php
     $configuredLogo = $systemLogo && is_file(public_path($systemLogo)) ? $systemLogo : null;
     $faviconPath = $configuredLogo ?: 'uploads/branding/logo-20260722101948.png';
+    $displayLogo = is_file(public_path($faviconPath)) ? $faviconPath : null;
 @endphp
     <link rel="icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
     <link rel="apple-touch-icon" href="{{ asset($faviconPath) }}?v={{ is_file(public_path($faviconPath)) ? filemtime(public_path($faviconPath)) : 1 }}">
@@ -29,7 +30,7 @@
 <div class="app-shell">
     <aside class="sidebar">
         <div class="brand">
-            <div class="brand-mark @if($systemLogo) has-logo @endif">@if($systemLogo)<img src="{{ asset($systemLogo) }}" alt="Logo">@else<i class="bi bi-graph-up-arrow"></i>@endif</div>
+            <div class="brand-mark @if($displayLogo) has-logo @endif">@if($displayLogo)<img src="{{ asset($displayLogo) }}?v={{ filemtime(public_path($displayLogo)) }}" alt="Logo">@else<i class="bi bi-graph-up-arrow"></i>@endif</div>
             <div><strong>{{ $systemName }}</strong><small>HỆ THỐNG QUẢN LÝ</small></div>
         </div>
         <div class="sidebar-label">Tổng quan</div>

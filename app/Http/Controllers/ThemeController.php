@@ -21,7 +21,7 @@ class ThemeController extends Controller
             'section' => $section,
             'theme' => SystemSetting::valueOf('theme_color', 'blue'),
             'softwareName' => SystemSetting::valueOf('software_name', 'E-SKY CENTER'),
-            'logoPath' => SystemSetting::valueOf('logo_path'),
+            'logoPath' => $this->existingLogoPath(SystemSetting::valueOf('logo_path')),
             'loadingStyle' => SystemSetting::valueOf('loading_style', 'center'),
             'visualEffect' => SystemSetting::valueOf('visual_effect', 'standard'),
             'footerText' => SystemSetting::valueOf('footer_text', '© 2026 E-sky center v1.0.0 | Phát triển bởi Đặng Việt Duy'),
@@ -82,7 +82,7 @@ class ThemeController extends Controller
         return view('settings.theme', [
             'theme'=>SystemSetting::valueOf('theme_color','blue'),
             'softwareName'=>SystemSetting::valueOf('software_name','E-SKY CENTER'),
-            'logoPath'=>SystemSetting::valueOf('logo_path'),
+            'logoPath'=>$this->existingLogoPath(SystemSetting::valueOf('logo_path')),
             'loadingStyle'=>SystemSetting::valueOf('loading_style','center'),
             'bankEnabled'=>SystemSetting::valueOf('bank_enabled','0') === '1',
             'bankBin'=>SystemSetting::valueOf('bank_bin','970428'),
@@ -137,5 +137,14 @@ class ThemeController extends Controller
     {
         if(!$logoPath||!str_starts_with($logoPath,'uploads/branding/')) return;
         $fullPath=public_path($logoPath);if(File::isFile($fullPath)) File::delete($fullPath);
+    }
+
+    private function existingLogoPath(?string $logoPath): ?string
+    {
+        return $logoPath
+            && str_starts_with($logoPath, 'uploads/branding/')
+            && File::isFile(public_path($logoPath))
+                ? $logoPath
+                : null;
     }
 }
