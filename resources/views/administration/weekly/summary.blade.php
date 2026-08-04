@@ -74,7 +74,7 @@
     @endif
     </section>
 
-    <form method="POST" action="{{ route('administration.weekly.compile') }}">
+    <form id="weeklyCompilationForm" method="POST" action="{{ route('administration.weekly.compile') }}">
         @csrf
         <input type="hidden" name="period_id" value="{{ $period->id }}">
         <input type="hidden" name="week_start" value="{{ $weekStart->toDateString() }}">
@@ -98,14 +98,14 @@
                         <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#employeeReportModal{{ $report->id }}"><i class="bi bi-eye me-1"></i>Xem</button>
                     </article>
 
-                    <div class="modal fade" id="employeeReportModal{{ $report->id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered"><div class="modal-content employee-report-modal">
+                    <div class="modal fade employee-report-detail-modal" id="employeeReportModal{{ $report->id }}" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered"><div class="modal-content employee-report-modal">
                         <div class="modal-header"><div><h5 class="modal-title">{{ $report->user->name }}</h5><div class="small text-muted">Gửi {{ $report->submitted_at?->format('H:i d/m/Y') }} · độ rõ ràng {{ $report->quality_score }}/100</div></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                         <div class="modal-body">
                             @foreach($types as $type => $typeLabel)
                             <section class="employee-report-section"><h6>{{ $loop->iteration }}. {{ $typeLabel }}</h6>
                                 @forelse($filteredReportItems->where('type', $type) as $item)
                                 <label class="summary-item {{ $duplicateItemIds->contains($item->id) ? 'is-duplicate' : '' }}">
-                                    <input class="form-check-input mt-1" type="checkbox" name="selected_item_ids[]" value="{{ $item->id }}" {{ in_array($item->id, old('selected_item_ids', $compilation?->source_item_ids ?? $items->pluck('id')->all())) ? 'checked' : '' }}>
+                                    <input class="form-check-input mt-1" type="checkbox" name="selected_item_ids[]" value="{{ $item->id }}" form="weeklyCompilationForm" {{ in_array($item->id, old('selected_item_ids', $compilation?->source_item_ids ?? $items->pluck('id')->all())) ? 'checked' : '' }}>
                                     <span><select class="form-select form-select-sm summary-work-area" data-work-area-select data-url="{{ route('administration.weekly.items.work-area', $item) }}" aria-label="Phân loại công tác">@foreach($workAreas as $areaKey => $areaLabel)<option value="{{ $areaKey }}" @selected($item->work_area === $areaKey)>{{ $areaLabel }}</option>@endforeach</select><span class="report-rich-output">{!! $item->content !!}</span><small class="d-block {{ $item->quality_score >= 60 ? 'text-success' : 'text-danger' }}">Độ rõ ràng {{ $item->quality_score }}/100{{ $duplicateItemIds->contains($item->id) ? ' · Có thể trùng ý' : '' }}</small></span>
                                 </label>
                                 @empty<p class="text-muted small mb-0">Không có nội dung.</p>@endforelse
@@ -135,6 +135,9 @@
 @endsection
 @push('scripts')
 <script>
+// Modal phải nằm trực tiếp dưới body. Nếu để trong card có hiệu ứng transform,
+// trình duyệt sẽ giới hạn modal theo kích thước card và chỉ hiện một dải ngang.
+document.querySelectorAll('.employee-report-detail-modal').forEach(modal => document.body.appendChild(modal));
 document.querySelectorAll('[data-work-area-select]').forEach(select => select.addEventListener('change', async () => {
     const previous = select.dataset.savedValue || select.defaultValue;
     select.disabled = true;
