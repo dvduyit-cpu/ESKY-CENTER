@@ -54,6 +54,20 @@ class WorkTaskController extends Controller
             'due' => (clone $activeBase)->where('due_at', '<=', now())->whereHas('assignees', fn ($q) => $q->whereNull('completed_at'))->count(),
             'closed' => (clone $base)->whereNotNull('closed_at')->count(),
         ];
+        $myAssignmentBase = WorkTaskAssignee::query()
+            ->where('user_id', $me->id)
+            ->whereIn('work_task_id', (clone $activeBase)->select('id'));
+        $taskStats['my_unacknowledged'] = (clone $myAssignmentBase)
+            ->whereNull('acknowledged_at')
+            ->whereNull('completed_at')
+            ->count();
+        $taskStats['my_acknowledged'] = (clone $myAssignmentBase)
+            ->whereNotNull('acknowledged_at')
+            ->whereNull('completed_at')
+            ->count();
+        $taskStats['my_completed'] = (clone $myAssignmentBase)
+            ->whereNotNull('completed_at')
+            ->count();
         $assignedTaskBase = WorkTask::query()->where('created_by_id', $me->id);
         if ($filterYear >= 2000 && $filterYear <= 2100) $assignedTaskBase->whereYear('due_at', $filterYear);
         if ($filterMonth >= 1 && $filterMonth <= 12) {
@@ -69,14 +83,17 @@ class WorkTaskController extends Controller
         if ($request->filled('q')) $query->where(fn ($q) => $q->where('title','like','%'.$request->string('q').'%')->orWhere('description','like','%'.$request->string('q').'%'));
         match ($status) {
             'completed' => $query->whereDoesntHave('assignees', fn ($q) => $q->whereNull('completed_at')),
+            'personal_completed' => $query->whereHas('assignees', fn ($q) => $q->where('user_id',$me->id)->whereNotNull('completed_at')),
             'overdue' => $query->where('due_at','<',now())->whereHas('assignees', fn ($q) => $q->whereNull('completed_at')),
             'pending' => $query->whereHas('assignees', fn ($q) => $q->whereNull('completed_at')),
-            'unread' => $query->whereHas('assignees', fn ($q) => $q->where('user_id',$me->id)->whereNull('acknowledged_at')),
+            'unread' => $query->whereHas('assignees', fn ($q) => $q->where('user_id',$me->id)->whereNull('acknowledged_at')->whereNull('completed_at')),
+            'acknowledged' => $query->whereHas('assignees', fn ($q) => $q->where('user_id',$me->id)->whereNotNull('acknowledged_at')->whereNull('completed_at')),
             default => null,
         };
         $tasks = $query->latest('due_at')->paginate(\App\Support\Pagination::perPage())->withQueryString();
         $canCreateTasks = $me->allowed('work_tasks', 'create');
         $canDeleteTasks = $me->allowed('work_tasks', 'delete');
+        $showPersonalAssignmentStats = ! $me->isAdmin() && ! $me->isDirector();
         $users = $canCreateTasks ? User::query()->where('active',true)->orderBy('name')->get(['id','name','email']) : collect();
         $memberTaskStats = $canCreateTasks
             ? WorkTaskAssignee::query()
@@ -98,7 +115,7 @@ class WorkTaskController extends Controller
             'overdue' => (clone $personalBase)->whereNull('completed_at')->where('scheduled_for', '<', now())->count(),
         ];
         $personalPlans = (clone $personalBase)->whereNull('completed_at')->orderBy('scheduled_for')->limit(8)->get();
-        return view('work-tasks.index', compact('tasks','users','taskStats','memberTaskStats','personalPlans','personalStats','filterYears','filterYear','filterMonth','filterQuarter','canCreateTasks','canDeleteTasks'));
+        return view('work-tasks.index', compact('tasks','users','taskStats','memberTaskStats','personalPlans','personalStats','filterYears','filterYear','filterMonth','filterQuarter','canCreateTasks','canDeleteTasks','showPersonalAssignmentStats'));
     }
 
     public function store(Request $request): RedirectResponse

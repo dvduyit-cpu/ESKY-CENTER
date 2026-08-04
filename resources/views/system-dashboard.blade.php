@@ -21,15 +21,27 @@
 
 <div class="system-section-title"><span><i class="bi bi-list-check"></i></span><div><h5>{{$canViewAll?'Công việc toàn hệ thống':'Công việc của tôi'}}</h5><small>Thống kê công việc được giao trong {{$period}}</small></div>@if($canViewAll)<button class="btn btn-sm btn-outline-primary ms-auto" type="button" data-bs-toggle="modal" data-bs-target="#taskRecipientStatsModal"><i class="bi bi-people me-1"></i>Xem theo thành viên</button>@elseif(auth()->user()->allowed('work_tasks'))<a class="btn btn-sm btn-outline-primary ms-auto" href="{{route('tasks.index')}}">Mở công việc</a>@endif</div>
 <div class="row g-3 mb-4">
+@if($canViewAll)
 @foreach([
-    [$canViewAll?'Tổng công việc đã giao':'Công việc liên quan',$workTaskStats['total'],'primary','bi-send-check'],
-    ['Lượt phân công',$workTaskStats['assignments'],'info','bi-people'],
-    ['Đã nhận việc',$workTaskStats['acknowledged'],'success','bi-check-square'],
-    ['Đã hoàn thành',$workTaskStats['completed'],'success','bi-check2-circle'],
-    ['Đang quá hạn',$workTaskStats['overdue'],'danger','bi-exclamation-triangle']
-] as [$label,$value,$color,$icon])
-<div class="col-6 col-xl">@if(auth()->user()->allowed('work_tasks'))<a class="dashboard-card-link" href="{{route('tasks.index')}}">@endif<div class="card card-soft stat-card h-100"><div class="card-body p-4"><div class="stat-label">{{$label}}</div><div class="d-flex justify-content-between align-items-center"><div class="stat-value text-{{$color}}">{{number_format($value)}}</div><div class="stat-icon bg-{{$color}}-subtle text-{{$color}}"><i class="bi {{$icon}}"></i></div></div></div></div>@if(auth()->user()->allowed('work_tasks'))</a>@endif</div>
+    ['Tổng công việc đã giao',$workTaskStats['total'],'primary','bi-send-check',''],
+    ['Lượt phân công',$workTaskStats['assignments'],'info','bi-people',''],
+    ['Đã nhận việc',$workTaskStats['acknowledged'],'success','bi-check-square',''],
+    ['Đã hoàn thành',$workTaskStats['completed'],'success','bi-check2-circle','completed'],
+    ['Đang quá hạn',$workTaskStats['overdue'],'danger','bi-exclamation-triangle','overdue'],
+] as [$label,$value,$color,$icon,$status])
+<div class="col-6 col-xl">@if(auth()->user()->allowed('work_tasks'))<a class="dashboard-card-link" href="{{route('tasks.index',array_filter(['status'=>$status]))}}">@endif<div class="card card-soft stat-card h-100"><div class="card-body p-4"><div class="stat-label">{{$label}}</div><div class="d-flex justify-content-between align-items-center"><div class="stat-value text-{{$color}}">{{number_format($value)}}</div><div class="stat-icon bg-{{$color}}-subtle text-{{$color}}"><i class="bi {{$icon}}"></i></div></div></div></div>@if(auth()->user()->allowed('work_tasks'))</a>@endif</div>
 @endforeach
+@else
+@foreach([
+    ['Công việc liên quan',$workTaskStats['total'],'primary','bi-send-check',''],
+    ['Chưa xác nhận',$workTaskStats['awaiting_acknowledgement'],'warning','bi-exclamation-circle','unread'],
+    ['Đã nhận việc',$workTaskStats['in_progress'],'info','bi-check-square','acknowledged'],
+    ['Đã hoàn thành',$workTaskStats['completed'],'success','bi-check2-circle','personal_completed'],
+    ['Đang quá hạn',$workTaskStats['overdue'],'danger','bi-exclamation-triangle','overdue'],
+] as [$label,$value,$color,$icon,$status])
+<div class="col-6 col-xl">@if(auth()->user()->allowed('work_tasks'))<a class="dashboard-card-link" href="{{route('tasks.index',array_filter(['status'=>$status]))}}">@endif<div class="card card-soft stat-card h-100"><div class="card-body p-4"><div class="stat-label">{{$label}}</div><div class="d-flex justify-content-between align-items-center"><div class="stat-value text-{{$color}}">{{number_format($value)}}</div><div class="stat-icon bg-{{$color}}-subtle text-{{$color}}"><i class="bi {{$icon}}"></i></div></div></div></div>@if(auth()->user()->allowed('work_tasks'))</a>@endif</div>
+@endforeach
+@endif
 </div>
 
 @if($canViewAll)

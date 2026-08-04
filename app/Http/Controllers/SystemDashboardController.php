@@ -47,10 +47,13 @@ class SystemDashboardController extends Controller
                 ->orWhereHas('assignees',fn($assignees)=>$assignees->where('user_id',$user->id)));
         }
         $workAssignments=WorkTaskAssignee::query()->whereIn('work_task_id',(clone $workTasks)->select('id'));
+        if(!$canViewAll)$workAssignments->where('user_id',$user->id);
         $workTaskStats=[
             'total'=>(clone $workTasks)->count(),
             'assignments'=>(clone $workAssignments)->count(),
             'acknowledged'=>(clone $workAssignments)->whereNotNull('acknowledged_at')->count(),
+            'awaiting_acknowledgement'=>(clone $workAssignments)->whereNull('acknowledged_at')->whereNull('completed_at')->count(),
+            'in_progress'=>(clone $workAssignments)->whereNotNull('acknowledged_at')->whereNull('completed_at')->count(),
             'completed'=>(clone $workAssignments)->whereNotNull('completed_at')->count(),
             'overdue'=>(clone $workTasks)->whereNull('closed_at')->where('due_at','<',now())
                 ->whereHas('assignees',fn($query)=>$query->whereNull('completed_at'))->count(),
@@ -91,6 +94,8 @@ class SystemDashboardController extends Controller
         array_splice($rows,2,0,[
             ['Công việc','Tổng công việc đã giao',$data['workTaskStats']['total'],'công việc',$period],
             ['Công việc','Lượt phân công',$data['workTaskStats']['assignments'],'lượt',$period],
+            ['Công việc','Chưa xác nhận nhận việc',$data['workTaskStats']['awaiting_acknowledgement'],'lượt',$period],
+            ['Công việc','Đã nhận việc, đang thực hiện',$data['workTaskStats']['in_progress'],'lượt',$period],
             ['Công việc','Đã nhận việc',$data['workTaskStats']['acknowledged'],'lượt',$period],
             ['Công việc','Đã hoàn thành',$data['workTaskStats']['completed'],'lượt',$period],
         ]);
