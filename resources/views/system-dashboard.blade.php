@@ -12,7 +12,7 @@
 <div class="weekly-report-prompt mb-4">
     <div class="weekly-report-prompt-icon"><i class="bi bi-file-earmark-text"></i></div>
     <div class="flex-grow-1">
-        <div class="small text-uppercase fw-semibold opacity-75">Báo cáo tuần {{ $weeklyReportCard['week_start']->format('d/m') }} – {{ $weeklyReportCard['week_end']->format('d/m/Y') }}</div>
+        <div class="small text-uppercase fw-semibold opacity-75">{{ $weeklyReportCard['title'] }} · {{ $weeklyReportCard['week_start']->format('d/m') }} – {{ $weeklyReportCard['week_end']->format('d/m/Y') }}</div>
         @if($weeklyReportCard['mode'] === 'management')
             <h5 class="mb-1">Theo dõi báo cáo tuần của toàn bộ nhân sự</h5>
             <div class="small">Trạng thái: <strong>{{ $weeklyReportCard['is_active'] ? 'Đang hoạt động' : 'Đã tắt' }}</strong> · Đã gửi: <strong>{{ $weeklyReportCard['submitted_count'] }}</strong> · Chưa gửi: <strong>{{ $weeklyReportCard['missing_count'] }}</strong></div>
@@ -23,11 +23,11 @@
     </div>
     @if($weeklyReportCard['mode'] === 'management')
         <div class="d-flex flex-wrap gap-2">
-            @if(!auth()->user()->isAdmin() && $weeklyReportCard['is_assigned'])<a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['week'=>$weeklyReportCard['week_start']->toDateString(),'open'=>1]) }}">{{ $weeklyReportCard['report']?->status === 'submitted' ? 'Xem báo cáo của tôi' : 'Báo cáo của tôi' }}</a>@endif
+            @if(!auth()->user()->isAdmin() && $weeklyReportCard['is_assigned'])<a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['period'=>$weeklyReportCard['period_id'],'open'=>1]) }}">{{ $weeklyReportCard['report']?->status === 'submitted' ? 'Xem báo cáo của tôi' : 'Báo cáo của tôi' }}</a>@endif
             <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index') }}">Xem các tuần <i class="bi bi-arrow-right ms-1"></i></a>
         </div>
     @else
-        <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['week'=>$weeklyReportCard['week_start']->toDateString(),'open'=>1]) }}">{{ $weeklyReportCard['report'] ? 'Xem báo cáo' : 'Báo cáo ngay' }} <i class="bi bi-arrow-right ms-1"></i></a>
+        <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['period'=>$weeklyReportCard['period_id'],'open'=>1]) }}">{{ $weeklyReportCard['report'] ? 'Xem báo cáo' : 'Báo cáo ngay' }} <i class="bi bi-arrow-right ms-1"></i></a>
     @endif
 </div>
 @endif

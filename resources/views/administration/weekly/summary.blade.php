@@ -4,8 +4,8 @@
 @section('content')
 <div class="administration-page">
     <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
-        <div><h1 class="page-title">Tổng hợp báo cáo tuần</h1><div class="page-subtitle">{{ $weekStart->format('d/m/Y') }} – {{ $weekEnd->format('d/m/Y') }} · hạn gửi {{ $dueDate->format('d/m/Y') }}</div></div>
-        <div class="d-flex gap-2"><a class="btn btn-outline-secondary" href="{{ route('administration.weekly.index', ['week'=>$weekStart->toDateString()]) }}">Báo cáo của tôi</a></div>
+        <div><h1 class="page-title">{{ $period->title ?: 'Tổng hợp báo cáo tuần '.$weekStart->isoWeek() }}</h1><div class="page-subtitle">{{ $weekStart->format('d/m/Y') }} – {{ $weekEnd->format('d/m/Y') }} · hạn gửi {{ $dueDate->format('d/m/Y') }} · mã kỳ #{{ $period->id }}</div></div>
+        <div class="d-flex gap-2"><a class="btn btn-outline-secondary" href="{{ route('administration.weekly.index', ['period'=>$period->id]) }}">Danh sách báo cáo</a></div>
     </div>
 
     <nav class="weekly-summary-nav mb-4" aria-label="Đi đến phần nội dung">
@@ -16,7 +16,7 @@
         <a href="#summary-official"><i class="bi bi-patch-check"></i><span>Bản chính thức</span></a>
     </nav>
 
-    <form id="summary-overview" class="card card-soft weekly-summary-filter mb-4 summary-anchor" method="GET"><div class="card-body row g-3 align-items-end"><div class="col-md-3"><label class="form-label">Tuần báo cáo</label><input class="form-control" type="date" name="week" value="{{ $weekStart->toDateString() }}"></div><div class="col-md-6"><label class="form-label">Lọc theo nhóm công tác</label><select class="form-select" name="work_area"><option value="">Tất cả nhóm công tác</option>@foreach($workAreas as $areaKey => $areaLabel)<option value="{{ $areaKey }}" @selected($workArea === $areaKey)>{{ $areaLabel }}</option>@endforeach</select></div><div class="col-md-3 d-grid"><button class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Lọc báo cáo</button></div></div></form>
+    <form id="summary-overview" class="card card-soft weekly-summary-filter mb-4 summary-anchor" method="GET"><input type="hidden" name="period" value="{{ $period->id }}"><div class="card-body row g-3 align-items-end"><div class="col-md-3"><label class="form-label">Kỳ báo cáo</label><input class="form-control" value="{{ $period->title ?: 'Tuần '.$weekStart->isoWeek() }}" readonly></div><div class="col-md-6"><label class="form-label">Lọc theo nhóm công tác</label><select class="form-select" name="work_area"><option value="">Tất cả nhóm công tác</option>@foreach($workAreas as $areaKey => $areaLabel)<option value="{{ $areaKey }}" @selected($workArea === $areaKey)>{{ $areaLabel }}</option>@endforeach</select></div><div class="col-md-3 d-grid"><button class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Lọc báo cáo</button></div></div></form>
 
     <div class="summary-section-heading summary-section-heading-compact"><div><span>01</span><h4>Tình hình tuần báo cáo</h4></div><p>Các chỉ số gửi báo cáo, chất lượng nội dung và cơ cấu công việc trong tuần.</p></div>
     <div class="row g-3 mb-4 director-report-metrics">
@@ -76,6 +76,7 @@
 
     <form method="POST" action="{{ route('administration.weekly.compile') }}">
         @csrf
+        <input type="hidden" name="period_id" value="{{ $period->id }}">
         <input type="hidden" name="week_start" value="{{ $weekStart->toDateString() }}">
         <div id="summary-people" class="card card-soft mb-4 summary-anchor"><div class="card-header bg-white d-flex flex-wrap justify-content-between gap-2"><strong><span class="summary-section-index">03</span>Báo cáo theo từng nhân sự</strong><small class="text-muted">Bấm vào tên hoặc nút xem để đọc nội dung và chọn ý tổng hợp</small></div><div class="card-body">
             @if($items->isEmpty())

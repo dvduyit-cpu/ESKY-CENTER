@@ -89,16 +89,15 @@ class DirectorDashboardController extends Controller
             ->whereDate('week_start', '<=', today())
             ->orderBy('week_start')
             ->get();
-        $weeklyReportsByWeek = AdministrativeWeeklyReport::query()
-            ->whereIn('week_start', $weeklyPeriods->pluck('week_start')->map->toDateString())
+        $weeklyReportsByPeriod = AdministrativeWeeklyReport::query()
+            ->whereIn('period_id', $weeklyPeriods->pluck('id'))
             ->where('status', 'submitted')
-            ->get(['week_start', 'user_id'])
-            ->groupBy(fn (AdministrativeWeeklyReport $report) => $report->week_start->toDateString());
-        $missingByWeek = $weeklyPeriods->mapWithKeys(function (AdministrativeWeeklyPeriod $weeklyPeriod) use ($weeklyReportsByWeek) {
-            $weekKey = $weeklyPeriod->week_start->toDateString();
-            $submittedUserIds = $weeklyReportsByWeek->get($weekKey, collect())->pluck('user_id');
+            ->get(['period_id', 'user_id'])
+            ->groupBy('period_id');
+        $missingByWeek = $weeklyPeriods->mapWithKeys(function (AdministrativeWeeklyPeriod $weeklyPeriod) use ($weeklyReportsByPeriod) {
+            $submittedUserIds = $weeklyReportsByPeriod->get($weeklyPeriod->id, collect())->pluck('user_id');
 
-            return [$weekKey => $weeklyPeriod->assignedUsers->pluck('id')->diff($submittedUserIds)->values()];
+            return [$weeklyPeriod->id => $weeklyPeriod->assignedUsers->pluck('id')->diff($submittedUserIds)->values()];
         });
         $weeklyReportStats = [
             'missing_submissions' => $missingByWeek->sum(fn ($userIds) => $userIds->count()),

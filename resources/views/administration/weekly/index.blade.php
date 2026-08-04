@@ -5,7 +5,7 @@
 <div class="administration-page" data-weekly-report data-review-url="{{ route('administration.weekly.check') }}">
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div><h1 class="page-title">Báo cáo tuần</h1><div class="page-subtitle">Mỗi tuần là một thẻ riêng; báo cáo đã gửi được lưu đầy đủ tại trang quản lý.</div></div>
-        @if($canManage)<div class="d-flex flex-wrap gap-2">@if(!$showEditor)<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createWeeklyPeriodModal"><i class="bi bi-plus-circle me-1"></i>Tạo tuần</button>@endif<a class="btn btn-outline-primary" href="{{ route('administration.weekly.summary', ['week'=>$weekStart->toDateString()]) }}"><i class="bi bi-collection me-1"></i>Tổng hợp tuần</a></div>@endif
+        @if($canManage)<div class="d-flex flex-wrap gap-2">@if(!$showEditor)<button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#createWeeklyPeriodModal"><i class="bi bi-plus-circle me-1"></i>Tạo tuần</button>@endif @if($selectedPeriod)<a class="btn btn-outline-primary" href="{{ route('administration.weekly.summary', ['period'=>$selectedPeriod->id]) }}"><i class="bi bi-collection me-1"></i>Tổng hợp kỳ đang chọn</a>@endif</div>@endif
     </div>
 
     @if($canManage && !$showEditor)
@@ -36,7 +36,7 @@
                                 <span title="{{ $missingUser->email }}"><i class="bi bi-person"></i>{{ $missingUser->name }}</span>
                             @endforeach
                         </div>
-                        <a class="btn btn-sm btn-outline-primary" href="{{ route('administration.weekly.summary', ['week'=>$card->week_start->toDateString()]) }}#summary-overview">Mở tổng hợp tuần <i class="bi bi-arrow-right ms-1"></i></a>
+                        <a class="btn btn-sm btn-outline-primary" href="{{ route('administration.weekly.summary', ['period'=>$card->id]) }}#summary-overview">Mở tổng hợp tuần <i class="bi bi-arrow-right ms-1"></i></a>
                     </article>
                 @empty
                     <div class="empty-state py-4"><i class="bi bi-check-circle text-success me-1"></i>Tất cả các tuần đã bắt đầu đều hoàn tất báo cáo.</div>
@@ -46,7 +46,7 @@
     @endif
 
     <div class="modal fade" id="createWeeklyPeriodModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered"><div class="modal-content"><form method="POST" action="{{ route('administration.weekly.periods.store') }}" data-assignee-form>@csrf
-        <div class="modal-header"><div><h5 class="modal-title"><i class="bi bi-calendar-plus me-1"></i>Tạo kỳ báo cáo tuần</h5><div class="small text-muted">Chọn thời gian và những tài khoản phải gửi báo cáo về admin.</div></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-header"><div><h5 class="modal-title"><i class="bi bi-calendar-plus me-1"></i>Tạo kỳ báo cáo tuần</h5><div class="small text-muted">Có thể tạo nhiều kỳ cùng ngày; mỗi kỳ được lưu và tổng hợp độc lập.</div></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body"><div class="row g-3">
             <div class="col-md-4"><label class="form-label">Chọn một ngày trong tuần</label><input class="form-control" type="date" name="week_start" required value="{{ old('week_start', now()->startOfWeek()->toDateString()) }}">@error('week_start')<div class="text-danger small">{{ $message }}</div>@enderror</div>
             <div class="col-md-4"><label class="form-label">Tên kỳ báo cáo</label><input class="form-control" name="title" maxlength="180" value="{{ old('title') }}" placeholder="Ví dụ: Tuần 32"></div>
@@ -79,14 +79,14 @@
                         @endphp
                     @endif
                     <article class="weekly-report-row {{ $submitted ? 'is-submitted' : 'is-pending' }}">
-                        <div class="weekly-row-name"><span class="weekly-row-calendar"><i class="bi bi-calendar3"></i></span><div><strong>{{ $card->title ?: 'Báo cáo tuần '.$card->week_start->isoWeek() }}</strong><small>Tuần {{ $card->week_start->isoWeek() }}/{{ $card->week_start->isoWeekYear() }}</small></div></div>
+                        <div class="weekly-row-name"><span class="weekly-row-calendar"><i class="bi bi-calendar3"></i></span><div><strong>{{ $card->title ?: 'Báo cáo tuần '.$card->week_start->isoWeek() }}</strong><small>Tuần {{ $card->week_start->isoWeek() }}/{{ $card->week_start->isoWeekYear() }} · Mã kỳ #{{ $card->id }}</small></div></div>
                         <div class="weekly-row-time"><i class="bi bi-play-fill text-success"></i><div><small>Bắt đầu</small><strong>{{ $card->week_start->format('d/m/Y') }} - Thứ Hai</strong></div></div>
                         <div class="weekly-row-time"><i class="bi bi-stop-fill text-danger"></i><div><small>Kết thúc</small><strong>{{ $card->week_end->format('d/m/Y') }} - Chủ nhật</strong></div></div>
                         <div class="weekly-row-status"><span class="activity-dot {{ $card->effective_active ? 'is-active' : '' }}" title="{{ $card->effective_active ? 'Đang hoạt động' : 'Đã tắt hoặc chưa đến giờ' }}"></span><small>{{ $canManage ? $submitted.'/'.(int)$card->assigned_count.' đã gửi · '.(int)$card->draft_count.' nháp' : ($submitted ? 'Đã gửi' : ($personalReport ? 'Bản nháp' : 'Chưa báo cáo')) }}</small></div>
                         <div class="weekly-row-actions">
                             @if($canManage)
                                 <button type="button" data-bs-toggle="modal" data-bs-target="#weeklyReportModal{{ $card->id }}" title="Xem nhanh báo cáo"><i class="bi bi-eye"></i></button>
-                                @if($canSubmitReport && $card->assigned_to_current_user)<a href="{{ route('administration.weekly.index', ['week'=>$card->week_start->toDateString(),'open'=>1]) }}" title="{{ $personalReport ? 'Xem hoặc chỉnh sửa báo cáo của tôi' : 'Nhập báo cáo của tôi' }}"><i class="bi bi-pencil-square"></i></a>@endif
+                                @if($canSubmitReport && $card->assigned_to_current_user)<a href="{{ route('administration.weekly.index', ['period'=>$card->id,'open'=>1]) }}" title="{{ $personalReport ? 'Xem hoặc chỉnh sửa báo cáo của tôi' : 'Nhập báo cáo của tôi' }}"><i class="bi bi-pencil-square"></i></a>@endif
                                 <form method="POST" action="{{ route('administration.weekly.periods.toggle', $card) }}">@csrf @method('PATCH')<input type="hidden" name="is_active" value="{{ $card->effective_active ? 0 : 1 }}"><button type="submit" title="{{ $card->effective_active ? 'Tắt thủ công' : 'Bật thủ công' }}"><i class="bi {{ $card->effective_active ? 'bi-toggle-on text-success' : 'bi-toggle-off' }}"></i></button></form>
                                 @if((int)$card->report_count === 0)
                                     <form method="POST" action="{{ route('administration.weekly.periods.destroy', $card) }}" onsubmit="return confirm('Xóa kỳ báo cáo chưa có dữ liệu này?')">@csrf @method('DELETE')<button type="submit" class="text-danger" title="Xóa kỳ báo cáo"><i class="bi bi-trash"></i></button></form>
@@ -98,9 +98,9 @@
                             @else
                                 @if($personalReport)
                                     <button type="button" data-bs-toggle="modal" data-bs-target="#weeklyReportModal{{ $card->id }}" title="Xem nhanh báo cáo"><i class="bi bi-eye"></i></button>
-                                    <a href="{{ route('administration.weekly.index', ['week'=>$card->week_start->toDateString(),'open'=>1]) }}" title="Chỉnh sửa báo cáo"><i class="bi bi-pencil-square"></i></a>
+                                    <a href="{{ route('administration.weekly.index', ['period'=>$card->id,'open'=>1]) }}" title="Chỉnh sửa báo cáo"><i class="bi bi-pencil-square"></i></a>
                                     <form method="POST" action="{{ route('administration.weekly.destroy', $personalReport) }}" onsubmit="return confirm('Xóa báo cáo tuần này? Nội dung đã nhập sẽ không thể khôi phục.')">@csrf @method('DELETE')<button type="submit" class="text-danger" title="Xóa báo cáo"><i class="bi bi-trash"></i></button></form>
-                                @else<a class="weekly-enter-action" href="{{ route('administration.weekly.index', ['week'=>$card->week_start->toDateString(),'open'=>1]) }}" title="Nhập báo cáo"><i class="bi bi-pencil-square"></i><span>Nhập báo cáo</span></a>@endif
+                                @else<a class="weekly-enter-action" href="{{ route('administration.weekly.index', ['period'=>$card->id,'open'=>1]) }}" title="Nhập báo cáo"><i class="bi bi-pencil-square"></i><span>Nhập báo cáo</span></a>@endif
                             @endif
                         </div>
                     </article>
@@ -120,7 +120,7 @@
                                     @endforeach
                                 @endif
                             </div>
-                            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>@if($canManage)<button class="btn btn-outline-primary" type="submit" form="periodEdit{{ $card->id }}"><i class="bi bi-save me-1"></i>Lưu lịch</button>@endif<a class="btn btn-primary" href="{{ $canManage ? route('administration.weekly.summary', ['week'=>$card->week_start->toDateString()]) : route('administration.weekly.index', ['week'=>$card->week_start->toDateString(),'open'=>1]) }}">{{ $canManage ? 'Mở trang tổng hợp' : 'Chỉnh sửa báo cáo' }}</a></div>
+                            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>@if($canManage)<button class="btn btn-outline-primary" type="submit" form="periodEdit{{ $card->id }}"><i class="bi bi-save me-1"></i>Lưu lịch</button>@endif<a class="btn btn-primary" href="{{ $canManage ? route('administration.weekly.summary', ['period'=>$card->id]) : route('administration.weekly.index', ['period'=>$card->id,'open'=>1]) }}">{{ $canManage ? 'Mở trang tổng hợp' : 'Chỉnh sửa báo cáo' }}</a></div>
                         </div></div>
                     </div>
                     @endif
@@ -132,6 +132,9 @@
                                 <input type="hidden" name="delete_with_data" value="1">
                                 <div class="modal-header"><div><h5 class="modal-title text-danger"><i class="bi bi-exclamation-octagon-fill me-1"></i>Xóa toàn bộ {{ $card->title ?: 'tuần '.$card->week_start->isoWeek() }}</h5><div class="small text-muted">Thao tác chỉ dành cho Admin và không thể khôi phục.</div></div><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                                 <div class="modal-body">
+                                    @if((int)session('force_delete_period_id') === (int)$card->id && session('error'))
+                                        <div class="alert alert-danger"><strong><i class="bi bi-x-circle-fill me-1"></i>Xóa không thành công</strong><div class="mt-1">{{ session('error') }}</div></div>
+                                    @endif
                                     <div class="alert alert-danger"><strong>Sẽ xóa vĩnh viễn:</strong><ul class="mb-0 mt-2"><li>{{ (int)$card->submitted_count }} báo cáo đã gửi</li><li>{{ (int)$card->draft_count }} bản nháp</li><li>Nội dung chi tiết, bản tổng hợp và báo cáo chính thức của tuần</li></ul></div>
                                     @php
                                         $deleteConfirmation = 'XOA TUAN '.$card->week_start->isoWeek();
@@ -154,7 +157,7 @@
         @if($report)<div class="alert {{ $report->status === 'submitted' ? 'alert-success' : 'alert-warning' }} d-flex flex-wrap justify-content-between gap-2"><span><strong>{{ $report->status === 'submitted' ? 'Đã gửi về admin' : 'Bản nháp đã lưu' }}</strong>{{ $report->submitted_at ? ' lúc '.$report->submitted_at->format('H:i d/m/Y') : '' }}</span><span>Độ rõ ràng: <strong>{{ $report->quality_score ?? 0 }}/100</strong></span></div>@endif
 
         <form class="weekly-entry-form" method="POST" action="{{ route('administration.weekly.save') }}" data-report-form>
-            @csrf<input type="hidden" name="week_start" value="{{ $weekStart->toDateString() }}">
+            @csrf<input type="hidden" name="period_id" value="{{ $selectedPeriod?->id }}"><input type="hidden" name="week_start" value="{{ $weekStart->toDateString() }}">
             <div class="card card-soft mb-4"><div class="card-body d-flex flex-wrap justify-content-between gap-3">
                 <div><div class="small text-muted">Kỳ báo cáo</div><strong>{{ $selectedPeriod?->title ?: 'Tuần '.$weekStart->isoWeek().'/'.$weekStart->isoWeekYear() }}</strong><div class="small text-muted">Từ {{ $weekStart->format('d/m/Y') }} đến {{ $weekEnd->format('d/m/Y') }}</div></div>
                 <div><div class="small text-muted">Người báo cáo</div><strong>{{ auth()->user()->name }}</strong><div class="small text-muted">Hạn báo cáo: {{ $dueDate->format('d/m/Y') }}</div></div>
@@ -236,5 +239,11 @@ document.querySelectorAll('[data-force-delete-weekly-form]').forEach(form => {
     });
     sync();
 });
+@if(session('force_delete_period_id'))
+    document.addEventListener('DOMContentLoaded', () => {
+        const modal = document.getElementById('forceDeleteWeeklyPeriod{{ (int)session('force_delete_period_id') }}');
+        if (modal) bootstrap.Modal.getOrCreateInstance(modal).show();
+    });
+@endif
 </script>
 @endpush

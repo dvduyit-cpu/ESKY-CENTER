@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class AdministrativeWeeklyPeriod extends Model
 {
@@ -59,5 +61,15 @@ class AdministrativeWeeklyPeriod extends Model
     {
         return $this->belongsToMany(User::class, 'administrative_weekly_period_user', 'period_id', 'user_id')
             ->withTimestamps();
+    }
+
+    public function reports(): HasMany
+    {
+        return $this->hasMany(AdministrativeWeeklyReport::class, 'period_id');
+    }
+
+    public function compilation(): HasOne
+    {
+        return $this->hasOne(AdministrativeWeeklyCompilation::class, 'period_id');
     }
 }

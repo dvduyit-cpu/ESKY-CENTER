@@ -77,22 +77,22 @@ class SystemDashboardController extends Controller
             $weeklyPeriod=AdministrativeWeeklyPeriod::query()
                 ->with('assignedUsers:id,name,email')
                 ->when(!$user->isLeader(),fn($query)=>$query->activeNow()->whereHas('assignedUsers',fn($users)=>$users->whereKey($user->id)))
-                ->orderByDesc('is_active')->latest('week_start')->first();
+                ->orderByDesc('is_active')->latest('week_start')->latest('id')->first();
             $weeklyStart=$weeklyPeriod?->week_start;
             if($user->isLeader()){
                 if($weeklyPeriod){
                     $eligibleUserIds=$weeklyPeriod->assignedUsers->pluck('id');
-                    $submittedCount=AdministrativeWeeklyReport::query()->whereDate('week_start',$weeklyStart)->where('status','submitted')->whereIn('user_id',$eligibleUserIds)->count();
-                    $weeklyReport=$user->isAdmin()||!$eligibleUserIds->contains($user->id)?null:AdministrativeWeeklyReport::query()->where('user_id',$user->id)->whereDate('week_start',$weeklyStart)->first();
+                    $submittedCount=AdministrativeWeeklyReport::query()->where('period_id',$weeklyPeriod->id)->where('status','submitted')->whereIn('user_id',$eligibleUserIds)->count();
+                    $weeklyReport=$user->isAdmin()||!$eligibleUserIds->contains($user->id)?null:AdministrativeWeeklyReport::query()->where('user_id',$user->id)->where('period_id',$weeklyPeriod->id)->first();
                     $weeklyReportCard=[
-                        'mode'=>'management','week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,'is_active'=>$weeklyPeriod->isCurrentlyActive(),
+                        'mode'=>'management','period_id'=>$weeklyPeriod->id,'title'=>$weeklyPeriod->title,'week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,'is_active'=>$weeklyPeriod->isCurrentlyActive(),
                         'submitted_count'=>$submittedCount,'missing_count'=>max(0,$eligibleUserIds->count()-$submittedCount),'report'=>$weeklyReport,'is_assigned'=>$eligibleUserIds->contains($user->id),
                     ];
                 }
             }elseif($weeklyPeriod){
-                $weeklyReport=AdministrativeWeeklyReport::query()->where('user_id',$user->id)->whereDate('week_start',$weeklyStart)->first();
+                $weeklyReport=AdministrativeWeeklyReport::query()->where('user_id',$user->id)->where('period_id',$weeklyPeriod->id)->first();
                 $weeklyReportCard=[
-                    'mode'=>'personal','week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,
+                    'mode'=>'personal','period_id'=>$weeklyPeriod->id,'title'=>$weeklyPeriod->title,'week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,
                     'report'=>$weeklyReport,
                 ];
             }

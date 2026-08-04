@@ -14,8 +14,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Throwable;
 
 class AdministrativeWeeklyReportController extends Controller
 {
@@ -64,32 +66,33 @@ class AdministrativeWeeklyReportController extends Controller
                 ->whereHas('assignedUsers', fn ($users) => $users->whereKey($request->user()->id)))
             ->when($canManage, fn ($query) => $this->applyPeriodFilter($query, $request))
             ->latest('week_start')
+            ->latest('id')
             ->get();
+        $requestedPeriodId = $request->integer('period');
         $requestedWeek = $request->filled('week') ? $this->weekStart($request->query('week')) : null;
-        $selectedPeriod = $requestedWeek
-            ? $periods->first(fn ($period) => $period->week_start->isSameDay($requestedWeek))
-            : $periods->first();
+        $selectedPeriod = $requestedPeriodId
+            ? $periods->firstWhere('id', $requestedPeriodId)
+            : ($requestedWeek ? $periods->first(fn ($period) => $period->week_start->isSameDay($requestedWeek)) : $periods->first());
         $weekStart = $selectedPeriod?->week_start?->copy() ?? now()->startOfWeek(Carbon::MONDAY)->startOfDay();
         $submissionWindowOpen = $canManage ? (bool) $selectedPeriod : (bool) $selectedPeriod?->isCurrentlyActive();
         $report = AdministrativeWeeklyReport::query()
             ->with('items')
             ->where('user_id', $request->user()->id)
-            ->whereDate('week_start', $weekStart)
+            ->when($selectedPeriod, fn ($query) => $query->where('period_id', $selectedPeriod->id), fn ($query) => $query->whereRaw('1 = 0'))
             ->first();
-        $weekKeys = $periods->pluck('week_start')->map->toDateString();
+        $periodIds = $periods->pluck('id');
         $compilations = $canManage ? AdministrativeWeeklyCompilation::query()
-            ->whereIn('week_start', $weekKeys)
+            ->whereIn('period_id', $periodIds)
             ->get()
-            ->keyBy(fn ($row) => $row->week_start->toDateString()) : collect();
+            ->keyBy('period_id') : collect();
         $personalReports = AdministrativeWeeklyReport::query()
             ->with('items')
             ->where('user_id', $request->user()->id)
-            ->whereIn('week_start', $weekKeys)
+            ->whereIn('period_id', $periodIds)
             ->get()
-            ->keyBy(fn ($row) => $row->week_start->toDateString());
+            ->keyBy('period_id');
         $weekCards = $periods->each(function ($period) use ($personalReports, $compilations, $canManage, $request): void {
-            $key = $period->week_start->toDateString();
-            $periodReports = AdministrativeWeeklyReport::query()->whereDate('week_start', $period->week_start)
+            $periodReports = AdministrativeWeeklyReport::query()->where('period_id', $period->id)
                 ->whereIn('user_id', $period->assignedUsers->pluck('id'))
                 ->get(['user_id', 'status']);
             $submittedUserIds = $periodReports->where('status', 'submitted')->pluck('user_id');
@@ -100,10 +103,10 @@ class AdministrativeWeeklyReportController extends Controller
             $period->setAttribute('assigned_to_current_user', $period->assignedUsers->contains('id', $request->user()->id));
             $period->setAttribute('effective_active', $period->isCurrentlyActive());
             if ($canManage) {
-                $period->setRelation('compilation', $compilations->get($key));
+                $period->setRelation('compilation', $compilations->get($period->id));
                 $period->setRelation('missingUsers', $period->assignedUsers->whereNotIn('id', $submittedUserIds)->sortBy('name')->values());
             }
-            $period->setRelation('report', $personalReports->get($key));
+            $period->setRelation('report', $personalReports->get($period->id));
         });
 
         return view('administration.weekly.index', [
@@ -136,6 +139,7 @@ class AdministrativeWeeklyReportController extends Controller
     {
         abort_unless($request->user()->isLeader(), 403);
         $data = $request->validate([
+            'period_id' => ['nullable', 'integer', 'exists:administrative_weekly_periods,id'],
             'week_start' => ['required', 'date'],
             'title' => ['nullable', 'string', 'max:180'],
             'is_active' => ['nullable', 'boolean'],
@@ -150,10 +154,9 @@ class AdministrativeWeeklyReportController extends Controller
         $isActive = $request->boolean('is_active');
         $startsAt = filled($data['starts_at'] ?? null) ? Carbon::parse($data['starts_at']) : null;
         $endsAt = filled($data['ends_at'] ?? null) ? Carbon::parse($data['ends_at']) : null;
-        $period = AdministrativeWeeklyPeriod::query()->updateOrCreate(
-            ['week_start' => $weekStart->toDateString()],
-            [
+        $period = AdministrativeWeeklyPeriod::query()->create([
                 'week_end' => $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->toDateString(),
+                'week_start' => $weekStart->toDateString(),
                 'due_date' => $weekStart->copy()->addDays(2)->toDateString(),
                 'title' => trim((string) ($data['title'] ?? '')) ?: null,
                 'is_active' => $isActive,
@@ -162,8 +165,7 @@ class AdministrativeWeeklyReportController extends Controller
                 'created_by' => $request->user()->id,
                 'activated_by' => $isActive ? $request->user()->id : null,
                 'activated_at' => $isActive ? now() : null,
-            ]
-        );
+            ]);
         $period->assignedUsers()->sync($assigneeIds);
 
         return redirect()->route('administration.weekly.index')->with('success', 'Đã tạo kỳ báo cáo tuần.');
@@ -211,7 +213,7 @@ class AdministrativeWeeklyReportController extends Controller
     public function destroyPeriod(Request $request, AdministrativeWeeklyPeriod $period): RedirectResponse
     {
         abort_unless($request->user()->isLeader(), 403);
-        $reportQuery = AdministrativeWeeklyReport::query()->whereDate('week_start', $period->week_start);
+        $reportQuery = AdministrativeWeeklyReport::query()->where('period_id', $period->id);
         $reportCount = (clone $reportQuery)->count();
         $hasReports = $reportCount > 0;
         if ($hasReports) {
@@ -222,16 +224,39 @@ class AdministrativeWeeklyReportController extends Controller
 
             $confirmation = 'XOA TUAN '.$period->week_start->isoWeek();
             if (! hash_equals($confirmation, mb_strtoupper(trim((string) $request->input('confirmation'))))) {
-                return back()->with('error', 'Câu xác nhận chưa đúng. Hãy nhập chính xác: '.$confirmation);
+                return back()->withInput()->with([
+                    'error' => 'Chưa xóa tuần '.$period->week_start->isoWeek().': câu xác nhận không khớp. Hãy nhập chính xác “'.$confirmation.'”.',
+                    'force_delete_period_id' => $period->id,
+                ]);
             }
 
             $draftCount = (clone $reportQuery)->where('status', 'draft')->count();
             $submittedCount = (clone $reportQuery)->where('status', 'submitted')->count();
-            DB::transaction(function () use ($period, $reportQuery): void {
-                AdministrativeWeeklyCompilation::query()->whereDate('week_start', $period->week_start)->delete();
-                (clone $reportQuery)->delete();
-                $period->delete();
-            });
+            try {
+                DB::transaction(function () use ($period, $reportQuery): void {
+                    AdministrativeWeeklyCompilation::query()->where('period_id', $period->id)->delete();
+                    (clone $reportQuery)->delete();
+                    $period->delete();
+                });
+            } catch (QueryException $exception) {
+                report($exception);
+                $databaseCode = (string) ($exception->errorInfo[1] ?? $exception->getCode() ?: 'không xác định');
+                $reason = $databaseCode === '1451'
+                    ? 'vẫn còn dữ liệu khác đang liên kết với tuần này'
+                    : 'database từ chối thao tác';
+
+                return back()->withInput()->with([
+                    'error' => 'Không thể xóa tuần '.$period->week_start->isoWeek().' vì '.$reason.' (mã database '.$databaseCode.'). Toàn bộ thao tác đã được hoàn tác, dữ liệu vẫn còn nguyên.',
+                    'force_delete_period_id' => $period->id,
+                ]);
+            } catch (Throwable $exception) {
+                report($exception);
+
+                return back()->withInput()->with([
+                    'error' => 'Không thể xóa tuần '.$period->week_start->isoWeek().' do lỗi hệ thống khi xử lý giao dịch. Toàn bộ thao tác đã được hoàn tác; dữ liệu vẫn còn nguyên. Vui lòng xem log tại thời điểm '.now()->format('H:i:s d/m/Y').'.',
+                    'force_delete_period_id' => $period->id,
+                ]);
+            }
 
             return redirect()->route('administration.weekly.index')
                 ->with('success', 'Đã xóa toàn bộ tuần '.$period->week_start->isoWeek().', gồm '.$submittedCount.' báo cáo đã gửi và '.$draftCount.' bản nháp. Dữ liệu không thể khôi phục.');
@@ -244,6 +269,7 @@ class AdministrativeWeeklyReportController extends Controller
     public function save(Request $request): RedirectResponse
     {
         $data = $request->validate([
+            'period_id' => ['nullable', 'integer', 'exists:administrative_weekly_periods,id'],
             'week_start' => ['required', 'date'],
             'action' => ['required', 'in:draft,submit'],
             'items' => ['required', 'array'],
@@ -254,7 +280,7 @@ class AdministrativeWeeklyReportController extends Controller
             'work_areas.*.*' => ['nullable', 'string', 'in:'.implode(',', array_keys(self::WORK_AREAS))],
         ]);
         $weekStart = Carbon::parse($data['week_start'])->startOfWeek(Carbon::MONDAY)->startOfDay();
-        $period = AdministrativeWeeklyPeriod::query()->whereDate('week_start', $weekStart)->first();
+        $period = $this->resolvePeriod($request, $weekStart);
         if (! $period || (! $request->user()->isLeader() && ! $period->isCurrentlyActive())) {
             throw ValidationException::withMessages([
                 'items' => 'Kỳ báo cáo này chưa được admin bật hoạt động hoặc đã được tắt.',
@@ -294,8 +320,9 @@ class AdministrativeWeeklyReportController extends Controller
         $averageScore = (int) round($reviewedRows->avg(fn (array $row) => $row['review']['score']));
         DB::transaction(function () use ($request, $weekStart, $period, $data, $reviewedRows, $averageScore): void {
             $report = AdministrativeWeeklyReport::query()->updateOrCreate(
-                ['user_id' => $request->user()->id, 'week_start' => $weekStart->toDateString()],
+                ['user_id' => $request->user()->id, 'period_id' => $period->id],
                 [
+                    'week_start' => $period->week_start->toDateString(),
                     'week_end' => $period->week_end->toDateString(),
                     'due_date' => $period->due_date->toDateString(),
                     'status' => $data['action'] === 'submit' ? 'submitted' : 'draft',
@@ -318,7 +345,7 @@ class AdministrativeWeeklyReportController extends Controller
             }
         });
 
-        return redirect()->route('administration.weekly.index', ['week' => $weekStart->toDateString()])
+        return redirect()->route('administration.weekly.index', ['period' => $period->id])
             ->with('success', $data['action'] === 'submit' ? 'Đã gửi báo cáo tuần về quản lý.' : 'Đã lưu bản nháp báo cáo tuần.');
     }
 
@@ -342,10 +369,10 @@ class AdministrativeWeeklyReportController extends Controller
     public function destroyReport(Request $request, AdministrativeWeeklyReport $report): RedirectResponse
     {
         abort_unless($request->user()->isLeader() || $report->user_id === $request->user()->id, 403);
-        $weekStart = $report->week_start->toDateString();
+        $periodId = $report->period_id;
         $report->delete();
 
-        return redirect()->route('administration.weekly.index', ['week' => $weekStart])
+        return redirect()->route('administration.weekly.index', ['period' => $periodId])
             ->with('success', 'Đã xóa báo cáo tuần.');
     }
 
@@ -353,11 +380,13 @@ class AdministrativeWeeklyReportController extends Controller
     {
         abort_unless($request->user()->isLeader(), 403);
         $weekStart = $this->weekStart($request->query('week'));
-        $period = AdministrativeWeeklyPeriod::query()->with('assignedUsers:id,name,email')->whereDate('week_start', $weekStart)->first();
+        $period = $this->resolvePeriod($request, $weekStart)?->load('assignedUsers:id,name,email');
+        abort_unless($period, 404, 'Không tìm thấy kỳ báo cáo tuần.');
+        $weekStart = $period->week_start->copy();
         $assignedUserIds = $period?->assignedUsers->pluck('id') ?? collect();
         $reports = AdministrativeWeeklyReport::query()
             ->with(['user:id,name,email', 'items'])
-            ->whereDate('week_start', $weekStart)
+            ->where('period_id', $period->id)
             ->whereIn('user_id', $assignedUserIds)
             ->where('status', 'submitted')
             ->orderBy('submitted_at')
@@ -371,7 +400,7 @@ class AdministrativeWeeklyReportController extends Controller
         $missingUsers = ($period?->assignedUsers ?? collect())
             ->whereNotIn('id', $submittedUserIds)
             ->sortBy('name')->values();
-        $compilation = AdministrativeWeeklyCompilation::query()->whereDate('week_start', $weekStart)->first();
+        $compilation = AdministrativeWeeklyCompilation::query()->where('period_id', $period->id)->first();
         $assignedCount = $period?->assignedUsers->count() ?? 0;
         $submittedCount = $reports->count();
         $onTimeCount = $reports->filter(fn ($report) => $report->submitted_at?->lessThanOrEqualTo($report->due_date->copy()->endOfDay()))->count();
@@ -382,8 +411,9 @@ class AdministrativeWeeklyReportController extends Controller
 
         return view('administration.weekly.summary', [
             'weekStart' => $weekStart,
-            'weekEnd' => $weekStart->copy()->endOfWeek(Carbon::SUNDAY),
-            'dueDate' => $weekStart->copy()->addDays(2),
+            'weekEnd' => $period->week_end->copy(),
+            'dueDate' => $period->due_date->copy(),
+            'period' => $period,
             'reports' => $reports,
             'items' => $items,
             'duplicateGroups' => $duplicateGroups,
@@ -406,6 +436,7 @@ class AdministrativeWeeklyReportController extends Controller
     {
         abort_unless($request->user()->isLeader(), 403);
         $data = $request->validate([
+            'period_id' => ['nullable', 'integer', 'exists:administrative_weekly_periods,id'],
             'week_start' => ['required', 'date'],
             'selected_item_ids' => ['nullable', 'array'],
             'selected_item_ids.*' => ['integer'],
@@ -415,11 +446,13 @@ class AdministrativeWeeklyReportController extends Controller
             'regenerate_official' => ['nullable', 'boolean'],
         ]);
         $weekStart = Carbon::parse($data['week_start'])->startOfWeek(Carbon::MONDAY)->startOfDay();
-        $assignedUserIds = AdministrativeWeeklyPeriod::query()->with('assignedUsers:id')->whereDate('week_start', $weekStart)
-            ->first()?->assignedUsers->pluck('id') ?? collect();
+        $period = $this->resolvePeriod($request, $weekStart)?->load('assignedUsers:id');
+        abort_unless($period, 404, 'Không tìm thấy kỳ báo cáo tuần.');
+        $weekStart = $period->week_start->copy();
+        $assignedUserIds = $period->assignedUsers->pluck('id');
         $availableItems = AdministrativeWeeklyReportItem::query()
             ->with('report.user:id,name')
-            ->whereHas('report', fn ($query) => $query->whereDate('week_start', $weekStart)->where('status', 'submitted')->whereIn('user_id', $assignedUserIds))
+            ->whereHas('report', fn ($query) => $query->where('period_id', $period->id)->where('status', 'submitted')->whereIn('user_id', $assignedUserIds))
             ->get();
         $selectedIds = collect($data['selected_item_ids'] ?? [])->map(fn ($id) => (int) $id)->unique();
         $selected = $availableItems->whereIn('id', $selectedIds)->values();
@@ -480,8 +513,9 @@ class AdministrativeWeeklyReportController extends Controller
         }
 
         AdministrativeWeeklyCompilation::query()->updateOrCreate(
-            ['week_start' => $weekStart->toDateString()],
+            ['period_id' => $period->id],
             [
+                'week_start' => $weekStart->toDateString(),
                 'week_end' => $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->toDateString(),
                 'content' => $content,
                 'official_content' => $officialContent,
@@ -492,7 +526,7 @@ class AdministrativeWeeklyReportController extends Controller
             ]
         );
 
-        return redirect()->route('administration.weekly.summary', ['week' => $weekStart->toDateString()])
+        return redirect()->route('administration.weekly.summary', ['period' => $period->id])
             ->with('success', ($usedAi || $usedOfficialAi)
                 ? 'AI đã lọc trùng, phân loại và lưu nội dung tổng hợp cùng báo cáo chính thức.'
                 : 'Đã lưu bản tổng hợp và mỗi nội dung trùng chỉ giữ một ý. Muốn AI tự phân tích, hãy cấu hình OPENAI_API_KEY.');
@@ -505,6 +539,16 @@ class AdministrativeWeeklyReportController extends Controller
         } catch (\Throwable) {
             return now()->startOfWeek(Carbon::MONDAY)->startOfDay();
         }
+    }
+
+    private function resolvePeriod(Request $request, ?Carbon $fallbackWeek = null): ?AdministrativeWeeklyPeriod
+    {
+        $periodId = $request->integer('period_id') ?: $request->integer('period');
+        if ($periodId) return AdministrativeWeeklyPeriod::query()->find($periodId);
+
+        return $fallbackWeek
+            ? AdministrativeWeeklyPeriod::query()->whereDate('week_start', $fallbackWeek)->orderBy('id')->first()
+            : null;
     }
 
     private function validAssigneeIds(array $ids): array

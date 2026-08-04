@@ -57,8 +57,9 @@ class WeeklyReportDemoSeeder extends Seeder
                 $number = $index + 1;
                 $score = 84 + $number;
                 $report = AdministrativeWeeklyReport::query()->updateOrCreate(
-                    ['user_id' => $user->id, 'week_start' => $period->week_start->toDateString()],
+                    ['user_id' => $user->id, 'period_id' => $period->id],
                     [
+                        'week_start' => $period->week_start->toDateString(),
                         'week_end' => $period->week_end->toDateString(),
                         'due_date' => $period->due_date->toDateString(),
                         'status' => 'submitted',

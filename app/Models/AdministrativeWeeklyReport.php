@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AdministrativeWeeklyReport extends Model
 {
-    protected $fillable = ['user_id','week_start','week_end','due_date','status','quality_score','review_payload','submitted_at','reviewed_by','reviewed_at','admin_note'];
+    protected $fillable = ['period_id','user_id','week_start','week_end','due_date','status','quality_score','review_payload','submitted_at','reviewed_by','reviewed_at','admin_note'];
 
     protected function casts(): array
     {
@@ -16,6 +16,7 @@ class AdministrativeWeeklyReport extends Model
     }
 
     public function user(): BelongsTo { return $this->belongsTo(User::class)->withTrashed(); }
+    public function period(): BelongsTo { return $this->belongsTo(AdministrativeWeeklyPeriod::class, 'period_id'); }
     public function reviewer(): BelongsTo { return $this->belongsTo(User::class, 'reviewed_by')->withTrashed(); }
     public function items(): HasMany { return $this->hasMany(AdministrativeWeeklyReportItem::class, 'report_id')->orderBy('sort_order'); }
 }
