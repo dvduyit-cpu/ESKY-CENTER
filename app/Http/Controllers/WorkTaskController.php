@@ -647,9 +647,15 @@ class WorkTaskController extends Controller
 
     public function downloadAttachment(Request $request, WorkTask $task, WorkTaskAttachment $attachment)
     {
-        $this->ensureCanViewTask($request, $task);
-        abort_unless($attachment->work_task_id === $task->id, 404);
-        abort_unless(Storage::disk('local')->exists($attachment->storage_path), 404);
+        $ownerTask = (int) $attachment->work_task_id === (int) $task->id
+            ? $task
+            : $attachment->task()->firstOrFail();
+        $this->ensureCanViewTask($request, $ownerTask);
+
+        $path = $this->resolveAttachmentPath($attachment);
+        if (! $path) {
+            return back()->with('warning', 'File đính kèm không còn tồn tại trên host. Vui lòng tải lại file hoặc liên hệ quản trị viên kiểm tra thư mục lưu trữ.');
+        }
 
         $extension = strtolower(pathinfo($attachment->original_name, PATHINFO_EXTENSION));
         $previewMimeTypes = [
@@ -666,11 +672,11 @@ class WorkTaskController extends Controller
 
         if ($request->boolean('preview') && $previewMime) {
             return response()
-                ->file(Storage::disk('local')->path($attachment->storage_path), ['Content-Type' => $previewMime])
+                ->file($path, ['Content-Type' => $previewMime])
                 ->setContentDisposition('inline', $attachment->original_name);
         }
 
-        return Storage::disk('local')->download($attachment->storage_path, $attachment->original_name);
+        return response()->download($path, $attachment->original_name);
     }
 
     public function destroyAttachment(Request $request, WorkTask $task, WorkTaskAttachment $attachment): RedirectResponse|JsonResponse
@@ -1098,6 +1104,23 @@ class WorkTaskController extends Controller
                 'error'=>$exception->getMessage(),
             ]);
         }
+    }
+
+    private function resolveAttachmentPath(WorkTaskAttachment $attachment): ?string
+    {
+        $storagePath = ltrim(str_replace('\\', '/', (string) $attachment->storage_path), '/');
+        if ($storagePath === '' || str_contains($storagePath, '../')) return null;
+
+        $disk = Storage::disk('local');
+        if ($disk->exists($storagePath)) {
+            return $disk->path($storagePath);
+        }
+
+        foreach ([storage_path('app/private/'.$storagePath), storage_path('app/'.$storagePath)] as $path) {
+            if (is_file($path)) return $path;
+        }
+
+        return null;
     }
 
     private function plainTextExcerpt(string $html): ?string

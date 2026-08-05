@@ -27,7 +27,7 @@ class LanguageClassController extends Controller
     {
         $user=$request->user();
         $query=LanguageClass::with(['program','level','teacher'])->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')]);
-        if($user->canTeach()||!($user->isAdmin()||$user->allowed('language_classes','update')))$query->where('teacher_user_id',$user->id);
+        if(! $this->canManageAllClasses($user))$query->where('teacher_user_id',$user->id);
         $request->boolean('history')?$query->whereIn('status',['completed','cancelled']):$query->whereNotIn('status',['completed','cancelled']);
         return view('language.classes.teacher-index',['items'=>$query->orderByDesc('start_date')->get()]);
     }
@@ -429,12 +429,10 @@ class LanguageClassController extends Controller
     private function authorizeManagement(Request $request,LanguageClass $class):void
     {
         $user=$request->user();
-        $teacherWorkspace=$request->routeIs('teacher-classes.*');
-        $allowed=$user->isTeacher()||($teacherWorkspace&&$user->canTeach())
-            ? $class->teacher_user_id===$user->id
-            : $user->isAdmin()||$user->allowed('language_classes','update')||$class->teacher_user_id===$user->id;
+        $allowed=$this->canManageAllClasses($user)||($user->canTeach()&&$class->teacher_user_id===$user->id);
         abort_unless($allowed,403,'Bạn không được phân công quản lý lớp này.');
     }
+    private function canManageAllClasses(User $user):bool{return $user->isAdmin()||$user->allowed('language_classes','update');}
     private function authorizeRegistrar(Request $request):void{$user=$request->user();abort_unless($user->isRegistrar(),403,'Chỉ tài khoản được đánh dấu Giáo vụ hoặc quản trị viên mới được xếp và chuyển học viên.');}
     private function form(LanguageClass $item):View{$students=LanguageStudent::with('guardians')->whereIn('status',['new','waiting_class','studying','dropped']);if($item->exists)$students->whereDoesntHave('enrollments',fn($q)=>$q->where('language_class_id',$item->id)->where('status','!=','dropped'));$teachers=User::query()->where(fn($query)=>$query->where(fn($active)=>$active->where('active',1)->instructors())->when($item->teacher_user_id,fn($query,$teacherId)=>$query->orWhere('id',$teacherId)))->orderBy('name')->get();return view('language.classes.form',compact('item','teachers')+['courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_course_id))->with(['program','level'])->orderBy('name')->get(),'discounts'=>LanguageDiscountPolicy::where(fn($query)=>$query->where('active',1)->when($item->language_discount_policy_id,fn($active,$id)=>$active->orWhere('id',$id)))->orderBy('name')->get(),'students'=>$students->orderBy('name')->get()]);}
 

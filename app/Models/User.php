@@ -90,22 +90,6 @@ class User extends Authenticatable
             return true;
         }
 
-        if ($this->isRegistrar()) {
-            $registrarPermissions = [
-                'language_students' => ['view', 'create', 'update'],
-                'language_classes' => ['view', 'update'],
-                'language_tuition' => ['view', 'create', 'update', 'export'],
-                'teacher_classes' => ['view'],
-            ];
-            if (in_array($action, $registrarPermissions[$moduleCode] ?? [], true)) {
-                return true;
-            }
-        }
-
-        if ($this->canTeach() && $moduleCode === 'teacher_classes' && in_array($action, ['view', 'update'], true)) {
-            return true;
-        }
-
         $column = 'can_'.$action;
         if (! in_array($column, ['can_view','can_create','can_update','can_delete','can_export'], true)) {
             return false;
@@ -123,6 +107,22 @@ class User extends Authenticatable
 
         if ($override) {
             return (bool) $override->{$column};
+        }
+
+        if ($this->isRegistrar()) {
+            $registrarPermissions = [
+                'language_students' => ['view', 'create', 'update'],
+                'language_classes' => ['view', 'update'],
+                'language_tuition' => ['view', 'create', 'update', 'export'],
+                'teacher_classes' => ['view'],
+            ];
+            if (in_array($action, $registrarPermissions[$moduleCode] ?? [], true)) {
+                return true;
+            }
+        }
+
+        if ($this->canTeach() && $moduleCode === 'teacher_classes' && in_array($action, ['view', 'update'], true)) {
+            return true;
         }
 
         if (! $this->role_id) {
