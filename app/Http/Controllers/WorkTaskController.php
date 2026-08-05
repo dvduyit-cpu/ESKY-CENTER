@@ -652,6 +652,12 @@ class WorkTaskController extends Controller
             : $attachment->task()->firstOrFail();
         $this->ensureCanViewTask($request, $ownerTask);
 
+        $disk = Storage::disk('local');
+        $storagePath = ltrim(str_replace('\\', '/', (string) $attachment->storage_path), '/');
+        if ($storagePath === '' || str_contains($storagePath, '../') || ! $disk->exists($storagePath)) {
+            return back()->with('warning', 'File đính kèm không còn tồn tại trên host. Vui lòng tải lại file hoặc liên hệ quản trị viên kiểm tra thư mục lưu trữ.');
+        }
+
         $path = $this->resolveAttachmentPath($attachment);
         if (! $path) {
             return back()->with('warning', 'File đính kèm không còn tồn tại trên host. Vui lòng tải lại file hoặc liên hệ quản trị viên kiểm tra thư mục lưu trữ.');
@@ -676,7 +682,7 @@ class WorkTaskController extends Controller
                 ->setContentDisposition('inline', $attachment->original_name);
         }
 
-        return response()->download($path, $attachment->original_name);
+        return $disk->download($storagePath, $attachment->original_name);
     }
 
     public function destroyAttachment(Request $request, WorkTask $task, WorkTaskAttachment $attachment): RedirectResponse|JsonResponse
