@@ -135,8 +135,12 @@ class LanguageTuitionController extends Controller
 
     public function updateDiscount(Request $request, LanguageTuitionCharge $languageTuition): RedirectResponse
     {
-        $data=$request->validate(['language_discount_policy_id'=>'nullable|integer|exists:language_discount_policies,id']);
-        DB::transaction(function()use($data,$languageTuition){
+        $data=$request->validate([
+            'language_discount_policy_id'=>'nullable|integer|exists:language_discount_policies,id',
+            'apply_mode'=>['nullable', Rule::in(['highest', 'student'])],
+        ]);
+        $applyMode=$data['apply_mode'] ?? 'highest';
+        DB::transaction(function()use($applyMode,$data,$languageTuition){
             $charge=LanguageTuitionCharge::lockForUpdate()->findOrFail($languageTuition->id);
             if($charge->outgoingTransfers()->exists())throw ValidationException::withMessages(['language_discount_policy_id'=>'Khoản thu đã quyết toán chuyển lớp nên không thể đổi chế độ miễn giảm.']);
             $personalDiscount=!empty($data['language_discount_policy_id'])?LanguageDiscountPolicy::findOrFail($data['language_discount_policy_id']):null;
@@ -144,7 +148,7 @@ class LanguageTuitionController extends Controller
             $classDiscount=$charge->languageClass?->language_discount_policy_id
                 ? LanguageDiscountPolicy::find($charge->languageClass->language_discount_policy_id)
                 : null;
-            $discount=LanguageDiscountResolver::highest($classDiscount,$personalDiscount);
+            $discount=$this->resolveManualDiscount($applyMode,$classDiscount,$personalDiscount);
 
             $percentage=(float)($discount?->percentage??0);
             $discountAmount=round((float)$charge->original_amount*$percentage/100,2);
@@ -164,6 +168,71 @@ class LanguageTuitionController extends Controller
         });
 
         return back()->with('success','Đã so sánh miễn giảm của lớp và học viên, chỉ áp dụng mức cao hơn để tính lại học phí.');
+    }
+
+    public function bulkApplyHighest(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:language_tuition_charges,id'],
+        ]);
+
+        $updated = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use (&$skipped, &$updated, $data) {
+            $charges = LanguageTuitionCharge::query()
+                ->with(['student', 'languageClass'])
+                ->whereIn('id', $data['ids'])
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($charges as $charge) {
+                if ($charge->outgoingTransfers()->exists()) {
+                    $skipped++;
+                    continue;
+                }
+
+                $studentDiscount = $charge->student?->language_discount_policy_id
+                    ? LanguageDiscountPolicy::find($charge->student->language_discount_policy_id)
+                    : null;
+                $classDiscount = $charge->languageClass?->language_discount_policy_id
+                    ? LanguageDiscountPolicy::find($charge->languageClass->language_discount_policy_id)
+                    : null;
+                $discount = LanguageDiscountResolver::highest($classDiscount, $studentDiscount);
+                $percentage = (float) ($discount?->percentage ?? 0);
+                $discountAmount = round((float) $charge->original_amount * $percentage / 100, 2);
+                $payableAmount = max(0, round((float) $charge->original_amount - $discountAmount, 2));
+                $settledAmount = (float) $charge->paid_amount + (float) $charge->credit_amount;
+
+                if ($payableAmount + 0.001 < $settledAmount) {
+                    $skipped++;
+                    continue;
+                }
+
+                $hasPendingReceipt = $charge->payments()->where('receipt_status', 'pending')->exists();
+                $status = $hasPendingReceipt
+                    ? 'pending_receipt'
+                    : ($settledAmount + 0.001 >= $payableAmount ? 'paid' : ($settledAmount > 0 ? 'partial' : 'unpaid'));
+
+                $charge->update([
+                    'language_discount_policy_id' => $discount?->id,
+                    'discount_percentage' => $percentage,
+                    'discount_amount' => $discountAmount,
+                    'payable_amount' => $payableAmount,
+                    'status' => $status,
+                ]);
+
+                $updated++;
+            }
+        });
+
+        $message = "Da ap dung muc mien giam cao nhat cho {$updated} khoan thu.";
+        if ($skipped > 0) {
+            return back()->with('warning', $message." Bo qua {$skipped} khoan thu khong the cap nhat.");
+        }
+
+        return back()->with('success', $message);
     }
 
     public function pay(Request $request, LanguageTuitionCharge $languageTuition): RedirectResponse
@@ -329,6 +398,24 @@ class LanguageTuitionController extends Controller
         ];
         $bank['enabled'] = $bank['enabled'] && $bank['bin'] !== '' && $bank['account_number'] !== '' && $bank['account_name'] !== '';
         return $bank;
+    }
+
+    private function resolveManualDiscount(
+        string $applyMode,
+        ?LanguageDiscountPolicy $classDiscount,
+        ?LanguageDiscountPolicy $personalDiscount
+    ): ?LanguageDiscountPolicy {
+        if ($applyMode === 'student') {
+            if (! $personalDiscount) {
+                throw ValidationException::withMessages([
+                    'language_discount_policy_id' => 'Vui long chon mien giam rieng cua hoc vien de ap dung.',
+                ]);
+            }
+
+            return $personalDiscount;
+        }
+
+        return LanguageDiscountResolver::highest($classDiscount, $personalDiscount);
     }
 
     private function applyPeriod($query, Request $request): void

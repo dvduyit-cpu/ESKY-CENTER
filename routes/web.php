@@ -158,6 +158,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-tuition/create',[LanguageTuitionController::class,'create'])->middleware('permission:language_tuition,create')->name('language-tuition.create');
         Route::get('/language-tuition/{languageTuition}',[LanguageTuitionController::class,'show'])->middleware('permission:language_tuition,view')->name('language-tuition.show');
         Route::post('/language-tuition',[LanguageTuitionController::class,'store'])->middleware('permission:language_tuition,create')->name('language-tuition.store');
+        Route::patch('/language-tuition/discount/highest', [LanguageTuitionController::class, 'bulkApplyHighest'])->middleware('permission:language_tuition,update')->name('language-tuition.discount.bulk-highest');
         Route::patch('/language-tuition/{languageTuition}/discount',[LanguageTuitionController::class,'updateDiscount'])->middleware('permission:language_tuition,update')->name('language-tuition.discount.update');
         Route::post('/language-tuition/{languageTuition}/pay',[LanguageTuitionController::class,'pay'])->middleware('permission:language_tuition,update')->name('language-tuition.pay');
         Route::post('/language-tuition-payments/{languageTuitionPayment}/confirm-receipt',[LanguageTuitionController::class,'confirmReceipt'])->middleware('permission:language_tuition,update')->name('language-tuition.confirm-receipt');
