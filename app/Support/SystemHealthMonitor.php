@@ -97,7 +97,7 @@ class SystemHealthMonitor
             'Môi trường PHP',
             'Đọc và nhập Excel XLSX',
             $zipReady,
-            $zipReady ? 'PHP ZipArchive đã sẵn sàng.' : 'Thiếu PHP ZipArchive; tải mẫu và nhập tệp XLSX sẽ thất bại. Hãy bật extension=zip trong php.ini.',
+            $zipReady ? 'PHP ZipArchive đã sẵn sàng.' : 'Thiếu PHP ZipArchive; tệp XLSX và một số báo cáo Excel sẽ bị giới hạn. Các màn có hỗ trợ CSV vẫn dùng được, nhưng nên bật extension=zip trong php.ini để dùng đầy đủ.',
             'error'
         );
 

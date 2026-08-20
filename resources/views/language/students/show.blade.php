@@ -38,7 +38,7 @@ $guardianLabels=['father'=>'Cha','mother'=>'Mẹ','guardian'=>'Người giám h�
             <div class="col-md-4"><div class="student-profile-field"><span>Khóa học trung tâm</span><strong>{{$item->course?->name?:'Chưa chọn'}}</strong>@if($item->course?->code)<small>{{$item->course->code}}</small>@endif</div></div>
             <div class="col-md-4"><div class="student-profile-field"><span>Ngày đăng ký</span><strong>{{$item->registered_at?->format('d/m/Y')?:'Chưa cập nhật'}}</strong></div></div>
             <div class="col-md-4"><div class="student-profile-field"><span>Ngày nhập học chính thức</span><strong>{{$item->official_enrollment_date?->format('d/m/Y')?:'Chưa nhập học'}}</strong></div></div>
-            <div class="col-md-4"><div class="student-profile-field"><span>Đối tượng miễn giảm</span><strong>{{$item->discountPolicy?->name?:'Không miễn giảm'}}</strong>@if($item->discountPolicy)<small>{{$item->discountPolicy->percentage}}%</small>@endif</div></div>
+            <div class="col-md-4"><div class="student-profile-field"><span>Đối tượng miễn giảm</span><strong>{{$item->discountPolicy?->name?:'Không miễn giảm'}}</strong>@if($item->discountPolicy)<small>{{\App\Support\ValueFormatter::percentage($item->discountPolicy->percentage)}}%</small>@endif</div></div>
             <div class="col-12"><div class="student-profile-field"><span>Ghi chú hồ sơ</span><strong class="fw-normal">{!!$item->note?nl2br(e($item->note)):'Chưa cập nhật'!!}</strong></div></div>
         </div>
 

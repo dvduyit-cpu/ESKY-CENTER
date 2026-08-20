@@ -6,6 +6,12 @@ use Illuminate\Support\Str;
 
 class TextNormalizer
 {
+    public static function exactName(?string $value): string
+    {
+        return Str::of((string) $value)->trim()->lower()
+            ->replaceMatches('/[^\pL\pN]+/u', ' ')->squish()->toString();
+    }
+
     public static function name(?string $value): string
     {
         return Str::of((string) $value)->trim()->lower()->ascii()

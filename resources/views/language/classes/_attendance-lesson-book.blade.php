@@ -6,8 +6,12 @@
     $canManageLessons = auth()->user()->allowed('teacher_classes','update');
     $defaultLessonDate = $selectedLesson?->lesson_date?->format('Y-m-d')
         ?? ($month->isSameMonth(now()) ? now()->format('Y-m-d') : $month->copy()->endOfMonth()->format('Y-m-d'));
-    $defaultStartTime = $selectedLesson ? substr((string) $selectedLesson->start_time, 0, 5) : '18:00';
-    $defaultEndTime = $selectedLesson ? substr((string) $selectedLesson->end_time, 0, 5) : '19:30';
+    $defaultStartTime = $selectedLesson
+        ? substr((string) $selectedLesson->start_time, 0, 5)
+        : ($languageClass->default_start_time ? substr((string) $languageClass->default_start_time, 0, 5) : '18:00');
+    $defaultEndTime = $selectedLesson
+        ? substr((string) $selectedLesson->end_time, 0, 5)
+        : ($languageClass->default_end_time ? substr((string) $languageClass->default_end_time, 0, 5) : '19:30');
 @endphp
 
 <section class="mb-4">

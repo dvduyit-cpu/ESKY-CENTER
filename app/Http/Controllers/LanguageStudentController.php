@@ -7,6 +7,7 @@ use App\Support\ActivityLogger;
 use App\Support\LanguageStudentSpreadsheet;
 use App\Support\LanguageEnrollmentManager;
 use App\Support\LanguageStudentMergeService;
+use App\Support\SpreadsheetSupport;
 use App\Support\TextNormalizer;
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
@@ -29,13 +30,18 @@ class LanguageStudentController extends Controller
         ])->latest();
         if ($request->filled('q')) {
             $search = (string) $request->string('q')->trim();
-            $query->where(function ($builder) use ($search) {
+            $normalizedSearchIds = $this->matchingStudentIdsByNormalizedName($search);
+            $query->where(function ($builder) use ($search, $normalizedSearchIds) {
                 $builder->where('name', 'like', "%{$search}%")
                     ->orWhere('code', 'like', "%{$search}%")
                     ->orWhere('phone', 'like', "%{$search}%")
                     ->orWhereHas('guardians', fn ($guardians) => $guardians
                         ->where('name', 'like', "%{$search}%")
                         ->orWhere('phone', 'like', "%{$search}%"));
+
+                if ($normalizedSearchIds !== []) {
+                    $builder->orWhereIn('id', $normalizedSearchIds);
+                }
             });
         }
         if ($request->filled('status')) $query->where('status', $request->status);
@@ -96,6 +102,38 @@ class LanguageStudentController extends Controller
         usort($groups, fn ($left, $right) => strcasecmp($left[0]->name, $right[0]->name));
 
         return $groups;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function matchingStudentIdsByNormalizedName(string $search): array
+    {
+        $normalizedSearch = TextNormalizer::name($search);
+        if ($normalizedSearch === '') {
+            return [];
+        }
+
+        return LanguageStudent::query()
+            ->with('guardians:id,language_student_id,name,phone')
+            ->get(['id', 'name'])
+            ->filter(function (LanguageStudent $student) use ($normalizedSearch): bool {
+                if (str_contains(TextNormalizer::name($student->name), $normalizedSearch)) {
+                    return true;
+                }
+
+                foreach ($student->guardians as $guardian) {
+                    if (str_contains(TextNormalizer::name($guardian->name), $normalizedSearch)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            })
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
     }
 
     public function duplicates(): View
@@ -249,30 +287,58 @@ class LanguageStudentController extends Controller
     {
         abort_unless($request->user()?->isRegistrar(), 403, 'Chỉ giáo vụ hoặc quản trị viên được nhập danh sách và xếp lớp học viên.');
         $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
             'duplicate_action' => ['nullable', Rule::in(['skip', 'overwrite'])],
         ], [
             'file.required' => 'Vui lòng chọn file Excel.',
-            'file.mimes' => 'File tải lên phải có định dạng .xlsx hoặc .xls.',
+            'file.mimes' => 'File tải lên phải có định dạng .xlsx, .xls hoặc .csv.',
             'file.max' => 'File Excel không được lớn hơn 10 MB.',
             'duplicate_action.in' => 'Cách xử lý hồ sơ trùng không hợp lệ.',
         ]);
 
         $streamProgress = $request->header('X-Import-Progress') === 'stream';
-        if (! class_exists(\ZipArchive::class)) {
-            if ($streamProgress) {
+        $validateOnly = $request->header('X-Import-Validate') === 'preview';
+        $file = $request->file('file');
+        if (! SpreadsheetSupport::canReadUpload($file)) {
+            $message = SpreadsheetSupport::missingZipImportMessage(
+                SpreadsheetSupport::uploadedExtension($file)
+            );
+
+            if ($streamProgress || $validateOnly) {
                 return response()->json([
-                    'message' => 'Máy chủ chưa bật PHP ZipArchive nên chưa thể đọc file Excel. Vui lòng liên hệ quản trị viên để bật extension=zip.',
+                    'message' => $message,
                 ], 422);
             }
 
             return redirect()->route('language-students.index')->withErrors([
-                'file' => 'Máy chủ chưa bật PHP ZipArchive nên chưa thể đọc file Excel. Vui lòng liên hệ quản trị viên để bật extension=zip.',
+                'file' => $message,
+            ]);
+        }
+
+        if ($validateOnly) {
+            try {
+                $result = $spreadsheet->import(
+                    $file,
+                    $request->input('duplicate_action') === 'overwrite',
+                    null,
+                    true
+                );
+            } catch (\Throwable $exception) {
+                return response()->json([
+                    'message' => 'Khong the kiem tra file: '.$exception->getMessage(),
+                ], 422);
+            }
+
+            return response()->json([
+                'ok' => $result['failed'] === 0,
+                'message' => $result['failed'] === 0
+                    ? 'File hop le. Ban co the bam Nhap hoc vien.'
+                    : "Da kiem tra xong, co {$result['failed']} dong loi can sua truoc khi nhap.",
+                'result' => $result,
             ]);
         }
 
         if ($streamProgress) {
-            $file = $request->file('file');
             $overwriteExisting = $request->input('duplicate_action') === 'overwrite';
 
             return response()->stream(function () use ($spreadsheet, $file, $overwriteExisting): void {
@@ -347,12 +413,6 @@ class LanguageStudentController extends Controller
 
     public function template(LanguageStudentSpreadsheet $spreadsheet): StreamedResponse|RedirectResponse
     {
-        if (! class_exists(\ZipArchive::class)) {
-            return redirect()->route('language-students.index')->withErrors([
-                'file' => 'Máy chủ chưa bật PHP ZipArchive nên chưa thể tạo file Excel mẫu. Vui lòng liên hệ quản trị viên để bật extension=zip.',
-            ]);
-        }
-
         return $spreadsheet->template();
     }
 

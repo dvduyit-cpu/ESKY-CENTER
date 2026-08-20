@@ -8,6 +8,7 @@ use App\Models\KpiRecord;
 use App\Models\Personnel;
 use App\Support\ActivityLogger;
 use App\Support\Period;
+use App\Support\SpreadsheetSupport;
 use App\Support\TextNormalizer;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -176,6 +177,14 @@ class ImportController extends Controller
         if ($data['period_type'] === 'quarter' && empty($data['quarter'])) return back()->withErrors(['quarter' => 'Vui lòng chọn quý.']);
 
         $file = $request->file('file');
+        if (! SpreadsheetSupport::canReadUpload($file)) {
+            return back()->withErrors([
+                'file' => SpreadsheetSupport::missingZipImportMessage(
+                    SpreadsheetSupport::uploadedExtension($file)
+                ),
+            ]);
+        }
+
         $hash = hash_file('sha256', $file->getRealPath());
         if (ImportBatch::where('file_hash', $hash)->where('status', 'completed')->exists()) {
             return back()->withErrors(['file' => 'File này đã được nhập trước đó.']);
@@ -284,12 +293,22 @@ class ImportController extends Controller
 
     public function template(): StreamedResponse
     {
+        $headers = ['STT','HỌ TÊN HỌC VIÊN','NHÂN SỰ GHI NHẬN','CỘNG TÁC VIÊN','KHÓA HỌC','LỚP ĐĂNG KÝ','THỰC THU','SỐ PHIẾU THU','NGÀY GHI NHẬN','SỐ LƯỢNG','GHI CHÚ'];
+        $sampleRow = [1,'Nguyễn Văn A','Giáo viên mẫu','','Chứng nhận B1','B1-TVU',1500000,'PT001',now()->format('d/m/Y'),1,'B1: đủ 2 lượt tính 1 KPI'];
+
+        if (! SpreadsheetSupport::hasZipArchive()) {
+            return SpreadsheetSupport::streamCsvDownload(
+                'mau-nhap-ket-qua-kpi.csv',
+                $headers,
+                [$sampleRow]
+            );
+        }
+
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('DU LIEU KPI');
-        $headers = ['STT','HỌ TÊN HỌC VIÊN','NHÂN SỰ GHI NHẬN','CỘNG TÁC VIÊN','KHÓA HỌC','LỚP ĐĂNG KÝ','THỰC THU','SỐ PHIẾU THU','NGÀY GHI NHẬN','SỐ LƯỢNG','GHI CHÚ'];
         $sheet->fromArray($headers, null, 'A1');
-        $sheet->fromArray([1,'Nguyễn Văn A','Giáo viên mẫu','','Chứng nhận B1','B1-TVU',1500000,'PT001',now()->format('d/m/Y'),1,'B1: đủ 2 lượt tính 1 KPI'], null, 'A2');
+        $sheet->fromArray($sampleRow, null, 'A2');
         $sheet->getStyle('A1:K1')->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
         $sheet->getStyle('A1:K1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF0F766E');
         foreach (range('A','K') as $column) $sheet->getColumnDimension($column)->setAutoSize(true);

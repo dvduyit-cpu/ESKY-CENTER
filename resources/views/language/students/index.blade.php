@@ -66,8 +66,8 @@
                 <div class="modal-body">
                     <div data-student-import-picker>
                         <label class="form-label" for="student-import-file">Chọn file Excel <span class="text-danger">*</span></label>
-                        <input class="form-control" id="student-import-file" type="file" name="file" accept=".xlsx,.xls" required>
-                        <div class="form-text mt-2">Nên tải file mẫu mới nhất, giữ nguyên hàng tiêu đề và xem sheet HƯỚNG DẪN trước khi nhập.</div>
+                        <input class="form-control" id="student-import-file" type="file" name="file" accept=".xlsx,.xls,.csv" required>
+                        <div class="form-text mt-2">Nen tai file mau moi nhat, giu nguyen hang tieu de va xem sheet HUONG DAN truoc khi nhap. Bam Kiem tra file truoc, chi khi khong co dong loi moi cho nhap.</div>
                     </div>
                     <div class="d-none" data-student-import-progress aria-live="polite">
                         <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
@@ -90,8 +90,9 @@
                 <div class="modal-footer">
                     <a class="btn btn-light me-auto" href="{{route('language-students.template')}}" data-no-loading download data-student-import-action><i class="bi bi-download me-2"></i>Tải file mẫu</a>
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-student-import-close data-student-import-action>Hủy</button>
-                    <button class="btn btn-primary" name="duplicate_action" value="skip" data-student-import-action><i class="bi bi-shield-check me-2"></i>Nhập, không ghi đè</button>
-                    <button class="btn btn-warning" name="duplicate_action" value="overwrite" data-student-import-action><i class="bi bi-arrow-repeat me-2"></i>Nhập và ghi đè</button>
+                    <button type="button" class="btn btn-outline-primary" data-student-import-validate data-student-import-action><i class="bi bi-clipboard2-check me-2"></i>Kiem tra file</button>
+                    <button class="btn btn-primary" name="duplicate_action" value="skip" data-student-import-action data-student-import-submit disabled><i class="bi bi-shield-check me-2"></i>Nhập, không ghi đè</button>
+                    <button class="btn btn-warning" name="duplicate_action" value="overwrite" data-student-import-action data-student-import-submit disabled><i class="bi bi-arrow-repeat me-2"></i>Nhập và ghi đè</button>
                     <button type="button" class="btn btn-primary d-none" data-student-import-finish><i class="bi bi-arrow-clockwise me-2"></i>Đóng và tải lại danh sách</button>
                 </div>
             </form>

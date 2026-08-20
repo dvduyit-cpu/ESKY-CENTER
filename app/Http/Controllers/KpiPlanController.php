@@ -8,6 +8,7 @@ use App\Models\KpiTarget;
 use App\Models\Personnel;
 use App\Support\ActivityLogger;
 use App\Support\Period;
+use App\Support\SpreadsheetSupport;
 use App\Support\TextNormalizer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -188,7 +189,21 @@ class KpiPlanController extends Controller
         ]);
         $this->validatePeriod($data);
 
-        $sheet = IOFactory::load($request->file('file')->getRealPath())->getActiveSheet();
+        $file = $request->file('file');
+        if (! SpreadsheetSupport::canReadUpload($file)) {
+            return back()->withErrors([
+                'file' => SpreadsheetSupport::missingZipImportMessage(
+                    SpreadsheetSupport::uploadedExtension($file)
+                ),
+            ]);
+        }
+
+        try {
+            $sheet = IOFactory::load($file->getRealPath())->getActiveSheet();
+        } catch (\Throwable $exception) {
+            return back()->withErrors(['file' => 'Không thể đọc file: '.$exception->getMessage()]);
+        }
+
         $rows = $sheet->toArray(null, true, true, false);
         if (count($rows) < 2) return back()->withErrors(['file' => 'File không có dữ liệu.']);
 
@@ -241,6 +256,17 @@ class KpiPlanController extends Controller
 
     public function template(): StreamedResponse
     {
+        $headers = ['STT','HỌ TÊN NHÂN SỰ','CHỈ TIÊU','DOANH THU MỤC TIÊU','BẮT BUỘC','MỨC THANH TOÁN KPI VƯỢT','GHI CHÚ'];
+        $sampleRow = [1,'Giáo viên mẫu',42,0,'Có',100000,'Chỉ tiêu tổng'];
+
+        if (! SpreadsheetSupport::hasZipArchive()) {
+            return SpreadsheetSupport::streamCsvDownload(
+                'mau-nhap-chi-tieu.csv',
+                $headers,
+                [$sampleRow]
+            );
+        }
+
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('NHAP CHI TIEU');

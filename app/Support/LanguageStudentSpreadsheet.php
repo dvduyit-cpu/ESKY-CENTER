@@ -56,6 +56,11 @@ class LanguageStudentSpreadsheet
      */
     private array $studentIdentityIndex = [];
 
+    /**
+     * @var array<string, array<int, array{student:LanguageStudent,phones:array<string, true>}>>
+     */
+    private array $studentExactIdentityIndex = [];
+
     public function __construct(private readonly LanguageEnrollmentManager $enrollmentManager) {}
 
     private const HEADERS = [
@@ -89,7 +94,8 @@ class LanguageStudentSpreadsheet
     public function import(
         UploadedFile $file,
         bool $overwriteExisting = false,
-        ?callable $progress = null
+        ?callable $progress = null,
+        bool $validateOnly = false
     ): array
     {
         $spreadsheet = IOFactory::load($file->getRealPath());
@@ -159,7 +165,12 @@ class LanguageStudentSpreadsheet
             ]);
         }
 
-        foreach ($dataRows as $dataRow) {
+        if ($validateOnly) {
+            DB::beginTransaction();
+        }
+
+        try {
+            foreach ($dataRows as $dataRow) {
             $rowNumber = $dataRow['number'];
             $row = $dataRow['values'];
             $result['total']++;
@@ -211,6 +222,11 @@ class LanguageStudentSpreadsheet
                     'failed' => $result['failed'],
                 ]);
             }
+            }
+        } finally {
+            if ($validateOnly && DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
         }
 
         if ($result['failed'] > count($result['errors'])) {
@@ -228,6 +244,37 @@ class LanguageStudentSpreadsheet
 
     public function template(): StreamedResponse
     {
+        if (! SpreadsheetSupport::hasZipArchive()) {
+            return SpreadsheetSupport::streamCsvDownload(
+                'mau-nhap-hoc-vien.csv',
+                self::HEADERS,
+                [[
+                    1,
+                    '',
+                    'Nguyễn Văn A',
+                    'Nam',
+                    '15/08/2012',
+                    'THCS Mẫu',
+                    '7A1',
+                    '0912345678',
+                    '',
+                    '',
+                    now()->format('d/m/Y'),
+                    '',
+                    'Facebook',
+                    '',
+                    '',
+                    '',
+                    'Mới đăng ký',
+                    '',
+                    'Nguyễn Thị B',
+                    'Mẹ',
+                    '0987654321',
+                    '',
+                ]]
+            );
+        }
+
         $spreadsheet = new Spreadsheet();
         $spreadsheet->getProperties()
             ->setTitle('Mẫu nhập học viên')
@@ -359,10 +406,8 @@ class LanguageStudentSpreadsheet
             trim((string) $this->cell($row, $headers, 'MA LOP TRUNG TAM')),
             'lớp trung tâm'
         );
-        $discount = $this->findByCode(
-            LanguageDiscountPolicy::class,
-            trim((string) $this->cell($row, $headers, 'MA MIEN GIAM')),
-            'chính sách miễn giảm'
+        $discount = $this->findDiscountPolicy(
+            trim((string) $this->cell($row, $headers, 'MA MIEN GIAM'))
         );
 
         if ($class?->language_course_id && $course && (int) $class->language_course_id !== (int) $course->id) {
@@ -566,6 +611,7 @@ class LanguageStudentSpreadsheet
     private function buildStudentIdentityIndex(): void
     {
         $this->studentIdentityIndex = [];
+        $this->studentExactIdentityIndex = [];
 
         LanguageStudent::query()
             ->with('guardians:id,language_student_id,phone')
@@ -578,12 +624,24 @@ class LanguageStudentSpreadsheet
      */
     private function indexStudent(LanguageStudent $student, array $extraPhones = []): void
     {
-        $name = TextNormalizer::name($student->name);
-        if ($name === '') {
+        $normalizedName = TextNormalizer::name($student->name);
+        $exactName = TextNormalizer::exactName($student->name);
+        if ($normalizedName === '' && $exactName === '') {
             return;
         }
 
-        $phones = $this->studentIdentityIndex[$name][$student->id]['phones'] ?? [];
+        $phones = [];
+        foreach ([
+            $normalizedName === '' ? [] : ($this->studentIdentityIndex[$normalizedName][$student->id]['phones'] ?? []),
+            $exactName === '' ? [] : ($this->studentExactIdentityIndex[$exactName][$student->id]['phones'] ?? []),
+        ] as $knownPhones) {
+            foreach ($knownPhones as $phone => $present) {
+                if ($present) {
+                    $phones[$phone] = true;
+                }
+            }
+        }
+
         foreach ([$student->phone, ...$extraPhones] as $phone) {
             $normalized = TextNormalizer::phone($phone);
             if ($normalized !== null) {
@@ -599,10 +657,18 @@ class LanguageStudentSpreadsheet
             }
         }
 
-        $this->studentIdentityIndex[$name][$student->id] = [
-            'student' => $student,
-            'phones' => $phones,
-        ];
+        if ($normalizedName !== '') {
+            $this->studentIdentityIndex[$normalizedName][$student->id] = [
+                'student' => $student,
+                'phones' => $phones,
+            ];
+        }
+        if ($exactName !== '') {
+            $this->studentExactIdentityIndex[$exactName][$student->id] = [
+                'student' => $student,
+                'phones' => $phones,
+            ];
+        }
     }
 
     /**
@@ -610,21 +676,25 @@ class LanguageStudentSpreadsheet
      */
     private function findMatchingStudent(string $name, array $phones): ?LanguageStudent
     {
+        $exactName = TextNormalizer::exactName($name);
         $name = TextNormalizer::name($name);
         $phones = array_values(array_filter(array_map(
             fn ($phone) => TextNormalizer::phone($phone),
             $phones
         )));
-        if ($name === '' || $phones === []) {
+        if (($exactName === '' && $name === '') || $phones === []) {
             return null;
         }
 
-        $matches = [];
-        foreach ($this->studentIdentityIndex[$name] ?? [] as $identity) {
-            if (array_intersect($phones, array_keys($identity['phones'])) !== []) {
-                $matches[$identity['student']->id] = $identity['student'];
-            }
+        $exactMatches = $this->matchingStudentsFromIndex($this->studentExactIdentityIndex, $exactName, $phones);
+        if (count($exactMatches) > 1) {
+            throw new \RuntimeException('Co nhieu ho so hoc vien trung ho ten va so dien thoai. Vui long gop thu cong truoc khi nhap lai.');
         }
+        if (count($exactMatches) === 1) {
+            return reset($exactMatches)->fresh();
+        }
+
+        $matches = $this->matchingStudentsFromIndex($this->studentIdentityIndex, $name, $phones);
 
         if (count($matches) > 1) {
             throw new \RuntimeException(
@@ -633,6 +703,26 @@ class LanguageStudentSpreadsheet
         }
 
         return $matches ? reset($matches)->fresh() : null;
+    }
+    /**
+     * @param array<string, array<int, array{student:LanguageStudent,phones:array<string, true>}>> $index
+     * @param array<int, string> $phones
+     * @return array<int, LanguageStudent>
+     */
+    private function matchingStudentsFromIndex(array $index, string $name, array $phones): array
+    {
+        if ($name === '') {
+            return [];
+        }
+
+        $matches = [];
+        foreach ($index[$name] ?? [] as $identity) {
+            if (array_intersect($phones, array_keys($identity['phones'])) !== []) {
+                $matches[$identity['student']->id] = $identity['student'];
+            }
+        }
+
+        return $matches;
     }
 
 
@@ -648,6 +738,42 @@ class LanguageStudentSpreadsheet
         }
 
         return $item;
+    }
+
+    private function findDiscountPolicy(string $code): ?LanguageDiscountPolicy
+    {
+        $code = trim($code);
+        if ($code === '') {
+            return null;
+        }
+
+        $policy = LanguageDiscountPolicy::query()->where('code', $code)->first();
+        if ($policy) {
+            return $policy;
+        }
+
+        $normalizedNumeric = str_replace([' ', '%', ','], ['', '', '.'], $code);
+        if (is_numeric($normalizedNumeric)) {
+            $percentage = round((float) $normalizedNumeric, 2);
+            $matches = LanguageDiscountPolicy::query()
+                ->where('percentage', $percentage)
+                ->orderByDesc('active')
+                ->orderBy('id')
+                ->get();
+
+            if ($matches->count() === 1) {
+                return $matches->first();
+            }
+
+            if ($matches->count() > 1) {
+                $activeMatch = $matches->firstWhere('active', true);
+                if ($activeMatch) {
+                    return $activeMatch;
+                }
+            }
+        }
+
+        throw new \RuntimeException("Không tìm thấy chính sách miễn giảm có mã {$code}.");
     }
 
     private function parseDate(mixed $value, string $label): ?Carbon
@@ -673,8 +799,15 @@ class LanguageStudentSpreadsheet
         }
 
         $text = trim((string) $value);
+        $text = preg_replace('/(?<=\d)[,.]00(?=\/|$)/', '', $text) ?: $text;
 
-        if (preg_match('/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})$/', $text, $matches)) {
+        if (preg_match('/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+\d{1,2}:\d{1,2}(:\d{1,2})?$/', $text)) {
+            $text = preg_replace('/\s+\d{1,2}:\d{1,2}(:\d{1,2})?$/', '', $text) ?: $text;
+        }
+
+        $normalized = str_replace(['.', '-'], '/', $text);
+
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/', $normalized, $matches)) {
             $day = (int) $matches[1];
             $month = (int) $matches[2];
             $year = (int) $matches[3];
@@ -687,7 +820,7 @@ class LanguageStudentSpreadsheet
             }
         }
 
-        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $text, $matches)) {
+        if (preg_match('/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/', $normalized, $matches)) {
             $year = (int) $matches[1];
             $month = (int) $matches[2];
             $day = (int) $matches[3];
@@ -695,6 +828,18 @@ class LanguageStudentSpreadsheet
             if (checkdate($month, $day, $year)) {
                 return Carbon::create($year, $month, $day)->startOfDay();
             }
+        }
+
+        foreach (['d/m/Y', 'j/n/Y', 'd/m/y', 'j/n/y', 'Y/m/d', 'Y/n/j'] as $format) {
+            try {
+                return Carbon::createFromFormat($format, $normalized)->startOfDay();
+            } catch (\Throwable) {
+            }
+        }
+
+        try {
+            return Carbon::parse($text)->startOfDay();
+        } catch (\Throwable) {
         }
 
         throw new \RuntimeException(ucfirst($label).' phải có định dạng ngày/tháng/năm, ví dụ 5/7/2026 hoặc 05/07/2026.');
