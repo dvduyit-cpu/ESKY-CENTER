@@ -87,7 +87,13 @@ class LanguageEnrollmentManager
                 ->first();
             $chargeDeleted = false;
 
-            if ($charge && (float) $charge->paid_amount <= 0 && (float) $charge->credit_amount <= 0 && ! $charge->payments()->exists()) {
+            if (
+                $charge
+                && (float) $charge->paid_amount <= 0
+                && (float) $charge->credit_amount <= 0
+                && ! $charge->payments()->exists()
+                && ! $charge->incomingTransfers()->exists()
+            ) {
                 $charge->delete();
                 $chargeDeleted = true;
             }
