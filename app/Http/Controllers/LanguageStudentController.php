@@ -515,10 +515,35 @@ class LanguageStudentController extends Controller
     private function syncCurrentClass(Request $request, LanguageStudent $student): void
     {
         $data = $request->validate(['language_class_id'=>'nullable|exists:language_classes,id']);
-        if (empty($data['language_class_id'])) return;
+        $activeEnrollments = $student->enrollments()
+            ->whereIn('status', ['studying', 'paused', 'reserved'])
+            ->with('languageClass')
+            ->orderByDesc('enrolled_at')
+            ->get();
+
+        if ($activeEnrollments->count() > 1) {
+            throw ValidationException::withMessages([
+                'language_class_id' => 'Học viên đang có nhiều lớp còn hiệu lực. Vui lòng xử lý tại Quản lý lớp học trước khi sửa hồ sơ này.',
+            ]);
+        }
+
+        $currentEnrollment = $activeEnrollments->first();
+        $targetClassId = isset($data['language_class_id']) ? (int) $data['language_class_id'] : null;
+
+        if (! $targetClassId) return;
+
+        if ($currentEnrollment && (int) $currentEnrollment->language_class_id !== $targetClassId) {
+            $currentClassLabel = $currentEnrollment->languageClass?->code
+                ? $currentEnrollment->languageClass->code.' - '.$currentEnrollment->languageClass->name
+                : 'một lớp khác';
+
+            throw ValidationException::withMessages([
+                'language_class_id' => 'Học viên đang ở '.$currentClassLabel.'. Hãy dùng chức năng Chuyển lớp hoặc Đưa khỏi lớp trong Quản lý lớp học trước khi đổi lớp tại hồ sơ học viên.',
+            ]);
+        }
         $user = $request->user();
         abort_unless($user?->isRegistrar(), 403, 'Chỉ tài khoản được đánh dấu Giáo vụ hoặc quản trị viên mới được xếp học viên vào lớp.');
-        $class = LanguageClass::findOrFail($data['language_class_id']);
+        $class = LanguageClass::findOrFail($targetClassId);
         $this->enrollmentManager->enroll(
             $class,
             $student,
