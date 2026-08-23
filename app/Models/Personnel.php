@@ -24,6 +24,7 @@ class Personnel extends Model
 
     public function user(): HasOne { return $this->hasOne(User::class)->withTrashed(); }
     public function targets(): HasMany { return $this->hasMany(KpiTarget::class); }
+    public function teachingReports(): HasMany { return $this->hasMany(KpiTeachingReport::class); }
     public function records(): HasMany { return $this->hasMany(KpiRecord::class); }
     public function collaboratorRecords(): HasMany { return $this->hasMany(KpiRecord::class, 'collaborator_id'); }
 

@@ -70,7 +70,8 @@
         @if($me->allowed('teacher_classes') || $me->allowed('language_classes') || $me->allowed('language_programs') || $me->allowed('language_courses'))
         <div class="sidebar-label">Đào tạo</div>
         <nav class="sidebar-nav nav flex-column">
-            @if($me->allowed('teacher_classes'))<a class="nav-link {{ request()->routeIs('teacher-classes.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>@endif
+            @if($me->allowed('teacher_classes'))<a class="nav-link {{ request()->routeIs('teacher-classes.*') && !request()->routeIs('teacher-classes.teaching-load.*') ? 'active' : '' }}" href="{{ route('teacher-classes.index') }}"><i class="bi bi-journal-check"></i> Lớp giảng dạy & điểm</a>@endif
+            @if($me->canTeach() && $me->personnel_id)<a class="nav-link {{ request()->routeIs('teacher-classes.teaching-load.*') ? 'active' : '' }}" href="{{ route('teacher-classes.teaching-load.index') }}"><i class="bi bi-clock-history"></i> Báo cáo tiết dạy</a>@endif
             @if($me->allowed('language_classes'))<a class="nav-link {{ request()->routeIs('language-classes.*') ? 'active' : '' }}" href="{{ route('language-classes.index') }}"><i class="bi bi-easel2-fill"></i> Quản lý lớp học</a>@endif
             @if($me->allowed('language_programs'))<a class="nav-link {{ request()->routeIs('language-programs.*') ? 'active' : '' }}" href="{{ route('language-programs.index') }}"><i class="bi bi-journal-richtext"></i> Chương trình & cấp độ</a>@endif
             @if($me->allowed('language_courses'))<a class="nav-link {{ request()->routeIs('language-center-courses.*') ? 'active' : '' }}" href="{{ route('language-center-courses.index') }}"><i class="bi bi-book-fill"></i> Khóa học trung tâm</a>@endif
@@ -93,6 +94,12 @@
             @if($me->allowed('imports'))<a class="nav-link {{ request()->routeIs('imports.index','imports.create','imports.template') ? 'active' : '' }}" href="{{ route('imports.index') }}"><i class="bi bi-file-earmark-spreadsheet"></i> Nhập kết quả Excel</a><a class="nav-link {{ request()->routeIs('imports.records') ? 'active' : '' }}" href="{{ route('imports.records') }}"><i class="bi bi-table"></i> Tổng dữ liệu đã nhập</a>@endif
             @if($me->allowed('reports'))<a class="nav-link {{ request()->routeIs('reports.*') ? 'active' : '' }}" href="{{ route('reports.index') }}"><i class="bi bi-bar-chart-line-fill"></i> Báo cáo</a>@endif
             @if($me->allowed('payments'))<a class="nav-link {{ request()->routeIs('payments.*') ? 'active' : '' }}" href="{{ route('payments.index') }}"><i class="bi bi-cash-coin"></i> Thanh toán vượt</a>@endif
+        </nav>
+        @endif
+        @if($me->allowed('tools'))
+        <div class="sidebar-label">Tiện ích</div>
+        <nav class="sidebar-nav nav flex-column">
+            <a class="nav-link {{ request()->routeIs('tools.*') ? 'active' : '' }}" href="{{ route('tools.index') }}"><i class="bi bi-tools"></i> Tool tiện ích</a>
         </nav>
         @endif
         @if($me->allowed('personnel') || $me->allowed('users') || $me->allowed('roles') || $me->allowed('logs'))
@@ -141,6 +148,7 @@
                 str_starts_with($routeName, 'language-students') => 'Học viên',
                 str_starts_with($routeName, 'language-programs') => 'Chương trình & cấp độ',
                 str_starts_with($routeName, 'language-classes') => 'Lớp học',
+                str_starts_with($routeName, 'teacher-classes.teaching-load') => 'Báo cáo tiết dạy',
                 str_starts_with($routeName, 'teacher-classes') => 'Lớp giảng dạy & điểm',
                 default => '',
             };

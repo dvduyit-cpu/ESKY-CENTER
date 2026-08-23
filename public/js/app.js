@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const scope = select.closest('form') || document;
             scope.querySelectorAll('[data-period-month]').forEach(item => item.classList.toggle('d-none', select.value !== 'month'));
             scope.querySelectorAll('[data-period-quarter]').forEach(item => item.classList.toggle('d-none', select.value !== 'quarter'));
+            scope.querySelectorAll('[data-period-year]').forEach(item => item.classList.toggle('d-none', select.value !== 'year'));
         };
         select.addEventListener('change', update);
         update();

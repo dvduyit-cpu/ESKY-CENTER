@@ -20,6 +20,7 @@ use App\Http\Controllers\LanguageStudentController;
 use App\Http\Controllers\LanguageProgramController;
 use App\Http\Controllers\LanguageClassController;
 use App\Http\Controllers\ThemeController;
+use App\Http\Controllers\ToolController;
 use App\Http\Controllers\LanguageDashboardController;
 use App\Http\Controllers\SystemDashboardController;
 use App\Http\Controllers\LanguageCollaboratorController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\PersonalSettingsController;
 use App\Http\Controllers\AdminSystemTestController;
 use App\Http\Controllers\AdministrativeDocumentController;
 use App\Http\Controllers\AdministrativeWeeklyReportController;
+use App\Http\Controllers\TeacherTeachingLoadController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -120,6 +122,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/language-programs/{languageProgram}/levels', [LanguageProgramController::class, 'storeLevel'])->middleware('permission:language_programs,create')->name('language-programs.levels.store');
         Route::delete('/language-programs/{languageProgram}/levels/{level}', [LanguageProgramController::class, 'destroyLevel'])->middleware('permission:language_programs,delete')->name('language-programs.levels.destroy');
         Route::get('/teacher-classes',[LanguageClassController::class,'teacherIndex'])->middleware('permission:teacher_classes,view')->name('teacher-classes.index');
+        Route::get('/teacher-classes/teaching-load',[TeacherTeachingLoadController::class,'index'])->middleware('permission:teacher_classes,view')->name('teacher-classes.teaching-load.index');
+        Route::post('/teacher-classes/teaching-load',[TeacherTeachingLoadController::class,'store'])->middleware('permission:teacher_classes,update')->name('teacher-classes.teaching-load.store');
         Route::get('/teacher-classes/{languageClass}/gradebook',[LanguageClassController::class,'gradebook'])->middleware('permission:teacher_classes,view')->name('teacher-classes.gradebook');
         Route::get('/teacher-classes/{languageClass}/print-lesson-book',[LanguageClassController::class,'printLessonBook'])->middleware('permission:teacher_classes,view')->name('teacher-classes.lesson-book.print');
         Route::post('/teacher-classes/{languageClass}/enrollments',[LanguageClassController::class,'teacherEnroll'])->middleware('permission:language_classes,update')->name('teacher-classes.enrollments.store');
@@ -249,6 +253,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::patch('/payments/{payment}/approve', [PaymentController::class, 'approve'])->middleware('permission:payments,update')->name('payments.approve');
         Route::patch('/payments/{payment}/paid', [PaymentController::class, 'paid'])->middleware('permission:payments,update')->name('payments.paid');
         Route::patch('/payments/{payment}/cancel', [PaymentController::class, 'cancel'])->middleware('permission:payments,update')->name('payments.cancel');
+        Route::get('/tools', [ToolController::class, 'index'])->middleware('permission:tools,view')->name('tools.index');
+        Route::post('/tools/shipping-label/print', [ToolController::class, 'printShippingLabel'])->middleware('permission:tools,create')->name('tools.shipping.print');
+        Route::get('/tools/tuition-qr/template', [ToolController::class, 'tuitionQrTemplate'])->middleware('permission:tools,view')->name('tools.tuition.template');
+        Route::post('/tools/tuition-qr/preview', [ToolController::class, 'previewTuitionQrs'])->middleware('permission:tools,create')->name('tools.tuition.preview');
 
         Route::get('/logs', [LogController::class, 'index'])->middleware('permission:logs,view')->name('logs.index');
     });

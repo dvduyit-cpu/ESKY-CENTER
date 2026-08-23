@@ -1,3 +1,4 @@
 *
 !.gitignore
 !LanguageEnrollmentManagerTest.php
+!LanguageTuitionQuickCollectionTest.php

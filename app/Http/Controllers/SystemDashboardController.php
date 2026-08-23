@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{ActivityLog,AdministrativeWeeklyPeriod,AdministrativeWeeklyReport,ExcessPayment,ImportBatch,LanguageClass,LanguageLead,LanguageStudent,LanguageTuitionCharge,LanguageTuitionPayment,Personnel,User,WorkTask,WorkTaskAssignee};
+use App\Models\{ActivityLog,AdministrativeWeeklyPeriod,AdministrativeWeeklyReport,ExcessPayment,ImportBatch,KpiPlan,KpiTarget,KpiTeachingReport,LanguageClass,LanguageLead,LanguageStudent,LanguageTuitionCharge,LanguageTuitionPayment,Personnel,User,WorkTask,WorkTaskAssignee};
 use App\Support\{ExcelExporter,KpiCalculator};
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -72,6 +72,48 @@ class SystemDashboardController extends Controller
                 ->get()
             : collect();
 
+        $teachingSummary = [
+            'assigned' => 0.0,
+            'reported' => 0.0,
+            'remaining' => 0.0,
+            'exceeded' => 0.0,
+            'progress' => 0.0,
+            'reported_months' => 0,
+            'has_target' => false,
+            'last_updated_at' => null,
+        ];
+        if (! $canViewAll && $user->personnel_id) {
+            $teachingPlan = KpiPlan::query()->where('year', $year)->first();
+            $teachingTarget = $teachingPlan
+                ? KpiTarget::query()
+                    ->where('plan_id', $teachingPlan->id)
+                    ->where('personnel_id', $user->personnel_id)
+                    ->where('period_type', 'year')
+                    ->first()
+                : null;
+            $teachingReports = KpiTeachingReport::query()
+                ->when($teachingPlan, fn ($query) => $query->where('plan_id', $teachingPlan->id))
+                ->where('personnel_id', $user->personnel_id)
+                ->where('report_year', $year)
+                ->get();
+
+            $assignedTeachingLoad = round((float) ($teachingTarget?->assigned_teaching_load ?? 0), 2);
+            $reportedTeachingLoad = round((float) $teachingReports->sum('reported_teaching_load'), 2);
+            $teachingProgress = $assignedTeachingLoad > 0
+                ? round(($reportedTeachingLoad / $assignedTeachingLoad) * 100, 1)
+                : 0.0;
+            $teachingSummary = [
+                'assigned' => $assignedTeachingLoad,
+                'reported' => $reportedTeachingLoad,
+                'remaining' => round(max($assignedTeachingLoad - $reportedTeachingLoad, 0), 2),
+                'exceeded' => round(max($reportedTeachingLoad - $assignedTeachingLoad, 0), 2),
+                'progress' => $teachingProgress,
+                'reported_months' => $teachingReports->pluck('report_month')->unique()->count(),
+                'has_target' => (bool) $teachingTarget && $assignedTeachingLoad > 0,
+                'last_updated_at' => $teachingReports->sortByDesc('updated_at')->first()?->updated_at,
+            ];
+        }
+
         $weeklyReportCard=null;
         if($user->allowed('administration')){
             $weeklyPeriod=AdministrativeWeeklyPeriod::query()
@@ -109,6 +151,7 @@ class SystemDashboardController extends Controller
             'classStatuses'=>(clone $classes)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'tuitionStatuses'=>(clone $charges)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'financial'=>$financial,'workTaskStats'=>$workTaskStats,'taskRecipientStats'=>$taskRecipientStats,'weeklyReportCard'=>$weeklyReportCard,
+            'teachingSummary' => $teachingSummary,
             'recentActivities'=>$canViewAll?$activities->limit(8)->get():collect(),'recentImports'=>$imports->limit(6)->get(),
         ]);
     }
@@ -125,6 +168,13 @@ class SystemDashboardController extends Controller
             ['Công việc','Đã nhận việc',$data['workTaskStats']['acknowledged'],'lượt',$period],
             ['Công việc','Đã hoàn thành',$data['workTaskStats']['completed'],'lượt',$period],
         ]);
+        if(!$data['canViewAll']){
+            $rows[]=['Giảng dạy','Tiết được giao',$data['teachingSummary']['assigned'],'tiết','Năm '.$data['year']];
+            $rows[]=['Giảng dạy','Tiết đã báo cáo',$data['teachingSummary']['reported'],'tiết','Năm '.$data['year']];
+            $rows[]=['Giảng dạy','Tiết còn lại',$data['teachingSummary']['remaining'],'tiết','Năm '.$data['year']];
+            $rows[]=['Giảng dạy','Tiết vượt',$data['teachingSummary']['exceeded'],'tiết','Năm '.$data['year']];
+            $rows[]=['Giảng dạy','Tiến độ giảng dạy',$data['teachingSummary']['progress'],'%','Năm '.$data['year']];
+        }
         foreach($data['leadStatuses'] as $status=>$total)$rows[]=['Trạng thái tư vấn',$status,$total,'khách hàng',$period];
         foreach($data['studentStatuses'] as $status=>$total)$rows[]=['Trạng thái học viên',$status,$total,'học viên',$period];
         foreach($data['classStatuses'] as $status=>$total)$rows[]=['Trạng thái lớp học',$status,$total,'lớp',$period];

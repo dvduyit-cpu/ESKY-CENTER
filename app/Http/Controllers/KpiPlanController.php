@@ -4,17 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use App\Models\KpiPlan;
+use App\Models\KpiRecord;
 use App\Models\KpiTarget;
 use App\Models\Personnel;
+use App\Models\User;
 use App\Support\ActivityLogger;
 use App\Support\Period;
 use App\Support\SpreadsheetSupport;
 use App\Support\TextNormalizer;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -27,7 +30,10 @@ class KpiPlanController extends Controller
     public function index(): View
     {
         return view('kpis.index', [
-            'plans' => KpiPlan::withCount('targets')->orderByDesc('year')->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'plans' => KpiPlan::withCount('targets')
+                ->orderByDesc('year')
+                ->paginate(\App\Support\Pagination::perPage())
+                ->withQueryString(),
         ]);
     }
 
@@ -39,14 +45,16 @@ class KpiPlanController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'year' => ['required','integer','min:2020','max:2100','unique:kpi_plans,year'],
-            'name' => ['required','string','max:200'],
-            'status' => ['required', Rule::in(['draft','active','closed'])],
-            'settlement_scope' => ['required', Rule::in(['month','quarter','year'])],
-            'note' => ['nullable','string'],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100', 'unique:kpi_plans,year'],
+            'name' => ['required', 'string', 'max:200'],
+            'status' => ['required', Rule::in(['draft', 'active', 'closed'])],
+            'settlement_scope' => ['required', Rule::in(['month', 'quarter', 'year'])],
+            'note' => ['nullable', 'string'],
         ]);
+
         $plan = KpiPlan::create($data + ['created_by' => $request->user()->id]);
         ActivityLogger::log('kpis', 'create_plan', 'Tạo kế hoạch chỉ tiêu năm '.$plan->year, $plan);
+
         return redirect()->route('kpis.show', $plan)->with('success', 'Đã tạo kế hoạch chỉ tiêu năm.');
     }
 
@@ -58,15 +66,24 @@ class KpiPlanController extends Controller
     public function update(Request $request, KpiPlan $plan): RedirectResponse
     {
         $data = $request->validate([
-            'year' => ['required','integer','min:2020','max:2100', Rule::unique('kpi_plans')->ignore($plan->id)],
-            'name' => ['required','string','max:200'],
-            'status' => ['required', Rule::in(['draft','active','closed'])],
-            'settlement_scope' => ['required', Rule::in(['month','quarter','year'])],
-            'note' => ['nullable','string'],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100', Rule::unique('kpi_plans')->ignore($plan->id)],
+            'name' => ['required', 'string', 'max:200'],
+            'status' => ['required', Rule::in(['draft', 'active', 'closed'])],
+            'settlement_scope' => ['required', Rule::in(['month', 'quarter', 'year'])],
+            'note' => ['nullable', 'string'],
         ]);
+
         $before = $plan->toArray();
         $plan->update($data);
-        ActivityLogger::log('kpis', 'update_plan', 'Cập nhật kế hoạch chỉ tiêu năm '.$plan->year, $plan, $before, $plan->fresh()->toArray());
+        ActivityLogger::log(
+            'kpis',
+            'update_plan',
+            'Cập nhật kế hoạch chỉ tiêu năm '.$plan->year,
+            $plan,
+            $before,
+            $plan->fresh()->toArray()
+        );
+
         return redirect()->route('kpis.show', $plan)->with('success', 'Đã cập nhật kế hoạch.');
     }
 
@@ -76,15 +93,24 @@ class KpiPlanController extends Controller
         $plan->delete();
         ActivityLogger::log('kpis', 'delete_plan', 'Xóa kế hoạch chỉ tiêu năm '.$year);
 
-        return redirect()->route('kpis.index')->with('success', 'Đã xóa kế hoạch chỉ tiêu năm '.$year.' và các dòng chỉ tiêu liên quan.');
+        return redirect()
+            ->route('kpis.index')
+            ->with('success', 'Đã xóa kế hoạch chỉ tiêu năm '.$year.' và các dòng chỉ tiêu liên quan.');
     }
 
     public function bulkDestroyPlans(Request $request): RedirectResponse
     {
-        $ids = $request->validate(['ids' => ['required','array','min:1'], 'ids.*' => ['integer']])['ids'];
+        $ids = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ])['ids'];
+
         $plans = KpiPlan::whereKey($ids)->get();
         $count = $plans->count();
-        foreach ($plans as $plan) $plan->delete();
+        foreach ($plans as $plan) {
+            $plan->delete();
+        }
+
         ActivityLogger::log('kpis', 'bulk_delete_plans', 'Xóa '.$count.' kế hoạch chỉ tiêu');
 
         return back()->with('success', 'Đã xóa '.$count.' kế hoạch và các dòng chỉ tiêu liên quan.');
@@ -92,18 +118,91 @@ class KpiPlanController extends Controller
 
     public function show(Request $request, KpiPlan $plan): View
     {
-        $query = $plan->targets()->with(['personnel','course'])->latest();
-        if ($request->filled('period_type')) $query->where('period_type', $request->string('period_type'));
-        if ($request->filled('quarter')) $query->where('quarter', $request->integer('quarter'));
-        if ($request->filled('month')) $query->where('month', $request->integer('month'));
-        if ($request->filled('personnel_id')) $query->where('personnel_id', $request->integer('personnel_id'));
-        if ($request->filled('course_id')) $query->where('course_id', $request->integer('course_id'));
+        $query = $plan->targets()->with(['personnel', 'course'])->latest();
+        if ($request->filled('period_type')) {
+            $query->where('period_type', $request->string('period_type'));
+        }
+        if ($request->filled('quarter')) {
+            $query->where('quarter', $request->integer('quarter'));
+        }
+        if ($request->filled('month')) {
+            $query->where('month', $request->integer('month'));
+        }
+        if ($request->filled('personnel_id')) {
+            $query->where('personnel_id', $request->integer('personnel_id'));
+        }
+        if ($request->filled('course_id')) {
+            $query->where('course_id', $request->integer('course_id'));
+        }
+
+        $teachingTargetQuery = $plan->targets()
+            ->with('personnel')
+            ->where('period_type', 'year')
+            ->where('assigned_teaching_load', '>', 0)
+            ->whereHas('personnel', fn ($personnel) => $personnel
+                ->where('type', 'teacher')
+                ->orWhereHas('user', fn ($user) => $user->instructors()));
+
+        if ($request->filled('personnel_id')) {
+            $teachingTargetQuery->where('personnel_id', $request->integer('personnel_id'));
+        }
+
+        $teachingTargets = $teachingTargetQuery->get()->sortBy(fn ($target) => $target->personnel?->name ?? '')->values();
+        $teachingReports = $plan->teachingReports()
+            ->with(['personnel', 'reporter'])
+            ->when($request->filled('personnel_id'), fn ($reportQuery) => $reportQuery->where('personnel_id', $request->integer('personnel_id')))
+            ->orderBy('report_month')
+            ->get()
+            ->groupBy('personnel_id');
+
+        $teachingLoadSummary = $teachingTargets->map(function (KpiTarget $target) use ($teachingReports): array {
+            $reports = $teachingReports->get($target->personnel_id, collect())->sortBy('report_month')->values();
+            $assigned = round((float) $target->assigned_teaching_load, 2);
+            $reported = round((float) $reports->sum('reported_teaching_load'), 2);
+
+            return [
+                'personnel' => $target->personnel,
+                'target' => $target,
+                'assigned_teaching_load' => $assigned,
+                'reported_teaching_load' => $reported,
+                'remaining_teaching_load' => round(max($assigned - $reported, 0), 2),
+                'exceeded_teaching_load' => round(max($reported - $assigned, 0), 2),
+                'report_count' => $reports->count(),
+                'reported_months' => $reports->pluck('report_month')->values(),
+                'latest_report' => $reports->last(),
+            ];
+        })->values();
+
+        $teachingLoadTotals = [
+            'assigned_teaching_load' => round((float) $teachingLoadSummary->sum('assigned_teaching_load'), 2),
+            'reported_teaching_load' => round((float) $teachingLoadSummary->sum('reported_teaching_load'), 2),
+            'remaining_teaching_load' => round((float) $teachingLoadSummary->sum('remaining_teaching_load'), 2),
+            'exceeded_teaching_load' => round((float) $teachingLoadSummary->sum('exceeded_teaching_load'), 2),
+            'teacher_count' => $teachingLoadSummary->count(),
+        ];
+
+        $targets = $query->paginate(\App\Support\Pagination::perPage())->withQueryString();
+        $actualQuantityMap = $this->actualQuantitiesForTargets($targets->getCollection(), (int) $plan->year);
+        $reportedTeachingLoadMap = $teachingReports->map(
+            fn ($reports) => round((float) $reports->sum('reported_teaching_load'), 2)
+        );
+
+        $targets->setCollection(
+            $targets->getCollection()->map(function (KpiTarget $target) use ($actualQuantityMap, $reportedTeachingLoadMap) {
+                $target->actual_quantity = (float) $actualQuantityMap->get($this->targetProgressKey($target), 0);
+                $target->reported_teaching_load = (float) $reportedTeachingLoadMap->get($target->personnel_id, 0);
+
+                return $target;
+            })
+        );
 
         return view('kpis.show', [
             'plan' => $plan,
-            'targets' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'targets' => $targets,
             'personnels' => Personnel::where('active', true)->where('type', '!=', 'collaborator')->orderBy('name')->get(),
             'courses' => Course::where('active', true)->orderBy('name')->get(),
+            'teachingLoadSummary' => $teachingLoadSummary,
+            'teachingLoadTotals' => $teachingLoadTotals,
         ]);
     }
 
@@ -121,55 +220,89 @@ class KpiPlanController extends Controller
     {
         $data = $this->targetData($request);
         $this->guardDuplicate($plan, $data);
+
         $target = $plan->targets()->create($data + ['created_by' => $request->user()->id]);
         ActivityLogger::log('kpis', 'create_target', 'Giao chỉ tiêu cho '.$target->personnel->name, $target);
+
         return redirect()->route('kpis.show', $plan)->with('success', 'Đã giao chỉ tiêu.');
     }
 
     public function editTarget(KpiPlan $plan, KpiTarget $target): View
     {
         abort_unless((int) $target->plan_id === (int) $plan->id, 404);
+
         return view('kpis.target-form', [
             'plan' => $plan,
             'target' => $target,
             'personnels' => Personnel::where('type', '!=', 'collaborator')
                 ->where(fn ($query) => $query->where('active', true)->orWhere('id', $target->personnel_id))
-                ->orderBy('name')->get(),
+                ->orderBy('name')
+                ->get(),
             'courses' => Course::where(fn ($query) => $query->where('active', true)->orWhere('id', $target->course_id))
-                ->orderBy('name')->get(),
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
     public function updateTarget(Request $request, KpiPlan $plan, KpiTarget $target): RedirectResponse
     {
         abort_unless((int) $target->plan_id === (int) $plan->id, 404);
+
         $data = $this->targetData($request);
         $this->guardDuplicate($plan, $data, $target);
+
         $before = $target->toArray();
         $target->update($data);
-        ActivityLogger::log('kpis', 'update_target', 'Cập nhật chỉ tiêu '.$target->personnel->name, $target, $before, $target->fresh()->toArray());
+        ActivityLogger::log(
+            'kpis',
+            'update_target',
+            'Cập nhật chỉ tiêu '.$target->personnel->name,
+            $target,
+            $before,
+            $target->fresh()->toArray()
+        );
+
         return redirect()->route('kpis.show', $plan)->with('success', 'Đã cập nhật chỉ tiêu.');
     }
 
     public function destroyTarget(KpiPlan $plan, KpiTarget $target): RedirectResponse
     {
         abort_unless((int) $target->plan_id === (int) $plan->id, 404);
+
         $target->delete();
         ActivityLogger::log('kpis', 'delete_target', 'Xóa mềm chỉ tiêu', $target);
+
         return back()->with('success', 'Đã xóa chỉ tiêu.');
     }
 
     public function bulkDestroyTargets(Request $request, KpiPlan $plan): RedirectResponse
     {
-        $data = $request->validate(['ids' => ['required','array','min:1'], 'ids.*' => ['integer'], 'delete_type' => ['required', Rule::in(['soft','force'])]]);
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'delete_type' => ['required', Rule::in(['soft', 'force'])],
+        ]);
         $force = $data['delete_type'] === 'force';
+
         abort_if($force && ! $request->user()->isAdmin(), 403, 'Chỉ quản trị viên được xóa vĩnh viễn.');
+
         $targets = $plan->targets()->withTrashed()->whereKey($data['ids'])->get();
         $deleted = 0;
+
         foreach ($targets as $target) {
-            try { $force ? $target->forceDelete() : $target->delete(); $deleted++; } catch (QueryException) {}
+            try {
+                $force ? $target->forceDelete() : $target->delete();
+                $deleted++;
+            } catch (QueryException) {
+            }
         }
-        ActivityLogger::log('kpis', $force ? 'bulk_force_delete_targets' : 'bulk_delete_targets', ($force ? 'Xóa vĩnh viễn ' : 'Xóa mềm ').$deleted.' chỉ tiêu', $plan);
+
+        ActivityLogger::log(
+            'kpis',
+            $force ? 'bulk_force_delete_targets' : 'bulk_delete_targets',
+            ($force ? 'Xóa vĩnh viễn ' : 'Xóa mềm ').$deleted.' chỉ tiêu',
+            $plan
+        );
 
         return back()->with('success', 'Đã '.($force ? 'xóa vĩnh viễn ' : 'xóa mềm ').$deleted.' chỉ tiêu.');
     }
@@ -182,10 +315,10 @@ class KpiPlanController extends Controller
     public function import(Request $request, KpiPlan $plan): RedirectResponse
     {
         $data = $request->validate([
-            'period_type' => ['required', Rule::in(['month','quarter'])],
-            'quarter' => ['nullable','integer','min:1','max:4'],
-            'month' => ['nullable','integer','min:1','max:12'],
-            'file' => ['required','file','mimes:xlsx,xls,csv','max:10240'],
+            'period_type' => ['required', Rule::in(['month', 'quarter'])],
+            'quarter' => ['nullable', 'integer', 'min:1', 'max:4'],
+            'month' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
         ]);
         $this->validatePeriod($data);
 
@@ -205,59 +338,87 @@ class KpiPlanController extends Controller
         }
 
         $rows = $sheet->toArray(null, true, true, false);
-        if (count($rows) < 2) return back()->withErrors(['file' => 'File không có dữ liệu.']);
-
-        $headers = [];
-        foreach ($rows[0] as $index => $header) $headers[TextNormalizer::header((string) $header)] = $index;
-        foreach (['HO TEN NHAN SU','CHI TIEU'] as $required) {
-            if (! array_key_exists($required, $headers)) return back()->withErrors(['file' => 'Thiếu cột '.$required.'.']);
+        if (count($rows) < 2) {
+            return back()->withErrors(['file' => 'File không có dữ liệu.']);
         }
 
-        $success = 0; $errors = [];
+        $headers = [];
+        foreach ($rows[0] as $index => $header) {
+            $headers[TextNormalizer::header((string) $header)] = $index;
+        }
+        foreach (['HO TEN NHAN SU', 'CHI TIEU'] as $required) {
+            if (! array_key_exists($required, $headers)) {
+                return back()->withErrors(['file' => 'Thiếu cột '.$required.'.']);
+            }
+        }
+
+        $success = 0;
+        $errors = [];
+
         DB::transaction(function () use ($rows, $headers, $plan, $data, $request, &$success, &$errors): void {
             foreach (array_slice($rows, 1) as $offset => $row) {
                 $rowNo = $offset + 2;
                 $personName = trim((string) ($row[$headers['HO TEN NHAN SU']] ?? ''));
-                if ($personName === '') continue;
+                if ($personName === '') {
+                    continue;
+                }
+
                 try {
                     $personnel = Personnel::where('normalized_name', TextNormalizer::name($personName))->first();
-                    if (! $personnel) throw new \RuntimeException('Không tìm thấy nhân sự: '.$personName);
+                    if (! $personnel) {
+                        throw new \RuntimeException('Không tìm thấy nhân sự: '.$personName);
+                    }
+
                     $mandatoryText = TextNormalizer::header((string) ($row[$headers['BAT BUOC'] ?? -1] ?? 'CO'));
                     $targetData = [
                         'personnel_id' => $personnel->id,
                         'course_id' => null,
                         'period_type' => $data['period_type'],
-                        'quarter' => $data['period_type'] === 'month' ? Period::quarterOfMonth((int) $data['month']) : (int) $data['quarter'],
+                        'quarter' => $data['period_type'] === 'month'
+                            ? Period::quarterOfMonth((int) $data['month'])
+                            : (int) $data['quarter'],
                         'month' => $data['period_type'] === 'month' ? (int) $data['month'] : 0,
                         'target_quantity' => (float) ($row[$headers['CHI TIEU']] ?? 0),
+                        'assigned_teaching_load' => 0,
                         'target_revenue' => (float) ($row[$headers['DOANH THU MUC TIEU'] ?? -1] ?? 0),
-                        'is_mandatory' => in_array($mandatoryText, ['CO','YES','1','BAT BUOC'], true),
+                        'is_mandatory' => in_array($mandatoryText, ['CO', 'YES', '1', 'BAT BUOC'], true),
                         'excess_payment_per_kpi' => (float) ($row[$headers['MUC THANH TOAN KPI VUOT'] ?? -1] ?? 0),
                         'note' => (string) ($row[$headers['GHI CHU'] ?? -1] ?? ''),
                         'created_by' => $request->user()->id,
                     ];
-                    KpiTarget::updateOrCreate([
-                        'plan_id' => $plan->id,
-                        'personnel_id' => $personnel->id,
-                        'course_id' => null,
-                        'period_type' => $targetData['period_type'],
-                        'quarter' => $targetData['quarter'],
-                        'month' => $targetData['month'],
-                    ], $targetData);
+
+                    KpiTarget::updateOrCreate(
+                        [
+                            'plan_id' => $plan->id,
+                            'personnel_id' => $personnel->id,
+                            'course_id' => null,
+                            'period_type' => $targetData['period_type'],
+                            'quarter' => $targetData['quarter'],
+                            'month' => $targetData['month'],
+                        ],
+                        $targetData
+                    );
+
                     $success++;
-                } catch (\Throwable $e) {
-                    $errors[] = "Dòng {$rowNo}: ".$e->getMessage();
+                } catch (\Throwable $exception) {
+                    $errors[] = "Dòng {$rowNo}: ".$exception->getMessage();
                 }
             }
         });
+
         ActivityLogger::log('kpis', 'import_targets', "Nhập {$success} chỉ tiêu vào năm {$plan->year}", $plan);
-        return redirect()->route('kpis.show', $plan)->with('success', "Đã nhập {$success} dòng chỉ tiêu.".(count($errors) ? ' Có '.count($errors).' dòng lỗi: '.implode(' | ', array_slice($errors, 0, 3)) : ''));
+
+        return redirect()->route('kpis.show', $plan)->with(
+            'success',
+            "Đã nhập {$success} dòng chỉ tiêu."
+            .(count($errors) ? ' Có '.count($errors).' dòng lỗi: '.implode(' | ', array_slice($errors, 0, 3)) : '')
+        );
     }
 
     public function template(): StreamedResponse
     {
-        $headers = ['STT','HỌ TÊN NHÂN SỰ','CHỈ TIÊU','DOANH THU MỤC TIÊU','BẮT BUỘC','MỨC THANH TOÁN KPI VƯỢT','GHI CHÚ'];
-        $sampleRow = [1,'Giáo viên mẫu',42,0,'Có',100000,'Chỉ tiêu tổng'];
+        $headers = ['STT', 'HỌ TÊN NHÂN SỰ', 'CHỈ TIÊU', 'DOANH THU MỤC TIÊU', 'BẮT BUỘC', 'MỨC THANH TOÁN KPI VƯỢT', 'GHI CHÚ'];
+        $sampleRow = [1, 'Giáo viên mẫu', 42, 0, 'Có', 100000, 'Chỉ tiêu tổng'];
 
         if (! SpreadsheetSupport::hasZipArchive()) {
             return SpreadsheetSupport::streamCsvDownload(
@@ -270,58 +431,164 @@ class KpiPlanController extends Controller
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('NHAP CHI TIEU');
-        $headers = ['STT','HỌ TÊN NHÂN SỰ','CHỈ TIÊU','DOANH THU MỤC TIÊU','BẮT BUỘC','MỨC THANH TOÁN KPI VƯỢT','GHI CHÚ'];
         $sheet->fromArray($headers, null, 'A1');
-        $sheet->fromArray([1,'Giáo viên mẫu',42,0,'Có',100000,'Chỉ tiêu tổng'], null, 'A2');
+        $sheet->fromArray($sampleRow, null, 'A2');
         $sheet->getStyle('A1:G1')->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
         $sheet->getStyle('A1:G1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF1E3A8A');
-        foreach (range('A','G') as $column) $sheet->getColumnDimension($column)->setAutoSize(true);
+        foreach (range('A', 'G') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
         $sheet->freezePane('A2');
-        return response()->streamDownload(fn () => (new Xlsx($spreadsheet))->save('php://output'), 'mau-nhap-chi-tieu.xlsx', [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
+
+        return response()->streamDownload(
+            fn () => (new Xlsx($spreadsheet))->save('php://output'),
+            'mau-nhap-chi-tieu.xlsx',
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+        );
     }
 
     private function targetData(Request $request): array
     {
         $data = $request->validate([
-            'personnel_id' => ['required','exists:personnels,id'],
-            'course_id' => ['nullable','exists:courses,id'],
-            'period_type' => ['required', Rule::in(['month','quarter','year'])],
-            'quarter' => ['nullable','integer','min:1','max:4'],
-            'month' => ['nullable','integer','min:1','max:12'],
-            'target_quantity' => ['required','numeric','min:0'],
-            'target_revenue' => ['nullable','numeric','min:0'],
-            'excess_payment_per_kpi' => ['nullable','numeric','min:0'],
-            'note' => ['nullable','string'],
+            'personnel_id' => ['required', 'exists:personnels,id'],
+            'course_id' => ['nullable', 'exists:courses,id'],
+            'period_type' => ['required', Rule::in(['month', 'quarter', 'year'])],
+            'quarter' => ['nullable', 'integer', 'min:1', 'max:4'],
+            'month' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'target_quantity' => ['required', 'numeric', 'min:0'],
+            'assigned_teaching_load' => ['nullable', 'numeric', 'min:0'],
+            'target_revenue' => ['nullable', 'numeric', 'min:0'],
+            'excess_payment_per_kpi' => ['nullable', 'numeric', 'min:0'],
+            'note' => ['nullable', 'string'],
         ]);
+
         $data['is_mandatory'] = $request->boolean('is_mandatory');
         $data['course_id'] = null;
         $data['target_revenue'] = $data['target_revenue'] ?? 0;
+        $data['assigned_teaching_load'] = $data['assigned_teaching_load'] ?? 0;
         $data['excess_payment_per_kpi'] = $data['excess_payment_per_kpi'] ?? 0;
+
         if ($data['period_type'] === 'month') {
             $data['quarter'] = Period::quarterOfMonth((int) $data['month']);
+            $data['assigned_teaching_load'] = 0;
         } elseif ($data['period_type'] === 'quarter') {
             $data['month'] = 0;
+            $data['assigned_teaching_load'] = 0;
         } else {
-            $data['quarter'] = 0; $data['month'] = 0;
+            $data['quarter'] = 0;
+            $data['month'] = 0;
         }
+
         $this->validatePeriod($data);
+
+        $personnel = Personnel::query()->find($data['personnel_id']);
+        if ((float) $data['assigned_teaching_load'] > 0 && ! $this->canPersonnelReceiveTeachingLoad($personnel)) {
+            throw ValidationException::withMessages([
+                'assigned_teaching_load' => 'Số tiết dạy chỉ áp dụng khi giao cho giáo viên hoặc nhân sự đã bật Kiêm giảng dạy.',
+            ]);
+        }
+
         return $data;
     }
 
     private function validatePeriod(array $data): void
     {
-        if ($data['period_type'] === 'month' && empty($data['month'])) abort(422, 'Vui lòng chọn tháng.');
-        if ($data['period_type'] === 'quarter' && empty($data['quarter'])) abort(422, 'Vui lòng chọn quý.');
+        if ($data['period_type'] === 'month' && empty($data['month'])) {
+            abort(422, 'Vui lòng chọn tháng.');
+        }
+        if ($data['period_type'] === 'quarter' && empty($data['quarter'])) {
+            abort(422, 'Vui lòng chọn quý.');
+        }
     }
 
     private function guardDuplicate(KpiPlan $plan, array $data, ?KpiTarget $ignore = null): void
     {
         $query = KpiTarget::where('plan_id', $plan->id)
-            ->where('personnel_id', $data['personnel_id'])->whereNull('course_id')
-            ->where('period_type', $data['period_type'])->where('quarter', $data['quarter'])->where('month', $data['month']);
-        if ($ignore) $query->whereKeyNot($ignore->id);
+            ->where('personnel_id', $data['personnel_id'])
+            ->whereNull('course_id')
+            ->where('period_type', $data['period_type'])
+            ->where('quarter', $data['quarter'])
+            ->where('month', $data['month']);
+
+        if ($ignore) {
+            $query->whereKeyNot($ignore->id);
+        }
+
         abort_if($query->exists(), 422, 'Nhân sự đã có chỉ tiêu tổng cho kỳ này.');
+    }
+
+    private function canPersonnelReceiveTeachingLoad(?Personnel $personnel): bool
+    {
+        if (! $personnel) {
+            return false;
+        }
+
+        if ($personnel->type === 'teacher') {
+            return true;
+        }
+
+        return User::query()
+            ->where('personnel_id', $personnel->id)
+            ->instructors()
+            ->exists();
+    }
+
+    private function actualQuantitiesForTargets($targets, int $year)
+    {
+        $personnelIds = $targets->pluck('personnel_id')->filter()->unique()->values();
+        if ($personnelIds->isEmpty()) {
+            return collect();
+        }
+
+        $groups = KpiRecord::query()
+            ->whereIn('personnel_id', $personnelIds)
+            ->where('record_year', $year)
+            ->groupBy('personnel_id', 'record_quarter', 'record_month', 'conversion_quantity', 'conversion_kpi', 'conversion_mode')
+            ->selectRaw('personnel_id, record_quarter, record_month, conversion_quantity, conversion_kpi, conversion_mode, SUM(raw_quantity) raw_quantity')
+            ->get();
+
+        $monthMap = collect();
+        $quarterMap = collect();
+        $yearMap = collect();
+
+        foreach ($groups as $group) {
+            $raw = (float) $group->raw_quantity;
+            $base = max((float) $group->conversion_quantity, 0.0001);
+            $credit = (float) $group->conversion_kpi;
+            $converted = $group->conversion_mode === 'full_group'
+                ? floor($raw / $base) * $credit
+                : ($raw / $base) * $credit;
+
+            $personnelId = (int) $group->personnel_id;
+            $monthKey = $personnelId.'|month|'.(int) $group->record_month;
+            $quarterKey = $personnelId.'|quarter|'.(int) $group->record_quarter;
+            $yearKey = $personnelId.'|year|0';
+
+            $monthMap->put($monthKey, round((float) $monthMap->get($monthKey, 0) + $converted, 2));
+            $quarterMap->put($quarterKey, round((float) $quarterMap->get($quarterKey, 0) + $converted, 2));
+            $yearMap->put($yearKey, round((float) $yearMap->get($yearKey, 0) + $converted, 2));
+        }
+
+        return $targets->mapWithKeys(function (KpiTarget $target) use ($monthMap, $quarterMap, $yearMap) {
+            $key = $this->targetProgressKey($target);
+
+            if ($target->period_type === 'month') {
+                return [$key => (float) $monthMap->get($key, 0)];
+            }
+            if ($target->period_type === 'quarter') {
+                return [$key => (float) $quarterMap->get($key, 0)];
+            }
+
+            return [$key => (float) $yearMap->get($key, 0)];
+        });
+    }
+
+    private function targetProgressKey(KpiTarget $target): string
+    {
+        return match ($target->period_type) {
+            'month' => $target->personnel_id.'|month|'.(int) $target->month,
+            'quarter' => $target->personnel_id.'|quarter|'.(int) $target->quarter,
+            default => $target->personnel_id.'|year|0',
+        };
     }
 }

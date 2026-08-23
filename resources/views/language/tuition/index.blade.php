@@ -6,12 +6,12 @@
 @section('content')
 @php($labels = ['unpaid' => 'Chưa đóng', 'partial' => 'Đóng một phần', 'pending_receipt' => 'Chờ bổ sung phiếu thu', 'paid' => 'Đã đóng đủ', 'transferred' => 'Đã quyết toán chuyển lớp'])
 
-<div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
-    <div>
+<div class="d-flex flex-column flex-lg-row align-items-start gap-3 mb-4">
+    <div class="me-lg-auto">
         <h1 class="page-title">Thu học phí</h1>
         <div class="page-subtitle">Danh sách khoản phải thu của từng học viên và lớp học. Chọn nhiều dòng để xuất nhanh hoặc áp dụng lại mức miễn giảm cao nhất.</div>
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex flex-wrap gap-2 ms-lg-auto justify-content-lg-end">
         <a class="btn btn-outline-primary" href="{{ route('language-tuition.monthly') }}">
             <i class="bi bi-calendar2-check me-2"></i>Theo tháng
         </a>

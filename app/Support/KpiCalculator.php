@@ -12,7 +12,7 @@ class KpiCalculator
     public function report(array $filters): array
     {
         $year = (int) ($filters['year'] ?? now()->year);
-        $periodType = in_array(($filters['period_type'] ?? 'year'), ['month','quarter','year'], true)
+        $periodType = in_array(($filters['period_type'] ?? 'year'), ['month', 'quarter', 'year'], true)
             ? $filters['period_type'] : 'year';
         $periodValue = (int) ($filters['period_value'] ?? 0);
 
@@ -28,7 +28,7 @@ class KpiCalculator
             $actualQuery->where('course_id', (int) $filters['course_id']);
         }
         if (! empty($filters['personnel_type'])) {
-            $actualQuery->whereHas('personnel', fn ($q) => $q->where('type', $filters['personnel_type']));
+            $actualQuery->whereHas('personnel', fn ($query) => $query->where('type', $filters['personnel_type']));
         }
 
         $actualGroups = $actualQuery
@@ -120,7 +120,7 @@ class KpiCalculator
             'excess_quantity' => round($rows->sum('excess_quantity'), 2),
             'revenue' => round($rows->sum('revenue'), 2),
             'payment_amount' => round($rows->sum('payment_amount'), 2),
-            'completed_people' => $rows->whereIn('status', ['completed','exceeded','payable'])->pluck('personnel_id')->unique()->count(),
+            'completed_people' => $rows->whereIn('status', ['completed', 'exceeded', 'payable'])->pluck('personnel_id')->unique()->count(),
             'not_completed_people' => $rows->where('status', 'not_completed')->pluck('personnel_id')->unique()->count(),
         ];
 
@@ -134,14 +134,15 @@ class KpiCalculator
             return collect();
         }
 
-        $query = KpiTarget::query()->with(['personnel','course'])->where('plan_id', $plan->id);
+        $query = KpiTarget::query()->with(['personnel', 'course'])->where('plan_id', $plan->id);
         if (! empty($filters['personnel_id'])) {
             $query->where('personnel_id', (int) $filters['personnel_id']);
         }
         if (! empty($filters['personnel_type'])) {
-            $query->whereHas('personnel', fn ($q) => $q->where('type', $filters['personnel_type']));
+            $query->whereHas('personnel', fn ($candidate) => $candidate->where('type', $filters['personnel_type']));
         }
-        $all = $query->get()->groupBy(fn ($t) => $t->personnel_id.'|all');
+
+        $all = $query->get()->groupBy(fn ($target) => $target->personnel_id.'|all');
         $result = collect();
 
         foreach ($all as $key => $targets) {
@@ -170,6 +171,7 @@ class KpiCalculator
             if ($selected->isEmpty()) {
                 continue;
             }
+
             $last = $selected->sortByDesc('id')->first();
             $result->put($key, [
                 'personnel' => $last->personnel,
@@ -177,10 +179,10 @@ class KpiCalculator
                 'target_quantity' => (float) $selected->sum('target_quantity'),
                 'target_revenue' => (float) $selected->sum('target_revenue'),
                 'is_mandatory' => $selected->contains(fn ($item) => (bool) $item->is_mandatory),
-                'rate' => (float) ($selected->firstWhere('excess_payment_per_kpi', '>', 0)?->excess_payment_per_kpi
-                    ?? 0),
+                'rate' => (float) ($selected->firstWhere('excess_payment_per_kpi', '>', 0)?->excess_payment_per_kpi ?? 0),
             ]);
         }
+
         return $result;
     }
 }

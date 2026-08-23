@@ -34,13 +34,14 @@ class ModulePermissionCatalog
         'imports' => ['view', 'create', 'update', 'delete'],
         'reports' => ['view', 'export'],
         'payments' => ['view', 'create', 'update'],
+        'tools' => ['view', 'create'],
         'logs' => ['view'],
         'software_settings' => ['view', 'update'],
     ];
 
     private const GROUPS = [
         'Tổng quan' => ['system_dashboard', 'kpi_dashboard_all', 'language_dashboard_all'],
-        'Công việc & hệ thống' => ['work_tasks', 'administration', 'personnel', 'users', 'roles', 'logs', 'software_settings'],
+        'Công việc & hệ thống' => ['work_tasks', 'administration', 'personnel', 'users', 'roles', 'logs', 'software_settings', 'tools'],
         'Tuyển sinh' => ['language_consulting', 'language_target_submissions', 'language_leads', 'language_collaborators'],
         'Học viên & điều hành trung tâm' => ['language_students', 'language_tuition', 'language_discounts', 'language_targets'],
         'Đào tạo' => ['teacher_classes', 'language_classes', 'language_programs', 'language_courses'],
@@ -65,13 +66,18 @@ class ModulePermissionCatalog
 
         foreach (self::GROUPS as $name => $codes) {
             $rows = collect($codes)->map(fn (string $code) => $byCode->get($code))->filter()->values();
-            if ($rows->isEmpty()) continue;
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
             $groups[] = ['name' => $name, 'modules' => $rows];
             $used = $used->merge($rows->pluck('code'));
         }
 
         $remaining = $modules->reject(fn ($module) => $used->contains($module->code))->values();
-        if ($remaining->isNotEmpty()) $groups[] = ['name' => 'Khác', 'modules' => $remaining];
+        if ($remaining->isNotEmpty()) {
+            $groups[] = ['name' => 'Khác', 'modules' => $remaining];
+        }
 
         return $groups;
     }

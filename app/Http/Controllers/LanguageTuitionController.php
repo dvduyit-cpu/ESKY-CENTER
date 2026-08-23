@@ -82,13 +82,52 @@ class LanguageTuitionController extends Controller
 
     public function create(Request $request): View
     {
-        $selectedClass=$request->integer('class');
-        $classes=LanguageClass::where(function ($query) use ($selectedClass) {
-            $query->whereIn('status',['recruiting','upcoming','active']);
-            if ($selectedClass) $query->orWhere('id',$selectedClass);
+        $selectedClass = $request->integer('class');
+        $selectedCourse = old('language_course_id', $request->integer('course'));
+        $selectedMode = old('entry_mode', $request->string('mode')->toString() === 'quick' ? 'quick' : 'class');
+
+        $classes = LanguageClass::where(function ($query) use ($selectedClass) {
+            $query->whereIn('status', ['recruiting', 'upcoming', 'active']);
+            if ($selectedClass) {
+                $query->orWhere('id', $selectedClass);
+            }
         })->orderBy('name')->get();
-        $enrollments=LanguageEnrollment::with(['student','languageClass.course'])->whereIn('status',['studying','paused','reserved'])->whereHas('languageClass',fn($q)=>$q->whereNotNull('language_course_id'))->whereDoesntHave('student.tuitionCharges',fn($q)=>$q->whereColumn('language_tuition_charges.language_class_id','language_enrollments.language_class_id'))->orderByDesc('enrolled_at')->get();
-        return view('language.tuition.form',['item'=>new LanguageTuitionCharge,'enrollments'=>$enrollments,'leads'=>LanguageLead::whereNotNull('converted_student_id')->orderBy('name')->get(),'discounts'=>LanguageDiscountPolicy::where('active',1)->orderBy('name')->get(),'selectedStudent'=>$request->integer('student'),'selectedLead'=>$request->integer('lead'),'selectedClass'=>$selectedClass]);
+
+        $enrollments = LanguageEnrollment::with(['student', 'languageClass.course'])
+            ->whereIn('status', ['studying', 'paused', 'reserved'])
+            ->whereHas('languageClass', fn ($query) => $query->whereNotNull('language_course_id'))
+            ->whereDoesntHave('student.tuitionCharges', fn ($query) => $query
+                ->whereColumn('language_tuition_charges.language_class_id', 'language_enrollments.language_class_id'))
+            ->orderByDesc('enrolled_at')
+            ->get();
+
+        $students = LanguageStudent::query()
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'phone', 'email', 'address']);
+
+        $courses = LanguageCourse::query()
+            ->where(function ($query) use ($selectedCourse) {
+                $query->where('active', true);
+                if ($selectedCourse) {
+                    $query->orWhere('id', $selectedCourse);
+                }
+            })
+            ->orderBy('name')
+            ->get(['id', 'code', 'name', 'tuition', 'textbook']);
+
+        return view('language.tuition.form', [
+            'item' => new LanguageTuitionCharge,
+            'enrollments' => $enrollments,
+            'students' => $students,
+            'courses' => $courses,
+            'bank' => self::bankSettings(),
+            'discounts' => LanguageDiscountPolicy::where('active', 1)->orderBy('name')->get(),
+            'selectedStudent' => $request->integer('student'),
+            'selectedLead' => $request->integer('lead'),
+            'selectedClass' => $selectedClass,
+            'selectedCourse' => $selectedCourse,
+            'selectedMode' => $selectedMode,
+        ]);
     }
 
     public function show(LanguageTuitionCharge $languageTuition): View
@@ -110,6 +149,10 @@ class LanguageTuitionController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        if ($request->input('entry_mode') === 'quick') {
+            return $this->storeQuickCollection($request);
+        }
+
         $data=$request->validate(['language_student_id'=>'required|exists:language_students,id','language_lead_id'=>'nullable|exists:language_leads,id','language_course_id'=>'required|exists:language_courses,id','language_class_id'=>'required|exists:language_classes,id','language_discount_policy_id'=>'nullable|exists:language_discount_policies,id','due_date'=>'nullable|date','note'=>'nullable']);
         $enrolled=DB::table('language_enrollments')->where('language_student_id',$data['language_student_id'])->where('language_class_id',$data['language_class_id'])->whereIn('status',['studying','paused','reserved'])->exists();
         if(! $enrolled) throw ValidationException::withMessages(['language_class_id'=>'Học viên chưa được xếp vào lớp này nên không thể tạo phiếu thu.']);
@@ -131,6 +174,122 @@ class LanguageTuitionController extends Controller
         LanguageTuitionCharge::create($data);
         $student->update(['language_course_id'=>$data['language_course_id'],'language_discount_policy_id'=>$personalDiscountId]);
         return redirect()->route('language-tuition.index')->with('success','Đã lập khoản thu học phí.');
+    }
+
+    private function storeQuickCollection(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'language_student_id' => ['required', 'exists:language_students,id'],
+            'language_course_id' => ['required', 'exists:language_courses,id'],
+            'language_discount_policy_id' => ['nullable', 'exists:language_discount_policies,id'],
+            'original_amount' => ['required', 'numeric', 'gt:0'],
+            'collected_amount' => ['required', 'numeric', 'gt:0'],
+            'receipt_code' => ['nullable', 'string', 'max:30', 'unique:language_tuition_payments,receipt_code'],
+            'paid_at' => ['required', 'date'],
+            'payment_method' => ['required', Rule::in(['cash', 'transfer', 'card', 'other'])],
+            'reference' => ['nullable', 'max:255'],
+            'note' => ['nullable'],
+            'submit_action' => ['nullable', Rule::in(['save', 'print'])],
+        ], [
+            'receipt_code.unique' => 'Số phiếu thu đã tồn tại.',
+        ]);
+
+        if ($data['payment_method'] === 'transfer' && ! self::bankSettings()['enabled']) {
+            throw ValidationException::withMessages([
+                'payment_method' => 'Chưa cấu hình tài khoản ngân hàng nhận học phí.',
+            ]);
+        }
+
+        $student = LanguageStudent::findOrFail($data['language_student_id']);
+        $discount = ! empty($data['language_discount_policy_id'])
+            ? LanguageDiscountPolicy::findOrFail($data['language_discount_policy_id'])
+            : null;
+
+        $originalAmount = round((float) $data['original_amount'], 2);
+        $discountPercentage = (float) ($discount?->percentage ?? 0);
+        $discountAmount = round($originalAmount * $discountPercentage / 100, 2);
+        $payableAmount = max(0, round($originalAmount - $discountAmount, 2));
+        $collectedAmount = round((float) $data['collected_amount'], 2);
+
+        if ($collectedAmount > $payableAmount + 0.001) {
+            throw ValidationException::withMessages([
+                'collected_amount' => 'Số tiền thu không được lớn hơn số phải thu sau miễn giảm.',
+            ]);
+        }
+
+        $isPending = blank($data['receipt_code'] ?? null);
+        $receiptCode = $data['receipt_code'] ?: null;
+        $leadId = $this->resolveLeadId((int) $data['language_student_id'], (int) $data['language_course_id']);
+        $chargeId = null;
+        $paymentId = null;
+
+        DB::transaction(function () use (
+            $collectedAmount,
+            $data,
+            $discount,
+            $discountAmount,
+            $discountPercentage,
+            $isPending,
+            $leadId,
+            $originalAmount,
+            $payableAmount,
+            $receiptCode,
+            $request,
+            $student,
+            &$chargeId,
+            &$paymentId
+        ) {
+            $charge = LanguageTuitionCharge::create([
+                'code' => CenterCode::next('language_tuition_charges', 'HP'),
+                'language_student_id' => $data['language_student_id'],
+                'language_lead_id' => $leadId,
+                'language_course_id' => $data['language_course_id'],
+                'language_class_id' => null,
+                'language_discount_policy_id' => $discount?->id,
+                'original_amount' => $originalAmount,
+                'discount_percentage' => $discountPercentage,
+                'discount_amount' => $discountAmount,
+                'payable_amount' => $payableAmount,
+                'paid_amount' => 0,
+                'credit_amount' => 0,
+                'due_date' => Carbon::parse($data['paid_at'])->toDateString(),
+                'status' => 'unpaid',
+                'note' => $data['note'] ?? null,
+                'created_by' => $request->user()->id,
+            ]);
+
+            $payment = $charge->payments()->create([
+                'receipt_code' => $receiptCode,
+                'receipt_status' => $isPending ? 'pending' : 'confirmed',
+                'confirmed_at' => $isPending ? null : now(),
+                'amount' => $collectedAmount,
+                'book_amount' => 0,
+                'paid_at' => $data['paid_at'],
+                'payment_method' => $data['payment_method'],
+                'reference' => $data['reference'] ?? null,
+                'note' => $data['note'] ?? null,
+                'collected_by' => $request->user()->id,
+            ]);
+
+            $this->refreshCharge($charge, $payment);
+
+            $chargeId = $charge->id;
+            $paymentId = $payment->id;
+
+            $student->update([
+                'language_course_id' => $data['language_course_id'],
+                'language_discount_policy_id' => $discount?->id,
+            ]);
+        });
+
+        if (($data['submit_action'] ?? 'save') === 'print') {
+            return redirect()->route('language-tuition.receipt.print', $paymentId);
+        }
+
+        return redirect()
+            ->route('language-tuition.show', $chargeId)
+            ->with('success', $isPending ? 'Đã ghi nhận thu tiền, đang chờ bổ sung số phiếu.' : 'Đã thu học phí và tạo phiếu thu.')
+            ->with('receipt_ready', $paymentId);
     }
 
     public function updateDiscount(Request $request, LanguageTuitionCharge $languageTuition): RedirectResponse

@@ -13,4 +13,5 @@ class KpiPlan extends Model
     protected $fillable = ['year', 'name', 'status', 'settlement_scope', 'note', 'created_by'];
 
     public function targets(): HasMany { return $this->hasMany(KpiTarget::class, 'plan_id'); }
+    public function teachingReports(): HasMany { return $this->hasMany(KpiTeachingReport::class, 'plan_id'); }
 }
