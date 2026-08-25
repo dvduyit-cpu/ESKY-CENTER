@@ -5,7 +5,6 @@ namespace App\Providers;
 use App\Http\Controllers\ThemeController;
 use App\Models\SystemSetting;
 use App\Models\UpcomingPlan;
-use App\Models\LanguageLead;
 use App\Models\LanguageMonthlyTargetRecord;
 use App\Models\LanguageTargetSubmission;
 use App\Models\LanguageTuitionPayment;
@@ -27,7 +26,16 @@ class AppServiceProvider extends ServiceProvider
         Paginator::useBootstrapFive();
         Paginator::defaultView('pagination.app');
 
-        foreach ([LanguageLead::class, LanguageMonthlyTargetRecord::class, LanguageTargetSubmission::class, LanguageTuitionPayment::class] as $model) {
+        foreach ([
+            'App\\Models\\LanguageLead',
+            LanguageMonthlyTargetRecord::class,
+            LanguageTargetSubmission::class,
+            LanguageTuitionPayment::class,
+        ] as $model) {
+            if (! class_exists($model)) {
+                continue;
+            }
+
             $model::saved(fn () => RealtimeNotifier::system());
             $model::deleted(fn () => RealtimeNotifier::system());
         }
