@@ -29,6 +29,7 @@ class ModulePermissionCatalog
         'language_targets' => ['view', 'export'],
         'roles' => ['view', 'create', 'update', 'delete'],
         'teacher_classes' => ['view', 'update'],
+        'teaching_load_management' => ['view'],
         'kpis' => ['view', 'create', 'update', 'delete'],
         'courses' => ['view', 'create', 'update', 'delete'],
         'imports' => ['view', 'create', 'update', 'delete'],
@@ -45,7 +46,7 @@ class ModulePermissionCatalog
         'Tuyển sinh' => ['language_consulting', 'language_target_submissions', 'language_leads', 'language_collaborators'],
         'Học viên & điều hành trung tâm' => ['language_students', 'language_tuition', 'language_discounts', 'language_targets'],
         'Đào tạo' => ['teacher_classes', 'language_classes', 'language_programs', 'language_courses'],
-        'KPI & báo cáo' => ['kpis', 'courses', 'imports', 'reports', 'payments'],
+        'KPI & báo cáo' => ['kpis', 'courses', 'imports', 'reports', 'teaching_load_management', 'payments'],
     ];
 
     public static function actionsFor(string $moduleCode): array

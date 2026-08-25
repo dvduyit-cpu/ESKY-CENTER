@@ -19,9 +19,9 @@ class SystemHealthMonitor
 
         try {
             DB::connection()->getPdo();
-            $add('Co so du lieu', 'Ket noi co so du lieu', true, 'Ket noi va truy van co so du lieu hoat dong.');
+            $add('Cơ sở dữ liệu', 'Kết nối cơ sở dữ liệu', true, 'Kết nối và truy vấn cơ sở dữ liệu hoạt động.');
         } catch (Throwable) {
-            $add('Co so du lieu', 'Ket noi co so du lieu', false, 'Khong the ket noi co so du lieu.', 'error');
+            $add('Cơ sở dữ liệu', 'Kết nối cơ sở dữ liệu', false, 'Không thể kết nối cơ sở dữ liệu.', 'error');
         }
 
         try {
@@ -33,10 +33,10 @@ class SystemHealthMonitor
             ];
             $missingTables = collect($requiredTables)->reject(fn (string $table) => Schema::hasTable($table))->values();
             $add(
-                'Co so du lieu',
-                'Cau truc bang nghiep vu',
+                'Cơ sở dữ liệu',
+                'Cấu trúc bảng nghiệp vụ',
                 $missingTables->isEmpty(),
-                $missingTables->isEmpty() ? 'Du '.count($requiredTables).' bang cot loi.' : 'Thieu bang: '.$missingTables->implode(', ')
+                $missingTables->isEmpty() ? 'Đủ '.count($requiredTables).' bảng cốt lõi.' : 'Thiếu bảng: '.$missingTables->implode(', ')
             );
 
             $requiredColumns = [
@@ -55,14 +55,14 @@ class SystemHealthMonitor
                     ->map(fn (string $column) => $table.'.'.$column);
             })->values();
             $add(
-                'Co so du lieu',
-                'Migration chuc nang moi',
+                'Cơ sở dữ liệu',
+                'Migration chức năng mới',
                 $missingColumns->isEmpty(),
-                $missingColumns->isEmpty() ? 'Du cot cho giao vu, kiem giang day, hoc phi, diem danh va so dau bai.' : 'Thieu cot: '.$missingColumns->implode(', ')
+                $missingColumns->isEmpty() ? 'Đủ cột cho giáo vụ, kiêm giảng dạy, học phí, điểm danh và sổ đầu bài.' : 'Thiếu cột: '.$missingColumns->implode(', ')
             );
         } catch (Throwable) {
-            $add('Co so du lieu', 'Cau truc bang nghiep vu', false, 'Khong the doc cau truc bang do ket noi co so du lieu dang loi.');
-            $add('Co so du lieu', 'Migration chuc nang moi', false, 'Khong the kiem tra cac cot chuc nang moi do ket noi co so du lieu dang loi.');
+            $add('Cơ sở dữ liệu', 'Cấu trúc bảng nghiệp vụ', false, 'Không thể đọc cấu trúc bảng do kết nối cơ sở dữ liệu đang lỗi.');
+            $add('Cơ sở dữ liệu', 'Migration chức năng mới', false, 'Không thể kiểm tra các cột chức năng mới do kết nối cơ sở dữ liệu đang lỗi.');
         }
 
         $requiredRoutes = [
@@ -77,6 +77,10 @@ class SystemHealthMonitor
             'teacher-classes.gradebook',
             'teacher-classes.teaching-load.index',
             'teacher-classes.teaching-load.pdf',
+            'teaching-load-management.index',
+            'reports.index',
+            'reports.recruitment-kpi',
+            'reports.teaching-load-kpi',
             'teacher-classes.attendance.store',
             'teacher-classes.lesson-book.store',
             'teacher-classes.lesson-book.print',
@@ -88,10 +92,10 @@ class SystemHealthMonitor
         ];
         $missingRoutes = collect($requiredRoutes)->reject(fn (string $name) => Route::has($name))->values();
         $add(
-            'Dieu huong',
-            'Route nghiep vu trong yeu',
+            'Điều hướng',
+            'Route nghiệp vụ trọng yếu',
             $missingRoutes->isEmpty(),
-            $missingRoutes->isEmpty() ? 'Du '.count($requiredRoutes).' route trong yeu.' : 'Thieu route: '.$missingRoutes->implode(', ')
+            $missingRoutes->isEmpty() ? 'Đủ '.count($requiredRoutes).' route trọng yếu.' : 'Thiếu route: '.$missingRoutes->implode(', ')
         );
 
         $teacherRoutes = collect(Route::getRoutes()->getRoutes())
@@ -99,39 +103,52 @@ class SystemHealthMonitor
         $teacherRoutesWithoutPermission = $teacherRoutes->filter(fn (LaravelRoute $route) => ! collect($route->gatherMiddleware())
             ->contains(fn ($middleware) => str_starts_with((string) $middleware, 'permission:')));
         $add(
-            'Phan quyen',
-            'Bao ve lop giang day',
+            'Phân quyền',
+            'Bảo vệ lớp giảng dạy',
             $teacherRoutes->isNotEmpty() && $teacherRoutesWithoutPermission->isEmpty(),
             $teacherRoutesWithoutPermission->isEmpty()
-                ? $teacherRoutes->count().' route giao vien deu co middleware quyen.'
-                : 'Thieu quyen: '.$teacherRoutesWithoutPermission->map(fn (LaravelRoute $route) => $route->getName())->filter()->implode(', ')
+                ? $teacherRoutes->count().' route giáo viên đều có middleware quyền.'
+                : 'Thiếu quyền: '.$teacherRoutesWithoutPermission->map(fn (LaravelRoute $route) => $route->getName())->filter()->implode(', ')
+        );
+
+        $managementRoutes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn (LaravelRoute $route) => str_starts_with((string) $route->getName(), 'teaching-load-management.'));
+        $managementRoutesWithoutPermission = $managementRoutes->filter(fn (LaravelRoute $route) => ! collect($route->gatherMiddleware())
+            ->contains(fn ($middleware) => str_starts_with((string) $middleware, 'permission:')));
+        $add(
+            'Phân quyền',
+            'Bảo vệ tổng hợp giờ dạy',
+            $managementRoutes->isNotEmpty() && $managementRoutesWithoutPermission->isEmpty(),
+            $managementRoutesWithoutPermission->isEmpty()
+                ? $managementRoutes->count().' route tổng hợp giờ dạy đã có middleware quyền.'
+                : 'Thiếu quyền: '.$managementRoutesWithoutPermission->map(fn (LaravelRoute $route) => $route->getName())->filter()->implode(', ')
         );
 
         $zipReady = extension_loaded('zip') && class_exists('ZipArchive');
         $add(
-            'Moi truong PHP',
-            'Doc va nhap Excel XLSX',
+            'Môi trường PHP',
+            'Đọc và nhập Excel XLSX',
             $zipReady,
-            $zipReady ? 'PHP ZipArchive da san sang.' : 'Thieu PHP ZipArchive; tep XLSX va mot so bao cao Excel se bi gioi han. Cac man co ho tro CSV van dung duoc, nhung nen bat extension=zip trong php.ini de dung day du.',
+            $zipReady ? 'PHP ZipArchive đã sẵn sàng.' : 'Thiếu PHP ZipArchive; tệp XLSX và một số báo cáo Excel sẽ bị giới hạn. Các màn có hỗ trợ CSV vẫn dùng được, nhưng nên bật extension=zip trong php.ini để dùng đầy đủ.',
             'error'
         );
 
         $sqliteReady = extension_loaded('pdo_sqlite');
         $add(
-            'Moi truong kiem thu',
-            'Co so du lieu SQLite co lap',
+            'Môi trường kiểm thử',
+            'Cơ sở dữ liệu SQLite cô lập',
             $sqliteReady,
-            $sqliteReady ? 'PDO SQLite da san sang cho kiem thu giao dich co lap.' : 'Thieu PDO SQLite; nhom kiem thu thao tac cong viec se bi bo qua.',
+            $sqliteReady ? 'PDO SQLite đã sẵn sàng cho kiểm thử giao dịch cô lập.' : 'Thiếu PDO SQLite; nhóm kiểm thử thao tác công việc sẽ bị bỏ qua.',
             'warning'
         );
 
         $storagePaths = [storage_path('framework'), storage_path('logs'), base_path('bootstrap/cache')];
         $unwritable = collect($storagePaths)->reject(fn (string $path) => is_dir($path) && is_writable($path))->values();
         $add(
-            'Moi truong PHP',
-            'Quyen ghi thu muc Laravel',
+            'Môi trường PHP',
+            'Quyền ghi thư mục Laravel',
             $unwritable->isEmpty(),
-            $unwritable->isEmpty() ? 'Storage, log va cache co quyen ghi.' : 'Khong the ghi: '.$unwritable->implode(', ')
+            $unwritable->isEmpty() ? 'Storage, log và cache có quyền ghi.' : 'Không thể ghi: '.$unwritable->implode(', ')
         );
 
         $themeFile = public_path('css/theme.css');
@@ -140,23 +157,23 @@ class SystemHealthMonitor
         $missingThemeTokens = collect($themeTokens)->reject(fn (string $token) => str_contains($themeCss, $token))->values();
         $loginView = resource_path('views/auth/login.blade.php');
         if (! is_file($loginView) || ! str_contains((string) file_get_contents($loginView), "asset('css/theme.css')")) {
-            $missingThemeTokens->push('theme.css tren trang dang nhap');
+            $missingThemeTokens->push('theme.css trên trang đăng nhập');
         }
         $add(
-            'Giao dien',
-            'Dong bo mau cau hinh',
+            'Giao diện',
+            'Đồng bộ màu cấu hình',
             $missingThemeTokens->isEmpty(),
-            $missingThemeTokens->isEmpty() ? 'Nut, chu, nen, tien trinh va trang thai chinh dung bien mau cau hinh.' : 'Thieu anh xa CSS: '.$missingThemeTokens->implode(', ')
+            $missingThemeTokens->isEmpty() ? 'Nút, chữ, nền, tiến trình và trạng thái chính dùng biến màu cấu hình.' : 'Thiếu ánh xạ CSS: '.$missingThemeTokens->implode(', ')
         );
 
         $layoutView = resource_path('views/layouts/app.blade.php');
         $layoutSupportsPageStyles = is_file($layoutView)
             && str_contains((string) file_get_contents($layoutView), "@stack('styles')");
         $add(
-            'Giao dien',
-            'Nap CSS rieng cua tung trang',
+            'Giao diện',
+            'Nạp CSS riêng của từng trang',
             $layoutSupportsPageStyles,
-            $layoutSupportsPageStyles ? 'Layout chinh da render stack styles cua cac trang con.' : 'Layout chinh thieu @stack styles; CSS rieng cua trang se khong hoat dong.'
+            $layoutSupportsPageStyles ? 'Layout chính đã render stack styles của các trang con.' : 'Layout chính thiếu @stack styles; CSS riêng của trang sẽ không hoạt động.'
         );
 
         $requiredViews = [
@@ -167,14 +184,18 @@ class SystemHealthMonitor
             resource_path('views/admin/trash.blade.php'),
             resource_path('views/director/dashboard.blade.php'),
             resource_path('views/language/tuition/monthly-pdf.blade.php'),
+            resource_path('views/reports/index.blade.php'),
+            resource_path('views/reports/recruitment-kpi.blade.php'),
+            resource_path('views/reports/teaching-load-kpi.blade.php'),
             resource_path('views/kpis/teaching-report-pdf.blade.php'),
+            resource_path('views/kpis/teaching-load-management.blade.php'),
         ];
         $missingViews = collect($requiredViews)->reject(fn (string $path) => is_file($path))->map(fn (string $path) => basename($path))->values();
         $add(
-            'Giao dien',
-            'View trong yeu',
+            'Giao diện',
+            'View trọng yếu',
             $missingViews->isEmpty(),
-            $missingViews->isEmpty() ? 'Cac trang quan tri, thung rac, giam sat, so lop, ban in hoc phi va bao cao tiet day deu ton tai.' : 'Thieu view: '.$missingViews->implode(', ')
+            $missingViews->isEmpty() ? 'Các trang quản trị, thùng rác, giám sát, sổ lớp, bản in học phí, báo cáo tiết dạy và tổng hợp giờ dạy đều tồn tại.' : 'Thiếu view: '.$missingViews->implode(', ')
         );
 
         return $checks;

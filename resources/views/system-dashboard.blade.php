@@ -45,6 +45,9 @@
     $teachingLoadRoute = auth()->user()->allowed('teacher_classes')
         ? route('teacher-classes.teaching-load.index')
         : null;
+    $teachingLoadManagementRoute = auth()->user()->allowed('teaching_load_management')
+        ? route('teaching-load-management.index')
+        : null;
     $teachingProgressWidth = min(max((float) ($teachingSummary['progress'] ?? 0), 0), 100);
     $headlineCards = $canViewAll
         ? [
@@ -176,6 +179,20 @@
         @endif
     </div>
 </div>
+
+@if($teachingLoadManagementRoute)
+<div class="card card-soft mb-4">
+    <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <div class="fw-semibold">Tổng hợp giờ dạy</div>
+            <div class="small text-muted">Mở trang riêng để theo dõi số tiết đã giao, đã báo cáo và chi tiết theo từng giáo viên.</div>
+        </div>
+        <a class="btn btn-outline-primary" href="{{ $teachingLoadManagementRoute }}">
+            <i class="bi bi-kanban me-1"></i>Mở trang quản lý
+        </a>
+    </div>
+</div>
+@endif
 
 @if($weeklyReportCard)
     <div class="weekly-report-prompt mb-4">

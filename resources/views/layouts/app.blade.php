@@ -85,14 +85,15 @@
             @if($me->allowed('language_discounts'))<a class="nav-link {{ request()->routeIs('language-discounts.*') ? 'active' : '' }}" href="{{ route('language-discounts.index') }}"><i class="bi bi-percent"></i> Chế độ miễn giảm</a>@endif
         </nav>
         @endif
-        @if($me->allowed('kpis') || $me->allowed('courses') || $me->allowed('imports') || $me->allowed('reports') || $me->allowed('payments'))
+        @if($me->allowed('kpis') || $me->allowed('courses') || $me->allowed('imports') || $me->allowed('reports') || $me->allowed('payments') || $me->allowed('teaching_load_management'))
         <div class="sidebar-label">KPI & báo cáo</div>
         <nav class="sidebar-nav nav flex-column">
             <a class="nav-link {{ request()->routeIs('kpi-dashboard.*') ? 'active' : '' }}" href="{{ route('kpi-dashboard.index') }}"><i class="bi bi-speedometer"></i> Tổng quan chỉ tiêu & dữ liệu</a>
             @if($me->allowed('kpis'))<a class="nav-link {{ request()->routeIs('kpis.*') ? 'active' : '' }}" href="{{ route('kpis.index') }}"><i class="bi bi-bullseye"></i> Kế hoạch chỉ tiêu</a>@endif
             @if($me->allowed('courses'))<a class="nav-link {{ request()->routeIs('courses.*') ? 'active' : '' }}" href="{{ route('courses.index') }}"><i class="bi bi-journal-bookmark-fill"></i> Khóa học & quy đổi</a>@endif
             @if($me->allowed('imports'))<a class="nav-link {{ request()->routeIs('imports.index','imports.create','imports.template') ? 'active' : '' }}" href="{{ route('imports.index') }}"><i class="bi bi-file-earmark-spreadsheet"></i> Nhập kết quả Excel</a><a class="nav-link {{ request()->routeIs('imports.records') ? 'active' : '' }}" href="{{ route('imports.records') }}"><i class="bi bi-table"></i> Tổng dữ liệu đã nhập</a>@endif
-            @if($me->allowed('reports'))<a class="nav-link {{ request()->routeIs('reports.*') ? 'active' : '' }}" href="{{ route('reports.index') }}"><i class="bi bi-bar-chart-line-fill"></i> Báo cáo</a>@endif
+            @if($me->allowed('reports'))<a class="nav-link {{ request()->routeIs('reports.index','reports.export') ? 'active' : '' }}" href="{{ route('reports.index') }}"><i class="bi bi-bar-chart-line-fill"></i> Báo cáo chung</a><a class="nav-link {{ request()->routeIs('reports.recruitment-kpi') ? 'active' : '' }}" href="{{ route('reports.recruitment-kpi') }}"><i class="bi bi-person-plus-fill"></i> KPI tuyển sinh</a><a class="nav-link {{ request()->routeIs('reports.teaching-load-kpi') ? 'active' : '' }}" href="{{ route('reports.teaching-load-kpi') }}"><i class="bi bi-clock-history"></i> KPI giờ dạy</a>@endif
+            @if($me->allowed('teaching_load_management'))<a class="nav-link {{ request()->routeIs('teaching-load-management.*') ? 'active' : '' }}" href="{{ route('teaching-load-management.index') }}"><i class="bi bi-kanban"></i> Tổng hợp giờ dạy</a>@endif
             @if($me->allowed('payments'))<a class="nav-link {{ request()->routeIs('payments.*') ? 'active' : '' }}" href="{{ route('payments.index') }}"><i class="bi bi-cash-coin"></i> Thanh toán vượt</a>@endif
         </nav>
         @endif
@@ -122,7 +123,8 @@
     <div class="main-wrap">
         @php
             $routeName = request()->route()?->getName() ?? '';
-            $isLanguageCenter = str_starts_with($routeName, 'language-') || str_starts_with($routeName, 'teacher-classes');
+            $isLanguageCenter = str_starts_with($routeName, 'language-')
+                || str_starts_with($routeName, 'teacher-classes');
             $languageSection = match (true) {
                 str_starts_with($routeName, 'language-leads'),
                 str_starts_with($routeName, 'language-consulting'),
@@ -180,7 +182,7 @@
                 $routeName === 'guide' => 'Trợ giúp',
                 $routeName === 'dashboard' => 'Tổng quan',
                 str_starts_with($routeName, 'director.') => 'Điều hành',
-                str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'KPI & báo cáo',
+                str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments'), str_starts_with($routeName, 'teaching-load-management') => 'KPI & báo cáo',
                 str_starts_with($routeName, 'admin.trash') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'profile'), str_starts_with($routeName, 'personal-settings') => 'Tài khoản cá nhân',
@@ -200,6 +202,9 @@
                 str_starts_with($routeName, 'courses') => 'Khóa học & quy đổi',
                 str_starts_with($routeName, 'imports.records') => 'Dữ liệu đã nhập',
                 str_starts_with($routeName, 'imports') => 'Nhập kết quả Excel',
+                $routeName === 'reports.recruitment-kpi' => 'KPI tuyển sinh',
+                $routeName === 'reports.teaching-load-kpi' => 'KPI giờ dạy',
+                str_starts_with($routeName, 'teaching-load-management') => 'Tổng hợp giờ dạy',
                 str_starts_with($routeName, 'reports') => 'Báo cáo chỉ tiêu',
                 str_starts_with($routeName, 'payments') => 'Thanh toán vượt chỉ tiêu',
                 str_starts_with($routeName, 'admin.trash') => 'Thùng rác chung',

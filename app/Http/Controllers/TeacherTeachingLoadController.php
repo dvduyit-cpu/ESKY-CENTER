@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\KpiPlan;
 use App\Models\KpiTarget;
 use App\Models\KpiTeachingReport;
+use App\Models\Personnel;
 use App\Support\ActivityLogger;
 use Dompdf\Dompdf;
 use Dompdf\Options;
@@ -82,6 +83,147 @@ class TeacherTeachingLoadController extends Controller
             'target',
             'year',
         ));
+    }
+
+    public function managementIndex(Request $request): View
+    {
+        $user = $request->user();
+        abort_unless($user?->allowed('teaching_load_management'), 403);
+
+        $year = (int) $request->input('year', now()->year);
+        $selectedMonth = $request->filled('report_month')
+            ? max(1, min(12, (int) $request->input('report_month')))
+            : null;
+        $selectedPersonnelId = $request->filled('personnel_id')
+            ? (int) $request->input('personnel_id')
+            : null;
+
+        $availableYears = KpiPlan::query()
+            ->whereHas('targets', fn ($query) => $query
+                ->where('period_type', 'year')
+                ->where('assigned_teaching_load', '>', 0)
+            )
+            ->orderByDesc('year')
+            ->pluck('year');
+
+        if ($availableYears->isEmpty()) {
+            $availableYears = collect([$year]);
+        } elseif (! $availableYears->contains($year)) {
+            $availableYears = $availableYears->prepend($year)->unique()->sortDesc()->values();
+        }
+
+        $personnels = Personnel::query()
+            ->where('type', '!=', 'collaborator')
+            ->where(fn ($query) => $query
+                ->where('active', true)
+                ->orWhereHas('targets', fn ($targets) => $targets
+                    ->whereHas('plan', fn ($planQuery) => $planQuery->where('year', $year))
+                    ->where('assigned_teaching_load', '>', 0)
+                )
+                ->orWhereHas('teachingReports', fn ($reports) => $reports->where('report_year', $year))
+            )
+            ->orderBy('name')
+            ->get();
+
+        $plan = KpiPlan::query()->where('year', $year)->first();
+        $summaryRows = collect();
+        $summaryTotals = [
+            'teacher_count' => 0,
+            'assigned_teaching_load' => 0.0,
+            'reported_teaching_load' => 0.0,
+            'remaining_teaching_load' => 0.0,
+            'exceeded_teaching_load' => 0.0,
+            'period_teaching_load' => 0.0,
+        ];
+
+        if ($plan) {
+            $targets = KpiTarget::query()
+                ->with('personnel')
+                ->where('plan_id', $plan->id)
+                ->where('period_type', 'year')
+                ->where('assigned_teaching_load', '>', 0)
+                ->when($selectedPersonnelId, fn ($query) => $query->where('personnel_id', $selectedPersonnelId))
+                ->get()
+                ->keyBy('personnel_id');
+
+            $reportsByPersonnel = KpiTeachingReport::query()
+                ->with(['personnel', 'reporter'])
+                ->where('plan_id', $plan->id)
+                ->where('report_year', $year)
+                ->when($selectedPersonnelId, fn ($query) => $query->where('personnel_id', $selectedPersonnelId))
+                ->orderBy('report_month')
+                ->get()
+                ->groupBy('personnel_id');
+
+            $personnelIds = $targets->keys()
+                ->merge($reportsByPersonnel->keys())
+                ->unique()
+                ->values();
+
+            $personnelMap = Personnel::withTrashed()
+                ->whereIn('id', $personnelIds)
+                ->get()
+                ->keyBy('id');
+
+            $summaryRows = $personnelIds->map(function ($personnelId) use ($personnelMap, $reportsByPersonnel, $selectedMonth, $targets) {
+                $target = $targets->get($personnelId);
+                $reports = $reportsByPersonnel->get($personnelId, collect())->sortBy('report_month')->values();
+                $periodReport = $selectedMonth ? $reports->firstWhere('report_month', $selectedMonth) : null;
+                $periodTotal = $selectedMonth
+                    ? round((float) ($periodReport?->reported_teaching_load ?? 0), 2)
+                    : round((float) $reports->sum('reported_teaching_load'), 2);
+                $assigned = round((float) ($target?->assigned_teaching_load ?? 0), 2);
+                $reported = round((float) $reports->sum('reported_teaching_load'), 2);
+
+                return [
+                    'personnel' => $personnelMap->get($personnelId),
+                    'target' => $target,
+                    'assigned_teaching_load' => $assigned,
+                    'reported_teaching_load' => $reported,
+                    'remaining_teaching_load' => round(max($assigned - $reported, 0), 2),
+                    'exceeded_teaching_load' => round(max($reported - $assigned, 0), 2),
+                    'period_teaching_load' => $periodTotal,
+                    'report_count' => $reports->count(),
+                    'months_reported' => $reports->pluck('report_month')->values(),
+                    'latest_report' => $selectedMonth ? $periodReport : $reports->sortByDesc('updated_at')->first(),
+                    'period_report' => $periodReport,
+                    'period_detail_rows' => $selectedMonth ? $this->detailRowsForMonth($periodReport) : [],
+                    'monthly_breakdown' => collect(range(1, 12))->map(function (int $month) use ($reports) {
+                        $report = $reports->firstWhere('report_month', $month);
+
+                        return [
+                            'month' => $month,
+                            'total' => round((float) ($report?->reported_teaching_load ?? 0), 2),
+                            'updated_at' => $report?->updated_at,
+                            'reporter_name' => $report?->reporter?->name,
+                            'detail_rows' => $this->detailRowsForMonth($report),
+                        ];
+                    })->all(),
+                ];
+            })
+                ->sortBy(fn (array $row) => mb_strtolower((string) ($row['personnel']?->name ?? '')))
+                ->values();
+
+            $summaryTotals = [
+                'teacher_count' => $summaryRows->count(),
+                'assigned_teaching_load' => round((float) $summaryRows->sum('assigned_teaching_load'), 2),
+                'reported_teaching_load' => round((float) $summaryRows->sum('reported_teaching_load'), 2),
+                'remaining_teaching_load' => round((float) $summaryRows->sum('remaining_teaching_load'), 2),
+                'exceeded_teaching_load' => round((float) $summaryRows->sum('exceeded_teaching_load'), 2),
+                'period_teaching_load' => round((float) $summaryRows->sum('period_teaching_load'), 2),
+            ];
+        }
+
+        return view('kpis.teaching-load-management', [
+            'availableYears' => $availableYears,
+            'personnels' => $personnels,
+            'plan' => $plan,
+            'selectedMonth' => $selectedMonth,
+            'selectedPersonnelId' => $selectedPersonnelId,
+            'summaryRows' => $summaryRows,
+            'summaryTotals' => $summaryTotals,
+            'year' => $year,
+        ]);
     }
 
     public function store(Request $request): RedirectResponse

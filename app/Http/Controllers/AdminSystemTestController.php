@@ -41,6 +41,7 @@ class AdminSystemTestController extends Controller
         ['group' => 'KPI & báo cáo', 'name' => 'Khóa học & quy đổi', 'prefix' => 'courses', 'index' => 'courses.index'],
         ['group' => 'KPI & báo cáo', 'name' => 'Nhập kết quả Excel', 'prefix' => 'imports', 'index' => 'imports.index'],
         ['group' => 'KPI & báo cáo', 'name' => 'Báo cáo', 'prefix' => 'reports', 'index' => 'reports.index'],
+        ['group' => 'KPI & báo cáo', 'name' => 'Tổng hợp giờ dạy', 'prefix' => 'teaching-load-management', 'index' => 'teaching-load-management.index'],
         ['group' => 'KPI & báo cáo', 'name' => 'Thanh toán vượt', 'prefix' => 'payments', 'index' => 'payments.index'],
         ['group' => 'Quản trị', 'name' => 'Nhân sự & CTV', 'prefix' => 'personnels', 'index' => 'personnels.index'],
         ['group' => 'Quản trị', 'name' => 'Tài khoản', 'prefix' => 'users', 'index' => 'users.index'],
