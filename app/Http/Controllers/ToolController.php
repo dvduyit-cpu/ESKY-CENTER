@@ -7,17 +7,29 @@ use App\Support\SpreadsheetSupport;
 use App\Support\TextNormalizer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ToolController extends Controller
 {
     public function index(): View
     {
-        return view('tools.index', [
+        return view('tools.index');
+    }
+
+    public function shippingIndex(): View
+    {
+        return view('tools.shipping-index');
+    }
+
+    public function tuitionIndex(): View
+    {
+        return view('tools.tuition-index', [
             'bank' => LanguageTuitionController::bankSettings(),
         ]);
     }
@@ -40,6 +52,8 @@ class ToolController extends Controller
         return view('tools.shipping-label', [
             'label' => $data,
             'autoPrint' => ! $request->boolean('preview'),
+            'backRoute' => route('tools.shipping.index'),
+            'backLabel' => 'Quay lại nhóm In ấn & vận chuyển',
         ]);
     }
 
@@ -146,12 +160,72 @@ class ToolController extends Controller
             ]);
         }
 
+        $request->session()->put('tools.tuition_qr_preview', [
+            'source_name' => $file->getClientOriginalName(),
+            'items' => $items,
+        ]);
+
         return view('tools.tuition-qr-preview', [
             'bank' => $bank,
             'items' => $items,
             'errors' => $errors,
             'sourceName' => $file->getClientOriginalName(),
+            'backRoute' => route('tools.tuition.index'),
+            'backLabel' => 'Quay lại nhóm QR & học phí',
         ]);
+    }
+
+    public function downloadPreviewTuitionQr(Request $request, int $index): StreamedResponse|RedirectResponse
+    {
+        $item = $this->previewTuitionQrItem($request, $index);
+        $binary = $this->downloadTuitionQrImage($item);
+
+        return response()->streamDownload(
+            fn () => print($binary),
+            $this->tuitionQrFilename($item, $index),
+            ['Content-Type' => 'image/png']
+        );
+    }
+
+    public function downloadAllPreviewTuitionQrs(Request $request): BinaryFileResponse|RedirectResponse
+    {
+        if (! SpreadsheetSupport::hasZipArchive()) {
+            throw ValidationException::withMessages([
+                'file' => SpreadsheetSupport::missingZipExportMessage(),
+            ]);
+        }
+
+        $preview = $this->previewTuitionQrPreview($request);
+        $archivePath = tempnam(sys_get_temp_dir(), 'tuition-qr-');
+
+        if ($archivePath === false) {
+            throw ValidationException::withMessages([
+                'file' => 'Không thể tạo file tạm để đóng gói danh sách QR.',
+            ]);
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($archivePath, \ZipArchive::OVERWRITE) !== true) {
+            @unlink($archivePath);
+
+            throw ValidationException::withMessages([
+                'file' => 'Không thể khởi tạo file zip để tải tất cả QR.',
+            ]);
+        }
+
+        foreach ($preview['items'] as $index => $item) {
+            $zip->addFromString($this->tuitionQrFilename($item, $index), $this->downloadTuitionQrImage($item));
+        }
+
+        $zip->close();
+
+        $archiveName = 'danh-sach-qr-hoc-phi-'.Str::slug(
+            pathinfo((string) $preview['source_name'], PATHINFO_FILENAME) ?: 'xem-truoc'
+        ).'.zip';
+
+        return response()
+            ->download($archivePath, $archiveName, ['Content-Type' => 'application/zip'])
+            ->deleteFileAfterSend(true);
     }
 
     private function tuitionQrImageUrl(array $bank, float $amount, string $content): string
@@ -161,6 +235,66 @@ class ToolController extends Controller
             'addInfo' => $content,
             'accountName' => $bank['account_name'],
         ]);
+    }
+
+    private function previewTuitionQrPreview(Request $request): array
+    {
+        $preview = $request->session()->get('tools.tuition_qr_preview');
+
+        if (! is_array($preview) || ! isset($preview['items']) || ! is_array($preview['items']) || $preview['items'] === []) {
+            throw ValidationException::withMessages([
+                'file' => 'Phiên xem trước QR đã hết hạn. Vui lòng tải lại file Excel để tạo danh sách mới.',
+            ]);
+        }
+
+        return $preview;
+    }
+
+    private function previewTuitionQrItem(Request $request, int $index): array
+    {
+        $preview = $this->previewTuitionQrPreview($request);
+
+        if (! array_key_exists($index, $preview['items'])) {
+            throw ValidationException::withMessages([
+                'file' => 'Không tìm thấy QR cần tải trong phiên xem trước hiện tại.',
+            ]);
+        }
+
+        return $preview['items'][$index];
+    }
+
+    private function downloadTuitionQrImage(array $item): string
+    {
+        $response = Http::timeout(20)->retry(2, 250)->get((string) ($item['qr_url'] ?? ''));
+
+        if (! $response->successful() || $response->body() === '') {
+            $name = trim((string) ($item['name'] ?? 'QR'));
+
+            throw ValidationException::withMessages([
+                'file' => 'Không thể tải ảnh QR cho '.$name.'. Vui lòng thử lại sau.',
+            ]);
+        }
+
+        return $response->body();
+    }
+
+    private function tuitionQrFilename(array $item, int $index): string
+    {
+        $name = Str::slug((string) ($item['name'] ?? 'hoc-vien')) ?: 'hoc-vien';
+        $classCode = Str::slug((string) ($item['class_code'] ?? ''));
+        $parts = ['qr-hoc-phi', str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT)];
+
+        if (! empty($item['row_number'])) {
+            $parts[] = 'dong-'.$item['row_number'];
+        }
+
+        if ($classCode !== '') {
+            $parts[] = $classCode;
+        }
+
+        $parts[] = $name;
+
+        return implode('-', $parts).'.png';
     }
 
     private function number(mixed $value): float

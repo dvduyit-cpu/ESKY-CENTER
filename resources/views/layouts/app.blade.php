@@ -100,7 +100,9 @@
         @if($me->allowed('tools'))
         <div class="sidebar-label">Tiện ích</div>
         <nav class="sidebar-nav nav flex-column">
-            <a class="nav-link {{ request()->routeIs('tools.*') ? 'active' : '' }}" href="{{ route('tools.index') }}"><i class="bi bi-tools"></i> Tool tiện ích</a>
+            <a class="nav-link {{ request()->routeIs('tools.index') ? 'active' : '' }}" href="{{ route('tools.index') }}"><i class="bi bi-grid-1x2"></i> Tổng quan tiện ích</a>
+            <a class="nav-link {{ request()->routeIs('tools.shipping.*') ? 'active' : '' }}" href="{{ route('tools.shipping.index') }}"><i class="bi bi-box-seam"></i> In ấn & vận chuyển</a>
+            <a class="nav-link {{ request()->routeIs('tools.tuition.*') ? 'active' : '' }}" href="{{ route('tools.tuition.index') }}"><i class="bi bi-qr-code"></i> QR & học phí</a>
         </nav>
         @endif
         @if($me->allowed('personnel') || $me->allowed('users') || $me->allowed('roles') || $me->allowed('logs'))
@@ -183,6 +185,7 @@
                 $routeName === 'dashboard' => 'Tổng quan',
                 str_starts_with($routeName, 'director.') => 'Điều hành',
                 str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments'), str_starts_with($routeName, 'teaching-load-management') => 'KPI & báo cáo',
+                str_starts_with($routeName, 'tools.') => 'Tiện ích',
                 str_starts_with($routeName, 'admin.trash') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'profile'), str_starts_with($routeName, 'personal-settings') => 'Tài khoản cá nhân',
@@ -207,6 +210,9 @@
                 str_starts_with($routeName, 'teaching-load-management') => 'Tổng hợp giờ dạy',
                 str_starts_with($routeName, 'reports') => 'Báo cáo chỉ tiêu',
                 str_starts_with($routeName, 'payments') => 'Thanh toán vượt chỉ tiêu',
+                $routeName === 'tools.shipping.index' => 'In ấn & vận chuyển',
+                $routeName === 'tools.tuition.index' => 'QR & học phí',
+                str_starts_with($routeName, 'tools.') => 'Tổng quan tiện ích',
                 str_starts_with($routeName, 'admin.trash') => 'Thùng rác chung',
                 str_starts_with($routeName, 'personnels') => 'Nhân sự & cộng tác viên',
                 str_starts_with($routeName, 'users') => 'Tài khoản',

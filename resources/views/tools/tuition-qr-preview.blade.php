@@ -9,6 +9,7 @@
         * { box-sizing: border-box; }
         body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; background: #eef2f7; }
         .toolbar { position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; gap: 12px; padding: 14px 18px; background: #111827; }
+        .toolbar-actions { display: flex; flex-wrap: wrap; gap: 12px; }
         .toolbar a, .toolbar button { border: 0; border-radius: 10px; background: #fff; color: #111827; padding: 10px 16px; font: 600 14px Arial, Helvetica, sans-serif; cursor: pointer; text-decoration: none; }
         .page { max-width: 1100px; margin: 18px auto; padding: 24px; }
         .intro { margin-bottom: 18px; }
@@ -24,6 +25,8 @@
         .content-box { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; }
         .content-box span { display: block; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: .06em; margin-bottom: 4px; }
         .content-box strong { font-size: 14px; line-height: 1.45; }
+        .card-actions { margin-top: 14px; }
+        .card-actions a { display: inline-flex; align-items: center; gap: 8px; border-radius: 10px; background: #111827; color: #fff; padding: 10px 14px; font: 600 13px Arial, Helvetica, sans-serif; text-decoration: none; }
         @media print {
             body { background: #fff; }
             .toolbar { display: none !important; }
@@ -34,8 +37,11 @@
 </head>
 <body>
     <div class="toolbar">
-        <a href="{{ route('tools.index') }}">Quay lại Tool</a>
-        <button type="button" onclick="window.print()">In danh sách QR</button>
+        <a href="{{ $backRoute ?? route('tools.tuition.index') }}">{{ $backLabel ?? 'Quay lại nhóm QR & học phí' }}</a>
+        <div class="toolbar-actions">
+            <a href="{{ route('tools.tuition.download-all') }}">Tải tất cả ảnh QR</a>
+            <button type="button" onclick="window.print()">In danh sách QR</button>
+        </div>
     </div>
 
     <main class="page">
@@ -68,6 +74,9 @@
                     <div class="content-box">
                         <span>Nội dung chuyển khoản</span>
                         <strong>{{ $item['content'] }}</strong>
+                    </div>
+                    <div class="card-actions">
+                        <a href="{{ route('tools.tuition.download', ['index' => $loop->index]) }}">Tải ảnh QR</a>
                     </div>
                 </article>
             @endforeach

@@ -629,7 +629,7 @@ class LanguageTuitionSpreadsheet
     private function simulateChargeTotals(LanguageTuitionCharge $charge, ?float $ratio): array
     {
         $charge->loadMissing(['payments', 'languageClass']);
-        $paidAmount = (float) $charge->payments()->sum('amount');
+        $paidAmount = (float) $charge->payments()->where('receipt_status', '!=', 'cancelled')->sum('amount');
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
 
         if ($ratio === null) {
@@ -801,7 +801,7 @@ class LanguageTuitionSpreadsheet
         $discountPercentage = (float) $charge->discount_percentage;
         $discountAmount = round($originalAmount * $discountPercentage / 100, 2);
         $payableAmount = max(0, round($originalAmount - $discountAmount, 2));
-        $paidAmount = (float) $charge->payments()->sum('amount');
+        $paidAmount = (float) $charge->payments()->where('receipt_status', '!=', 'cancelled')->sum('amount');
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
 
         if ($payableAmount + 0.001 < $settledAmount) {
@@ -847,8 +847,9 @@ class LanguageTuitionSpreadsheet
 
     private function refreshCharge(LanguageTuitionCharge $charge, LanguageTuitionPayment $payment): void
     {
-        $paidAmount = (float) $charge->payments()->sum('amount');
-        $hasPendingReceipt = $charge->payments()->where('receipt_status', 'pending')->exists();
+        $activePayments = $charge->payments()->where('receipt_status', '!=', 'cancelled');
+        $paidAmount = (float) (clone $activePayments)->sum('amount');
+        $hasPendingReceipt = (clone $activePayments)->where('receipt_status', 'pending')->exists();
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
         $status = $hasPendingReceipt
             ? 'pending_receipt'
@@ -860,6 +861,7 @@ class LanguageTuitionSpreadsheet
         ]);
 
         if ($payment->receipt_status !== 'confirmed') {
+            LanguageMonthlyTargetRecord::where('language_tuition_payment_id', $payment->id)->delete();
             return;
         }
 

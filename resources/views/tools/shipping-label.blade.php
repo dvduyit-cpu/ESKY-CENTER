@@ -34,7 +34,7 @@
 </head>
 <body>
     <div class="toolbar">
-        <a href="{{ route('tools.index') }}">Quay lại Tool</a>
+        <a href="{{ $backRoute ?? route('tools.shipping.index') }}">{{ $backLabel ?? 'Quay lại nhóm In ấn & vận chuyển' }}</a>
         <button type="button" onclick="window.print()">In A5</button>
     </div>
 

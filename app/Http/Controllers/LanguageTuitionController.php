@@ -39,9 +39,10 @@ class LanguageTuitionController extends Controller
     {
         $month = $this->resolveMonthlyDate($request);
         $query = $this->monthlyPaymentsQuery($request, $month);
+        $summaryQuery = (clone $query)->where('receipt_status', '!=', 'cancelled');
 
-        $tuitionCollected = (float) (clone $query)->sum('amount');
-        $bookCollected = (float) (clone $query)->sum('book_amount');
+        $tuitionCollected = (float) (clone $summaryQuery)->sum('amount');
+        $bookCollected = (float) (clone $summaryQuery)->sum('book_amount');
         $pendingCount = (clone $query)->where('receipt_status', 'pending')->count();
 
         return view('language.tuition.monthly', [
@@ -57,9 +58,10 @@ class LanguageTuitionController extends Controller
     {
         $month = $this->resolveMonthlyDate($request);
         $query = $this->monthlyPaymentsQuery($request, $month);
+        $summaryQuery = (clone $query)->where('receipt_status', '!=', 'cancelled');
         $items = $query->orderByDesc('paid_at')->get();
-        $tuitionCollected = (float) (clone $query)->sum('amount');
-        $bookCollected = (float) (clone $query)->sum('book_amount');
+        $tuitionCollected = (float) (clone $summaryQuery)->sum('amount');
+        $bookCollected = (float) (clone $summaryQuery)->sum('book_amount');
         $pendingCount = (clone $query)->where('receipt_status', 'pending')->count();
 
         $data = [
@@ -268,7 +270,7 @@ class LanguageTuitionController extends Controller
 
     public function show(LanguageTuitionCharge $languageTuition): View
     {
-        $languageTuition->load(['student','course','languageClass.program','languageClass.level','languageClass.discountPolicy','discount','payments','incomingTransfers.fromClass','outgoingTransfers.toClass']);
+        $languageTuition->load(['student','course','languageClass.program','languageClass.level','languageClass.discountPolicy','discount','payments.collector','payments.canceller','incomingTransfers.fromClass','outgoingTransfers.toClass']);
         $keptDiscountIds=array_filter([
             $languageTuition->language_discount_policy_id,
             $languageTuition->student?->language_discount_policy_id,
@@ -570,19 +572,61 @@ class LanguageTuitionController extends Controller
         DB::transaction(function () use ($data,$languageTuitionPayment) {
             $payment=LanguageTuitionPayment::lockForUpdate()->findOrFail($languageTuitionPayment->id);
             abort_if($payment->receipt_status==='confirmed',422,'Phiếu thu này đã được xác nhận.');
+            abort_if($payment->receipt_status==='cancelled',422,'Phiếu thu này đã bị hủy nên không thể xác nhận lại.');
             $payment->update(['receipt_code'=>$data['receipt_code'],'receipt_status'=>'confirmed','confirmed_at'=>now()]);
             $this->refreshCharge(LanguageTuitionCharge::lockForUpdate()->findOrFail($payment->language_tuition_charge_id),$payment);
         });
         return redirect()->route('language-tuition.show',$languageTuitionPayment->language_tuition_charge_id)->with('success','Đã bổ sung và xác nhận số phiếu thu.')->with('receipt_ready',$languageTuitionPayment->id);
     }
 
+    public function cancelReceipt(Request $request, LanguageTuitionPayment $languageTuitionPayment): RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Chỉ admin mới được hủy phiếu thu.');
+
+        $data = $request->validate([
+            'cancel_reason' => ['required', 'string', 'max:1000'],
+        ], [
+            'cancel_reason.required' => 'Vui lòng nhập lý do hủy phiếu thu.',
+            'cancel_reason.max' => 'Lý do hủy không được vượt quá 1000 ký tự.',
+        ]);
+
+        $chargeId = $languageTuitionPayment->language_tuition_charge_id;
+
+        DB::transaction(function () use ($data, $languageTuitionPayment, $request) {
+            $payment = LanguageTuitionPayment::lockForUpdate()->findOrFail($languageTuitionPayment->id);
+            abort_if($payment->receipt_status === 'cancelled', 422, 'Phiếu thu này đã được hủy trước đó.');
+
+            $payment->update([
+                'receipt_status' => 'cancelled',
+                'cancelled_at' => now(),
+                'cancelled_by' => $request->user()->id,
+                'cancel_reason' => trim((string) $data['cancel_reason']),
+            ]);
+
+            LanguageMonthlyTargetRecord::where('language_tuition_payment_id', $payment->id)->delete();
+
+            $this->refreshCharge(
+                LanguageTuitionCharge::lockForUpdate()->findOrFail($payment->language_tuition_charge_id),
+                $payment
+            );
+        });
+
+        return redirect()
+            ->route('language-tuition.show', $chargeId)
+            ->with('success', 'Đã hủy phiếu thu và hoàn nguyên số tiền đã ghi nhận.');
+    }
+
     public function receiptPrint(Request $request, LanguageTuitionPayment $languageTuitionPayment): View
     {
+        abort_if($languageTuitionPayment->receipt_status === 'cancelled', 422, 'Phiếu thu này đã bị hủy.');
+
         return view('language.tuition.receipt',$this->receiptData($languageTuitionPayment)+['pdfMode'=>false,'autoPrint'=>!$request->boolean('preview')]);
     }
 
     public function receiptPdf(LanguageTuitionPayment $languageTuitionPayment)
     {
+        abort_if($languageTuitionPayment->receipt_status === 'cancelled', 422, 'Phiếu thu này đã bị hủy.');
+
         $data=$this->receiptData($languageTuitionPayment)+['pdfMode'=>true,'autoPrint'=>false];
         $options=new Options(); $options->set('defaultFont','DejaVu Sans'); $options->set('isFontSubsettingEnabled',true); $options->set('isRemoteEnabled',false); $options->setChroot(public_path());
         $dompdf=new Dompdf($options); $dompdf->loadHtml(view('language.tuition.receipt',$data)->render(),'UTF-8'); $dompdf->setPaper('A5','landscape'); $dompdf->render();
@@ -807,8 +851,9 @@ class LanguageTuitionController extends Controller
 
     private function refreshCharge(LanguageTuitionCharge $charge, LanguageTuitionPayment $payment): void
     {
-        $paidAmount = (float) $charge->payments()->sum('amount');
-        $hasPendingReceipt = $charge->payments()->where('receipt_status', 'pending')->exists();
+        $activePayments = $charge->payments()->where('receipt_status', '!=', 'cancelled');
+        $paidAmount = (float) (clone $activePayments)->sum('amount');
+        $hasPendingReceipt = (clone $activePayments)->where('receipt_status', 'pending')->exists();
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
         $status = $hasPendingReceipt
             ? 'pending_receipt'
@@ -817,6 +862,7 @@ class LanguageTuitionController extends Controller
         $charge->update(['paid_amount' => $paidAmount, 'status' => $status]);
 
         if ($payment->receipt_status !== 'confirmed') {
+            LanguageMonthlyTargetRecord::where('language_tuition_payment_id', $payment->id)->delete();
             return;
         }
 

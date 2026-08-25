@@ -7,203 +7,46 @@
 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
     <div>
         <h1 class="page-title">Tool tiện ích</h1>
-        <div class="page-subtitle">Gồm 3 công cụ nhanh: in gửi đơn vận chuyển A5, tạo QR từ link, và tạo QR học phí hàng loạt từ file Excel.</div>
+        <div class="page-subtitle">Chia theo từng nhóm để mở nhanh đúng trang chức năng cần dùng.</div>
     </div>
 </div>
 
 <div class="row g-4">
-    <div class="col-12">
-        <div class="card card-soft">
-            <div class="card-header">
-                <h5>In gửi đơn vận chuyển A5</h5>
-            </div>
-            <div class="card-body p-4">
-                <form method="POST" action="{{ route('tools.shipping.print') }}">
-                    @csrf
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Mã đơn</label>
-                            <input class="form-control" name="order_code" value="{{ old('order_code') }}" required>
+    <div class="col-lg-6">
+        <a class="text-decoration-none text-reset" href="{{ route('tools.shipping.index') }}">
+            <div class="card card-soft h-100">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                        <div>
+                            <span class="badge-soft badge-info">Nhóm 1</span>
+                            <h4 class="mt-3 mb-2">In ấn & vận chuyển</h4>
+                            <p class="text-muted mb-0">Tạo và in phiếu gửi đơn A5, tách riêng để thao tác nhanh khi cần in vận chuyển.</p>
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Đơn vị vận chuyển</label>
-                            <input class="form-control" name="carrier_name" value="{{ old('carrier_name') }}" placeholder="Ví dụ: GHTK, J&T, VNPost">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Tiền COD</label>
-                            <div class="input-group">
-                                <input class="form-control" type="number" min="0" step="0.01" name="cod_amount" value="{{ old('cod_amount', 0) }}">
-                                <span class="input-group-text">đ</span>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label">Người gửi</label>
-                            <input class="form-control" name="sender_name" value="{{ old('sender_name', $systemName ?? 'E-SKY CENTER') }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">SĐT người gửi</label>
-                            <input class="form-control" name="sender_phone" value="{{ old('sender_phone') }}">
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Địa chỉ người gửi</label>
-                            <textarea class="form-control" name="sender_address" rows="2" required>{{ old('sender_address') }}</textarea>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label">Người nhận</label>
-                            <input class="form-control" name="recipient_name" value="{{ old('recipient_name') }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">SĐT người nhận</label>
-                            <input class="form-control" name="recipient_phone" value="{{ old('recipient_phone') }}" required>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Địa chỉ người nhận</label>
-                            <textarea class="form-control" name="recipient_address" rows="3" required>{{ old('recipient_address') }}</textarea>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Ghi chú kiện hàng</label>
-                            <textarea class="form-control" name="package_note" rows="2">{{ old('package_note') }}</textarea>
-                        </div>
+                        <span class="stat-icon bg-info-subtle text-info"><i class="bi bi-box-seam"></i></span>
                     </div>
-
-                    <div class="form-actions">
-                        <button class="btn btn-outline-secondary" type="submit" name="preview" value="1">
-                            <i class="bi bi-eye me-2"></i>Xem trước
-                        </button>
-                        <button class="btn btn-primary" type="submit">
-                            <i class="bi bi-printer me-2"></i>In A5
-                        </button>
-                    </div>
-                </form>
+                    <div class="small text-muted">Gồm: in gửi đơn vận chuyển A5.</div>
+                    <div class="mt-3 fw-semibold text-primary">Mở trang nhóm <i class="bi bi-arrow-right-short"></i></div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
-
-    <div class="col-lg-5">
-        <div class="card card-soft h-100">
-            <div class="card-header">
-                <h5>Tạo mã QR từ link</h5>
-            </div>
-            <div class="card-body p-4">
-                <div class="mb-3">
-                    <label class="form-label">Link cần tạo QR</label>
-                    <input class="form-control" data-link-qr-input placeholder="https://example.com/...">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Kích thước</label>
-                    <select class="form-select" data-link-qr-size>
-                        <option value="240x240">240 x 240</option>
-                        <option value="320x320" selected>320 x 320</option>
-                        <option value="480x480">480 x 480</option>
-                    </select>
-                </div>
-                <div class="border rounded-3 bg-light p-3 text-center">
-                    <img class="img-fluid rounded bg-white border p-2 d-none" alt="QR từ link" data-link-qr-image style="max-height: 280px;">
-                    <div class="small text-muted" data-link-qr-placeholder>Nhập link để tạo mã QR.</div>
-                </div>
-                <div class="form-actions">
-                    <button class="btn btn-outline-primary" type="button" data-link-qr-generate>
-                        <i class="bi bi-qr-code me-2"></i>Tạo QR
-                    </button>
-                    <a class="btn btn-outline-success d-none" href="#" target="_blank" data-link-qr-open>
-                        <i class="bi bi-box-arrow-up-right me-2"></i>Mở ảnh QR
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-lg-7">
-        <div class="card card-soft h-100">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h5 class="mb-0">Tạo mã QR học phí từ Excel</h5>
-                <a class="btn btn-sm btn-outline-success" href="{{ route('tools.tuition.template') }}">
-                    <i class="bi bi-download me-1"></i>Tải file mẫu
-                </a>
-            </div>
-            <div class="card-body p-4">
-                <form method="POST" enctype="multipart/form-data" action="{{ route('tools.tuition.preview') }}">
-                    @csrf
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label">File Excel</label>
-                            <input class="form-control" type="file" name="file" accept=".xlsx,.xls,.csv" required>
-                            <div class="form-text">Cột bắt buộc: `HỌ TÊN`, `SỐ TIỀN`. Có thể thêm `MÃ LỚP`, `NỘI DUNG`, `GHI CHÚ`.</div>
+    <div class="col-lg-6">
+        <a class="text-decoration-none text-reset" href="{{ route('tools.tuition.index') }}">
+            <div class="card card-soft h-100">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                        <div>
+                            <span class="badge-soft badge-success">Nhóm 2</span>
+                            <h4 class="mt-3 mb-2">QR & học phí</h4>
+                            <p class="text-muted mb-0">Gộp các tiện ích tạo mã QR, gồm QR từ link và QR học phí hàng loạt từ file Excel.</p>
                         </div>
-                        @if($bank['enabled'])
-                            <div class="col-12">
-                                <div class="alert alert-light border mb-0">
-                                    <strong>Tài khoản nhận học phí:</strong> {{ $bank['name'] }} - {{ $bank['account_number'] }} - {{ $bank['account_name'] }}
-                                </div>
-                            </div>
-                        @else
-                            <div class="col-12">
-                                <div class="alert alert-warning mb-0">
-                                    Chưa cấu hình tài khoản ngân hàng nhận học phí, cần cấu hình trước khi tạo QR hàng loạt.
-                                </div>
-                            </div>
-                        @endif
+                        <span class="stat-icon bg-success-subtle text-success"><i class="bi bi-qr-code"></i></span>
                     </div>
-
-                    <div class="form-actions">
-                        <button class="btn btn-primary" @disabled(! $bank['enabled'])>
-                            <i class="bi bi-file-earmark-spreadsheet me-2"></i>Tạo danh sách QR
-                        </button>
-                    </div>
-                </form>
+                    <div class="small text-muted">Gồm: QR từ link, QR học phí từ Excel.</div>
+                    <div class="mt-3 fw-semibold text-primary">Mở trang nhóm <i class="bi bi-arrow-right-short"></i></div>
+                </div>
             </div>
-        </div>
+        </a>
     </div>
 </div>
 @endsection
-
-@push('scripts')
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const linkInput = document.querySelector('[data-link-qr-input]');
-    const sizeInput = document.querySelector('[data-link-qr-size]');
-    const image = document.querySelector('[data-link-qr-image]');
-    const placeholder = document.querySelector('[data-link-qr-placeholder]');
-    const generateButton = document.querySelector('[data-link-qr-generate]');
-    const openLink = document.querySelector('[data-link-qr-open]');
-
-    if (!linkInput || !sizeInput || !image || !placeholder || !generateButton || !openLink) {
-        return;
-    }
-
-    const renderQr = function () {
-        const link = linkInput.value.trim();
-        if (!link) {
-            image.classList.add('d-none');
-            image.removeAttribute('src');
-            placeholder.classList.remove('d-none');
-            openLink.classList.add('d-none');
-            openLink.removeAttribute('href');
-            return;
-        }
-
-        const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?' + new URLSearchParams({
-            size: sizeInput.value,
-            data: link,
-        }).toString();
-
-        image.src = qrUrl;
-        image.classList.remove('d-none');
-        placeholder.classList.add('d-none');
-        openLink.href = qrUrl;
-        openLink.classList.remove('d-none');
-    };
-
-    generateButton.addEventListener('click', renderQr);
-    sizeInput.addEventListener('change', renderQr);
-    linkInput.addEventListener('keydown', function (event) {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            renderQr();
-        }
-    });
-});
-</script>
-@endpush

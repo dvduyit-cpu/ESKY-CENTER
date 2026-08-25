@@ -177,6 +177,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::patch('/language-tuition/{languageTuition}/discount',[LanguageTuitionController::class,'updateDiscount'])->middleware('permission:language_tuition,update')->name('language-tuition.discount.update');
         Route::post('/language-tuition/{languageTuition}/pay',[LanguageTuitionController::class,'pay'])->middleware('permission:language_tuition,update')->name('language-tuition.pay');
         Route::post('/language-tuition-payments/{languageTuitionPayment}/confirm-receipt',[LanguageTuitionController::class,'confirmReceipt'])->middleware('permission:language_tuition,update')->name('language-tuition.confirm-receipt');
+        Route::patch('/language-tuition-payments/{languageTuitionPayment}/cancel-receipt',[LanguageTuitionController::class,'cancelReceipt'])->middleware('permission:language_tuition,update')->name('language-tuition.cancel-receipt');
         Route::get('/language-tuition-payments/{languageTuitionPayment}/receipt/pdf',[LanguageTuitionController::class,'receiptPdf'])->middleware('permission:language_tuition,view')->name('language-tuition.receipt.pdf');
         Route::get('/language-tuition-payments/{languageTuitionPayment}/receipt/print',[LanguageTuitionController::class,'receiptPrint'])->middleware('permission:language_tuition,view')->name('language-tuition.receipt.print');
         Route::get('/language-tuition/{languageTuition}/qr-download',[LanguageTuitionController::class,'downloadQr'])->middleware('permission:language_tuition,view')->name('language-tuition.qr-download');
@@ -267,7 +268,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::patch('/payments/{payment}/paid', [PaymentController::class, 'paid'])->middleware('permission:payments,update')->name('payments.paid');
         Route::patch('/payments/{payment}/cancel', [PaymentController::class, 'cancel'])->middleware('permission:payments,update')->name('payments.cancel');
         Route::get('/tools', [ToolController::class, 'index'])->middleware('permission:tools,view')->name('tools.index');
+        Route::get('/tools/shipping-label', [ToolController::class, 'shippingIndex'])->middleware('permission:tools,view')->name('tools.shipping.index');
+        Route::get('/tools/tuition-qr', [ToolController::class, 'tuitionIndex'])->middleware('permission:tools,view')->name('tools.tuition.index');
         Route::post('/tools/shipping-label/print', [ToolController::class, 'printShippingLabel'])->middleware('permission:tools,create')->name('tools.shipping.print');
+        Route::get('/tools/tuition-qr/download-all', [ToolController::class, 'downloadAllPreviewTuitionQrs'])->middleware('permission:tools,view')->name('tools.tuition.download-all');
+        Route::get('/tools/tuition-qr/download/{index}', [ToolController::class, 'downloadPreviewTuitionQr'])->whereNumber('index')->middleware('permission:tools,view')->name('tools.tuition.download');
         Route::get('/tools/tuition-qr/template', [ToolController::class, 'tuitionQrTemplate'])->middleware('permission:tools,view')->name('tools.tuition.template');
         Route::post('/tools/tuition-qr/preview', [ToolController::class, 'previewTuitionQrs'])->middleware('permission:tools,create')->name('tools.tuition.preview');
 

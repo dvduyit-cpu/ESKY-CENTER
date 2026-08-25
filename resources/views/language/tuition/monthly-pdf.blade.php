@@ -32,7 +32,7 @@
                 · Từ khóa: {{ $filters['q'] }}
             @endif
             @if($filters['receipt_status'] !== '')
-                · Trạng thái phiếu: {{ $filters['receipt_status'] === 'confirmed' ? 'Đã xác nhận' : 'Chờ bổ sung' }}
+                · Trạng thái phiếu: {{ $filters['receipt_status'] === 'confirmed' ? 'Đã xác nhận' : ($filters['receipt_status'] === 'cancelled' ? 'Đã hủy' : 'Chờ bổ sung') }}
             @endif
         </div>
     </div>
@@ -93,7 +93,7 @@
                         <td class="right nowrap">{{ number_format((float) $payment->amount) }}đ</td>
                         <td class="right nowrap">{{ number_format((float) $payment->book_amount) }}đ</td>
                         <td>{{ $payment->collector?->name ?: '—' }}</td>
-                        <td class="nowrap">{{ $payment->receipt_status === 'confirmed' ? 'Đã xác nhận' : 'Chờ bổ sung' }}</td>
+                        <td class="nowrap">{{ $payment->receipt_status === 'confirmed' ? 'Đã xác nhận' : ($payment->receipt_status === 'cancelled' ? 'Đã hủy' : 'Chờ bổ sung') }}</td>
                     </tr>
                 @endforeach
             </tbody>

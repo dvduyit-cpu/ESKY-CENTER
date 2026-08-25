@@ -5,7 +5,10 @@
 
 @section('content')
 @php($labels = ['unpaid' => 'Chưa đóng', 'partial' => 'Đóng một phần', 'pending_receipt' => 'Chờ bổ sung phiếu thu', 'paid' => 'Đã đóng đủ', 'transferred' => 'Đã quyết toán chuyển lớp'])
+@php($receiptStatusLabels = ['confirmed' => 'Đã xác nhận', 'pending' => 'Chờ phiếu', 'cancelled' => 'Đã hủy'])
+@php($paymentMethods = ['cash' => 'Tiền mặt', 'transfer' => 'Chuyển khoản', 'card' => 'Thẻ', 'other' => 'Khác'])
 @php($remaining = $item->remainingAmount())
+@php($isAdmin = auth()->user()->isAdmin())
 @php($transferContent = \Illuminate\Support\Str::limit(trim(\Illuminate\Support\Str::ascii($item->student->name.' '.($item->languageClass?->code ?? 'CHUA XEP LOP'))), 50, ''))
 
 <div class="tuition-detail-page">
@@ -21,7 +24,7 @@
 
     @if(session('receipt_ready'))
         @php($readyPayment = $item->payments->firstWhere('id', (int) session('receipt_ready')))
-        @if($readyPayment)
+        @if($readyPayment && $readyPayment->receipt_status !== 'cancelled')
             <div class="alert alert-success receipt-ready-panel">
                 <div>
                     <strong><i class="bi bi-check-circle-fill me-2"></i>Phiếu thu {{ $readyPayment->receipt_code ?: 'tạm - số phiếu cập nhật sau' }} đã sẵn sàng</strong>
@@ -135,12 +138,29 @@
                                                 <div class="small text-muted text-truncate" style="max-width:220px" title="{{ $payment->note }}">{{ $payment->note }}</div>
                                             @endif
                                         </td>
-                                        <td>{{ $payment->payment_method }}</td>
-                                        <td>{{ $payment->receipt_status === 'confirmed' ? 'Đã xác nhận' : 'Chờ phiếu' }}</td>
+                                        <td>{{ $paymentMethods[$payment->payment_method] ?? $payment->payment_method }}</td>
+                                        <td>
+                                            <span class="badge-soft {{ $payment->receipt_status === 'confirmed' ? 'badge-success' : ($payment->receipt_status === 'cancelled' ? 'badge-danger' : 'badge-warning') }}">
+                                                {{ $receiptStatusLabels[$payment->receipt_status] ?? $payment->receipt_status }}
+                                            </span>
+                                            @if($payment->receipt_status === 'cancelled')
+                                                <div class="small text-danger mt-1">
+                                                    Hủy lúc {{ $payment->cancelled_at?->format('d/m/Y H:i') ?: '—' }} · {{ $payment->canceller?->name ?: 'Admin' }}
+                                                </div>
+                                                @if($payment->cancel_reason)
+                                                    <div class="small text-muted">{{ $payment->cancel_reason }}</div>
+                                                @endif
+                                            @endif
+                                        </td>
                                         <td class="text-end text-nowrap">
-                                            <a class="btn btn-sm btn-outline-secondary" target="_blank" href="{{ route('language-tuition.receipt.print', [$payment, 'preview' => 1]) }}" title="Xem hóa đơn"><i class="bi bi-eye"></i></a>
-                                            <a class="btn btn-sm btn-outline-success" data-no-loading download href="{{ route('language-tuition.receipt.pdf', $payment) }}" title="Tải PDF"><i class="bi bi-file-earmark-pdf"></i></a>
-                                            <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('language-tuition.receipt.print', $payment) }}" title="In A5"><i class="bi bi-printer"></i></a>
+                                            @if($payment->receipt_status !== 'cancelled')
+                                                <a class="btn btn-sm btn-outline-secondary" target="_blank" href="{{ route('language-tuition.receipt.print', [$payment, 'preview' => 1]) }}" title="Xem hóa đơn"><i class="bi bi-eye"></i></a>
+                                                <a class="btn btn-sm btn-outline-success" data-no-loading download href="{{ route('language-tuition.receipt.pdf', $payment) }}" title="Tải PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+                                                <a class="btn btn-sm btn-outline-primary" target="_blank" href="{{ route('language-tuition.receipt.print', $payment) }}" title="In A5"><i class="bi bi-printer"></i></a>
+                                            @endif
+                                            @if($isAdmin && $payment->receipt_status !== 'cancelled')
+                                                <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#cancel-receipt-{{ $payment->id }}" title="Hủy phiếu thu"><i class="bi bi-x-octagon"></i></button>
+                                            @endif
                                         </td>
                                     </tr>
                                 @empty
@@ -238,6 +258,13 @@
                 </form>
             @endforeach
 
+            @if($isAdmin)
+                <div class="alert alert-light border mb-4">
+                    <strong>Quy trình hủy phiếu thu</strong>
+                    <div class="small text-muted mt-1">Chỉ admin được hủy phiếu. Khi hủy, hệ thống sẽ tự trừ lại số tiền đã ghi nhận, cập nhật trạng thái khoản thu và gỡ doanh thu KPI của phiếu đó.</div>
+                </div>
+            @endif
+
             @if($remaining > 0)
                 <div class="card card-soft">
                     <div class="card-header"><h5>Ghi nhận tiền</h5></div>
@@ -299,6 +326,46 @@
         </div>
     </div>
 </div>
+
+@if($isAdmin)
+    @foreach($item->payments->sortByDesc('paid_at') as $payment)
+        @if($payment->receipt_status !== 'cancelled')
+            <div class="modal fade" id="cancel-receipt-{{ $payment->id }}" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('language-tuition.cancel-receipt', $payment) }}">
+                            @csrf
+                            @method('PATCH')
+                            <div class="modal-header">
+                                <h5 class="modal-title">Hủy phiếu thu {{ $payment->receipt_code ?: 'tạm ghi #' . $payment->id }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-warning small">
+                                    Phiếu này sẽ bị chuyển sang trạng thái đã hủy, đồng thời hoàn nguyên số tiền đã thu khỏi khoản học phí.
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Lý do hủy phiếu thu</label>
+                                    <textarea class="form-control" name="cancel_reason" rows="4" maxlength="1000" required placeholder="Ví dụ: Thu nhầm học viên, nhập sai số tiền, tạo trùng phiếu..."></textarea>
+                                </div>
+                                <div class="small text-muted">
+                                    Số tiền phiếu: <strong>{{ number_format((float) $payment->amount + (float) $payment->book_amount) }}đ</strong>
+                                    · Ngày thu {{ $payment->paid_at?->format('d/m/Y H:i') }}
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Đóng</button>
+                                <button class="btn btn-danger">
+                                    <i class="bi bi-x-octagon me-1"></i>Xác nhận hủy phiếu
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endif
+    @endforeach
+@endif
 @endsection
 
 @push('scripts')
