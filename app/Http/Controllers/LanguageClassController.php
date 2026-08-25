@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\{LanguageClass, LanguageClassLesson, LanguageCourse, LanguageDiscountPolicy, LanguageEnrollment, LanguageLevel, LanguageProgram, LanguageStudent, LanguageStudentMonthlyProgress, LanguageStudentScore, LanguageTuitionCharge, Module, User, UserPermission};
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Illuminate\Validation\ValidationException;
+use App\Support\ActivityLogger;
 use App\Support\{LanguageClassSpreadsheet, LanguageDiscountResolver, LanguageEnrollmentManager, SpreadsheetSupport};
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -17,11 +19,49 @@ class LanguageClassController extends Controller
 
     public function index(Request $request): View
     {
-        $query=LanguageClass::with(['program','level','teacher','discountPolicy'])->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')])->latest();
-        if($request->user()->isTeacher()&&!$this->hasExplicitLanguageClassUpdate($request->user()))$query->where('teacher_user_id',$request->user()->id);
+        $user = $request->user();
+        $status = $request->string('status')->toString();
+        if ($status === 'deleted' && ! $user->isAdmin()) {
+            abort(403, 'Chỉ admin mới được xem thùng rác lớp học.');
+        }
+
+        $query = ($user->isAdmin() ? LanguageClass::withTrashed() : LanguageClass::query())
+            ->with(['program','level','teacher','discountPolicy'])
+            ->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')])
+            ->latest();
+        if($user->isTeacher()&&!$this->hasExplicitLanguageClassUpdate($user))$query->where('teacher_user_id',$user->id);
         if($request->filled('q')){$search=$request->string('q');$query->where(fn($q)=>$q->where('name','like',"%{$search}%")->orWhere('code','like',"%{$search}%"));}
-        if($request->filled('status'))$query->where('status',$request->status);
-        return view('language.classes.index',['items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
+        if ($status === 'deleted' && $user->isAdmin()) {
+            $query->onlyTrashed();
+        } else {
+            if ($user->isAdmin()) {
+                $query->whereNull('deleted_at');
+            }
+            if ($status !== '') {
+                $query->where('status', $status);
+            }
+        }
+
+        $items = $query->paginate(\App\Support\Pagination::perPage())->withQueryString();
+        $deleteLogs = collect();
+        if ($user->isAdmin() && $status === 'deleted' && $items->isNotEmpty()) {
+            $deleteLogs = ActivityLog::query()
+                ->with('user')
+                ->where('module', 'language_classes')
+                ->where('action', 'delete')
+                ->where('subject_type', LanguageClass::class)
+                ->whereIn('subject_id', $items->pluck('id')->all())
+                ->orderByDesc('created_at')
+                ->get()
+                ->unique('subject_id')
+                ->keyBy('subject_id');
+        }
+
+        return view('language.classes.index', [
+            'items' => $items,
+            'canViewTrash' => $user->isAdmin(),
+            'deleteLogs' => $deleteLogs,
+        ]);
     }
 
     public function teacherIndex(Request $request): View
@@ -29,6 +69,10 @@ class LanguageClassController extends Controller
         $user=$request->user();
         $query=LanguageClass::with(['program','level','teacher'])->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')]);
         if($user->canTeach()&&!$this->hasExplicitLanguageClassUpdate($user))$query->where('teacher_user_id',$user->id);
+        if($request->filled('q')){
+            $search=$request->string('q');
+            $query->where(fn($builder)=>$builder->where('name','like',"%{$search}%")->orWhere('code','like',"%{$search}%"));
+        }
         $request->boolean('history')?$query->whereIn('status',['completed','cancelled']):$query->whereNotIn('status',['completed','cancelled']);
         return view('language.classes.teacher-index',['items'=>$query->orderByDesc('start_date')->get()]);
     }
@@ -312,16 +356,43 @@ class LanguageClassController extends Controller
         return back()->with('success','Đã cập nhật trạng thái học; điểm và đánh giá vẫn được giữ.');
     }
 
+    public function show(Request $request, LanguageClass $languageClass): View
+    {
+        $this->authorizeClassView($request, $languageClass);
+
+        return view('language.classes.show', [
+            'item' => $languageClass->load([
+                'course',
+                'program',
+                'level',
+                'teacher',
+                'discountPolicy',
+                'enrollments' => fn ($query) => $query
+                    ->where('status', '!=', 'dropped')
+                    ->with('student')
+                    ->orderBy('enrolled_at'),
+                'lessons' => fn ($query) => $query->orderByDesc('lesson_date')->orderByDesc('start_time'),
+            ]),
+        ]);
+    }
+
     public function create():View{return $this->form(new LanguageClass);}
-    public function store(Request $r):RedirectResponse{LanguageClass::create($this->data($r));return redirect()->route('language-classes.index')->with('success','Đã tạo lớp học.');}
+    public function store(Request $r):RedirectResponse
+    {
+        $class = LanguageClass::create($this->data($r));
+        ActivityLogger::log('language_classes', 'create', 'Tạo lớp học '.$class->name, $class);
+        return redirect()->route('language-classes.index')->with('success','Đã tạo lớp học.');
+    }
     public function edit(Request $request,LanguageClass $languageClass):View{$this->authorizeManagement($request,$languageClass);return $this->form($languageClass->load(['enrollments'=>fn($q)=>$q->where('status','!=','dropped')->with('student')]));}
     public function update(Request $r,LanguageClass $languageClass):RedirectResponse
     {
         $this->authorizeManagement($r,$languageClass);
         $data=$this->data($r,$languageClass);
-        $skipped=DB::transaction(function()use($languageClass,$data){
+        [$skipped,$before,$after]=DB::transaction(function()use($languageClass,$data){
             $lockedClass=LanguageClass::query()->lockForUpdate()->findOrFail($languageClass->id);
+            $before=$lockedClass->toArray();
             $lockedClass->update($data);
+            $lockedClass->enrollments()->whereIn('status',['studying','paused','reserved'])->update(['tuition'=>(float)$lockedClass->default_tuition]);
             $classDiscount=$lockedClass->language_discount_policy_id
                 ? LanguageDiscountPolicy::find($lockedClass->language_discount_policy_id)
                 : null;
@@ -339,21 +410,47 @@ class LanguageClassController extends Controller
                     : null;
                 $discount=LanguageDiscountResolver::highest($classDiscount,$studentDiscount);
                 $percentage=(float)($discount?->percentage??0);
-                $discountAmount=round((float)$charge->original_amount*$percentage/100,2);
-                $payableAmount=max(0,round((float)$charge->original_amount-$discountAmount,2));
+                $originalAmount=round((float)$lockedClass->default_tuition,2);
+                $discountAmount=round($originalAmount*$percentage/100,2);
+                $payableAmount=max(0,round($originalAmount-$discountAmount,2));
                 $settledAmount=(float)$charge->paid_amount+(float)$charge->credit_amount;
                 if($payableAmount+0.001<$settledAmount){$skipped++;continue;}
                 $pending=$charge->payments()->where('receipt_status','pending')->exists();
                 $status=$pending?'pending_receipt':($settledAmount+0.001>=$payableAmount?'paid':($settledAmount>0?'partial':'unpaid'));
-                $charge->update(['language_discount_policy_id'=>$discount?->id,'discount_percentage'=>$percentage,'discount_amount'=>$discountAmount,'payable_amount'=>$payableAmount,'status'=>$status]);
+                $charge->update([
+                    'language_course_id'=>$lockedClass->language_course_id,
+                    'original_amount'=>$originalAmount,
+                    'language_discount_policy_id'=>$discount?->id,
+                    'discount_percentage'=>$percentage,
+                    'discount_amount'=>$discountAmount,
+                    'payable_amount'=>$payableAmount,
+                    'status'=>$status,
+                ]);
             }
-            return $skipped;
+            return [$skipped,$before,$lockedClass->fresh()->toArray()];
         });
+        ActivityLogger::log('language_classes', 'update', 'Cập nhật lớp học '.$languageClass->name, $languageClass, $before, $after);
         $message='Đã cập nhật lớp và áp dụng mức miễn giảm cao nhất giữa lớp với từng học viên, không cộng dồn.';
         if($skipped)$message.=' Có '.$skipped.' khoản đã thu vượt mức mới nên được giữ nguyên để bảo toàn chứng từ.';
         return redirect()->route('language-classes.index')->with('success',$message);
     }
-    public function destroy(Request $request,LanguageClass $languageClass):RedirectResponse{$this->authorizeManagement($request,$languageClass);$languageClass->delete();return back()->with('success','Đã xóa lớp học.');}
+    public function destroy(Request $request,LanguageClass $languageClass):RedirectResponse
+    {
+        $this->authorizeManagement($request,$languageClass);
+        $before=$languageClass->toArray();
+        $languageClass->delete();
+        ActivityLogger::log('language_classes', 'delete', 'Xóa mềm lớp học '.$languageClass->name, $languageClass, $before);
+        return back()->with('success','Đã xóa lớp học. Lớp đã được chuyển vào thùng rác admin.');
+    }
+    public function restore(Request $request, int $id): RedirectResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403, 'Chỉ admin mới được khôi phục lớp học.');
+        $languageClass = LanguageClass::onlyTrashed()->findOrFail($id);
+        $before=$languageClass->toArray();
+        $languageClass->restore();
+        ActivityLogger::log('language_classes', 'restore', 'Khôi phục lớp học '.$languageClass->name, $languageClass, $before, $languageClass->fresh()->toArray());
+        return back()->with('success','Đã khôi phục lớp học từ thùng rác.');
+    }
     public function duplicate(Request $request,LanguageClass $languageClass):RedirectResponse
     {
         $this->authorizeRegistrar($request);
@@ -529,6 +626,14 @@ class LanguageClassController extends Controller
         $user=$request->user();
         $allowed=$this->hasExplicitLanguageClassUpdate($user)||($this->canManageAllClasses($user)&&!$user->isTeacher())||($user->canTeach()&&(int)$class->teacher_user_id===(int)$user->id);
         abort_unless($allowed,403,'Bạn không được phân công quản lý lớp này.');
+    }
+    private function authorizeClassView(Request $request, LanguageClass $class): void
+    {
+        $user = $request->user();
+
+        if ($user->canTeach() && ! $this->hasExplicitLanguageClassUpdate($user)) {
+            abort_unless((int) $class->teacher_user_id === (int) $user->id, 403, 'Ban khong duoc phan cong phu trach lop nay.');
+        }
     }
     private function authorizeTeachingClass(Request $request,LanguageClass $class):void
     {

@@ -110,7 +110,8 @@
             @if($me->allowed('roles'))<a class="nav-link {{ request()->routeIs('roles.*') ? 'active' : '' }}" href="{{ route('roles.index') }}"><i class="bi bi-shield-check"></i> Vai trò & quyền</a>@endif
             @if($me->allowed('logs'))<a class="nav-link {{ request()->routeIs('logs.*') ? 'active' : '' }}" href="{{ route('logs.index') }}"><i class="bi bi-clock-history"></i> Nhật ký hệ thống</a>@endif
             @if($me->allowed('software_settings'))<a class="nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}" href="{{ route('settings.edit','general') }}"><i class="bi bi-sliders"></i> Cấu hình phần mềm</a>@endif
-            @if($me->isAdmin())<a class="nav-link {{ request()->routeIs('admin.system-test*') ? 'active' : '' }}" href="{{ route('admin.system-test') }}"><i class="bi bi-clipboard2-pulse"></i> Kiểm thử hệ thống</a>@endif
+            @if($me->isAdmin())<a class="nav-link {{ request()->routeIs('admin.trash.*') ? 'active' : '' }}" href="{{ route('admin.trash.index') }}"><i class="bi bi-trash-fill"></i> Thùng rác chung</a>@endif
+            @if($me->isAdmin())<a class="nav-link {{ request()->routeIs('admin.system-test*') ? 'active' : '' }}" href="{{ route('admin.system-test') }}"><i class="bi bi-activity"></i> Kiểm thử hệ thống</a>@endif
         </nav>
         @endif
         <div class="sidebar-label">Trợ giúp</div>
@@ -166,6 +167,7 @@
                 str_ends_with($routeName, '.show') => 'Chi tiết',
                 str_contains($routeName, 'permissions') => 'Phân quyền',
                 str_contains($routeName, 'import') => 'Nhập dữ liệu',
+                str_starts_with($routeName, 'admin.trash') => 'Khôi phục dữ liệu',
                 str_starts_with($routeName, 'profile.') => 'Cập nhật',
                 str_starts_with($routeName, 'personal-settings.') => 'Thiết lập',
                 str_starts_with($routeName, 'settings.') => 'Thiết lập',
@@ -179,6 +181,7 @@
                 $routeName === 'dashboard' => 'Tổng quan',
                 str_starts_with($routeName, 'director.') => 'Điều hành',
                 str_starts_with($routeName, 'kpi-dashboard'), str_starts_with($routeName, 'kpis'), str_starts_with($routeName, 'courses'), str_starts_with($routeName, 'imports'), str_starts_with($routeName, 'reports'), str_starts_with($routeName, 'payments') => 'KPI & báo cáo',
+                str_starts_with($routeName, 'admin.trash') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'personnels'), str_starts_with($routeName, 'users'), str_starts_with($routeName, 'roles'), str_starts_with($routeName, 'logs'), str_starts_with($routeName, 'settings') => 'Quản trị hệ thống',
                 str_starts_with($routeName, 'profile'), str_starts_with($routeName, 'personal-settings') => 'Tài khoản cá nhân',
                 default => 'Hệ thống',
@@ -199,6 +202,7 @@
                 str_starts_with($routeName, 'imports') => 'Nhập kết quả Excel',
                 str_starts_with($routeName, 'reports') => 'Báo cáo chỉ tiêu',
                 str_starts_with($routeName, 'payments') => 'Thanh toán vượt chỉ tiêu',
+                str_starts_with($routeName, 'admin.trash') => 'Thùng rác chung',
                 str_starts_with($routeName, 'personnels') => 'Nhân sự & cộng tác viên',
                 str_starts_with($routeName, 'users') => 'Tài khoản',
                 str_starts_with($routeName, 'roles') => 'Vai trò & quyền',

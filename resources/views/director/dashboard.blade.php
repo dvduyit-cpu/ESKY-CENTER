@@ -68,7 +68,7 @@
                     @endforelse
                 </div>
                 <div class="small text-muted mt-3">Cập nhật lúc {{$systemHealth['checked_at']->format('H:i d/m/Y')}}</div>
-                @if(auth()->user()->isAdmin())<a class="btn btn-outline-primary w-100 mt-3" href="{{route('admin.system-test')}}"><i class="bi bi-clipboard2-pulse me-1"></i>Mở kiểm thử hệ thống</a>@endif
+                @if(auth()->user()->isAdmin())<a class="btn btn-outline-primary w-100 mt-3" href="{{route('admin.system-test')}}"><i class="bi bi-activity me-1"></i>Mở kiểm thử hệ thống</a>@endif
             </div>
         </div>
     </div>

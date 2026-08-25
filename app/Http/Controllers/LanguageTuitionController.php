@@ -3,7 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\{LanguageClass, LanguageCourse, LanguageDiscountPolicy, LanguageEnrollment, LanguageLead, LanguageMonthlyTargetRecord, LanguageStudent, LanguageTuitionCharge, LanguageTuitionPayment};
-use App\Support\{CenterCode, ExcelExporter, LanguageDiscountResolver};
+use App\Support\{CenterCode, ExcelExporter, LanguageDiscountResolver, LanguageTuitionSpreadsheet, SpreadsheetSupport};
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -15,57 +16,29 @@ use Dompdf\Dompdf;
 use Dompdf\Options;
 use App\Models\SystemSetting;
 use Carbon\Carbon;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class LanguageTuitionController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = LanguageTuitionCharge::with(['student','course','languageClass','discount','payments'])->withSum('payments','amount')->latest();
-        if ($request->filled('q')) {
-            $search = $request->string('q');
-            $query->where(fn ($builder) => $builder->where('code','like',"%{$search}%")
-                ->orWhereHas('student',fn ($student) => $student->where('name','like',"%{$search}%"))
-                ->orWhereHas('languageClass',fn ($class) => $class->where('code','like',"%{$search}%")->orWhere('name','like',"%{$search}%")));
-        }
-        if ($request->filled('class')) $query->where('language_class_id',$request->integer('class'));
-        if ($request->filled('status')) $query->where('status',$request->status);
-        $this->applyPeriod($query,$request);
+        $query = $this->filteredTuitionQuery($request, ['student', 'course', 'languageClass', 'discount', 'payments'])
+            ->withSum('payments', 'amount');
         return view('language.tuition.index',[
             'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'filterYear'=>$request->integer('year',now()->year),
-            'classes'=>LanguageClass::whereHas('tuitionCharges')->orderBy('code')->get(['id','code','name']),
+            'classes'=>LanguageClass::query()
+                ->whereNull('deleted_at')
+                ->whereHas('tuitionCharges')
+                ->orderBy('code')
+                ->get(['id','code','name']),
         ]);
     }
 
     public function monthly(Request $request): View
     {
-        try {
-            $month = $request->filled('month')
-                ? Carbon::createFromFormat('!Y-m', (string) $request->input('month'))->startOfMonth()
-                : now()->startOfMonth();
-        } catch (\Throwable) {
-            $month = now()->startOfMonth();
-        }
-
-        $query = LanguageTuitionPayment::query()
-            ->with(['collector','charge.student.guardians','charge.course','charge.languageClass'])
-            ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()]);
-        if ($request->filled('q')) {
-            $search = (string) $request->string('q')->trim();
-            $query->where(function ($builder) use ($search) {
-                $builder->where('receipt_code', 'like', "%{$search}%")
-                    ->orWhereHas('charge.student', fn ($student) => $student
-                        ->where('name', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%")
-                        ->orWhereHas('guardians', fn ($guardians) => $guardians->where('phone', 'like', "%{$search}%")))
-                    ->orWhereHas('charge.languageClass', fn ($class) => $class
-                        ->where('code', 'like', "%{$search}%")
-                        ->orWhere('name', 'like', "%{$search}%"));
-            });
-        }
-        if ($request->filled('receipt_status')) {
-            $query->where('receipt_status', $request->input('receipt_status'));
-        }
+        $month = $this->resolveMonthlyDate($request);
+        $query = $this->monthlyPaymentsQuery($request, $month);
 
         $tuitionCollected = (float) (clone $query)->sum('amount');
         $bookCollected = (float) (clone $query)->sum('book_amount');
@@ -80,13 +53,51 @@ class LanguageTuitionController extends Controller
         ]);
     }
 
+    public function monthlyPdf(Request $request)
+    {
+        $month = $this->resolveMonthlyDate($request);
+        $query = $this->monthlyPaymentsQuery($request, $month);
+        $items = $query->orderByDesc('paid_at')->get();
+        $tuitionCollected = (float) (clone $query)->sum('amount');
+        $bookCollected = (float) (clone $query)->sum('book_amount');
+        $pendingCount = (clone $query)->where('receipt_status', 'pending')->count();
+
+        $data = [
+            'items' => $items,
+            'month' => $month,
+            'tuitionCollected' => $tuitionCollected,
+            'bookCollected' => $bookCollected,
+            'pendingCount' => $pendingCount,
+            'filters' => [
+                'q' => trim((string) $request->string('q')),
+                'receipt_status' => (string) $request->input('receipt_status', ''),
+            ],
+        ];
+
+        $options = new Options();
+        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('isFontSubsettingEnabled', true);
+        $options->set('isRemoteEnabled', false);
+        $options->setChroot(public_path());
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml(view('language.tuition.monthly-pdf', $data)->render(), 'UTF-8');
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="thu-hoc-phi-thang-'.$month->format('m-Y').'.pdf"',
+        ]);
+    }
+
     public function create(Request $request): View
     {
         $selectedClass = $request->integer('class');
         $selectedCourse = old('language_course_id', $request->integer('course'));
         $selectedMode = old('entry_mode', $request->string('mode')->toString() === 'quick' ? 'quick' : 'class');
 
-        $classes = LanguageClass::where(function ($query) use ($selectedClass) {
+        $classes = LanguageClass::whereNull('deleted_at')->where(function ($query) use ($selectedClass) {
             $query->whereIn('status', ['recruiting', 'upcoming', 'active']);
             if ($selectedClass) {
                 $query->orWhere('id', $selectedClass);
@@ -95,7 +106,9 @@ class LanguageTuitionController extends Controller
 
         $enrollments = LanguageEnrollment::with(['student', 'languageClass.course'])
             ->whereIn('status', ['studying', 'paused', 'reserved'])
-            ->whereHas('languageClass', fn ($query) => $query->whereNotNull('language_course_id'))
+            ->whereHas('languageClass', fn ($query) => $query
+                ->whereNull('language_classes.deleted_at')
+                ->whereNotNull('language_course_id'))
             ->whereDoesntHave('student.tuitionCharges', fn ($query) => $query
                 ->whereColumn('language_tuition_charges.language_class_id', 'language_enrollments.language_class_id'))
             ->orderByDesc('enrolled_at')
@@ -130,6 +143,129 @@ class LanguageTuitionController extends Controller
         ]);
     }
 
+    public function import(Request $request, LanguageTuitionSpreadsheet $spreadsheet): RedirectResponse|StreamedResponse|\Illuminate\Http\JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+        ], [
+            'file.required' => 'Vui lòng chọn file Excel.',
+            'file.mimes' => 'File tải lên phải có định dạng .xlsx, .xls hoặc .csv.',
+            'file.max' => 'File Excel không được lớn hơn 10 MB.',
+        ]);
+
+        $streamProgress = $request->header('X-Import-Progress') === 'stream';
+        $validateOnly = $request->header('X-Import-Validate') === 'preview';
+        $file = $request->file('file');
+        if (! SpreadsheetSupport::canReadUpload($file)) {
+            $message = SpreadsheetSupport::missingZipImportMessage(
+                SpreadsheetSupport::uploadedExtension($file)
+            );
+
+            if ($streamProgress || $validateOnly) {
+                return response()->json(['message' => $message], 422);
+            }
+
+            return redirect()->route('language-tuition.index')->withErrors([
+                'file' => $message,
+            ]);
+        }
+
+        if ($validateOnly) {
+            try {
+                $result = $spreadsheet->import($file, $request->user()?->id, null, true);
+            } catch (\Throwable $exception) {
+                return response()->json([
+                    'message' => 'Không thể kiểm tra file: '.$exception->getMessage(),
+                ], 422);
+            }
+
+            return response()->json([
+                'ok' => $result['failed'] === 0,
+                'message' => $result['failed'] === 0
+                    ? ($result['success'] > 0
+                        ? 'File hợp lệ. Bạn có thể bấm Cập nhật học phí.'
+                        : 'File hợp lệ nhưng chưa có dòng nào cần cập nhật.')
+                    : "Đã kiểm tra xong, có {$result['failed']} dòng lỗi cần sửa trước khi nhập.",
+                'result' => $result,
+            ]);
+        }
+
+        if ($streamProgress) {
+            return response()->stream(function () use ($spreadsheet, $file, $request): void {
+                $emit = static function (array $event): void {
+                    echo json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n";
+                    if (ob_get_level() > 0) {
+                        @ob_flush();
+                    }
+                    flush();
+                };
+
+                $emit([
+                    'type' => 'preparing',
+                    'message' => 'Đang đọc và kiểm tra file Excel...',
+                ]);
+
+                try {
+                    $result = $spreadsheet->import($file, $request->user()?->id, $emit);
+
+                    $emit([
+                        'type' => 'complete',
+                        'message' => "Đã xử lý {$result['total']} dòng: tạo {$result['created']}, cập nhật {$result['updated']}, lỗi {$result['failed']}.",
+                        'result' => $result,
+                    ]);
+                } catch (\Throwable $exception) {
+                    $emit([
+                        'type' => 'error',
+                        'message' => 'Không thể nhập file: '.$exception->getMessage(),
+                    ]);
+                }
+            }, 200, [
+                'Content-Type' => 'application/x-ndjson; charset=UTF-8',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'X-Accel-Buffering' => 'no',
+            ]);
+        }
+
+        try {
+            $result = $spreadsheet->import($file, $request->user()?->id);
+        } catch (\Throwable $exception) {
+            return back()->withErrors(['file' => 'Không thể nhập file: '.$exception->getMessage()]);
+        }
+
+        $redirect = redirect()->route('language-tuition.index')->with(
+            $result['failed'] > 0 ? 'warning' : 'success',
+            "Đã tạo {$result['created']} phiếu mới, cập nhật {$result['updated']} phiếu, bỏ qua {$result['skipped']} dòng trống. Có {$result['failed']} dòng lỗi."
+        );
+        if ($result['errors']) {
+            $redirect->with('tuition_import_errors', $result['errors']);
+        }
+
+        return $redirect;
+    }
+
+    public function template(LanguageTuitionSpreadsheet $spreadsheet): StreamedResponse
+    {
+        return $spreadsheet->template();
+    }
+
+    public function outstandingSheet(Request $request, LanguageTuitionSpreadsheet $spreadsheet): StreamedResponse
+    {
+        $charges = $this->filteredTuitionQuery($request, ['student', 'languageClass', 'payments'])
+            ->when(
+                ! $request->filled('status'),
+                fn (Builder $query) => $query->whereIn('status', ['unpaid', 'partial', 'pending_receipt'])
+            )
+            ->reorder()
+            ->orderBy('language_class_id')
+            ->orderBy('code')
+            ->get();
+
+        return $spreadsheet->outstandingSheet(
+            $charges,
+            'danh-sach-hoc-phi-con-no-'.now()->format('Ymd-His').'.xlsx'
+        );
+    }
+
     public function show(LanguageTuitionCharge $languageTuition): View
     {
         $languageTuition->load(['student','course','languageClass.program','languageClass.level','languageClass.discountPolicy','discount','payments','incomingTransfers.fromClass','outgoingTransfers.toClass']);
@@ -153,7 +289,15 @@ class LanguageTuitionController extends Controller
             return $this->storeQuickCollection($request);
         }
 
-        $data=$request->validate(['language_student_id'=>'required|exists:language_students,id','language_lead_id'=>'nullable|exists:language_leads,id','language_course_id'=>'required|exists:language_courses,id','language_class_id'=>'required|exists:language_classes,id','language_discount_policy_id'=>'nullable|exists:language_discount_policies,id','due_date'=>'nullable|date','note'=>'nullable']);
+        $data=$request->validate([
+            'language_student_id'=>'required|exists:language_students,id',
+            'language_lead_id'=>'nullable|exists:language_leads,id',
+            'language_course_id'=>'required|exists:language_courses,id',
+            'language_class_id'=>['required', Rule::exists('language_classes', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
+            'language_discount_policy_id'=>'nullable|exists:language_discount_policies,id',
+            'due_date'=>'nullable|date',
+            'note'=>'nullable',
+        ]);
         $enrolled=DB::table('language_enrollments')->where('language_student_id',$data['language_student_id'])->where('language_class_id',$data['language_class_id'])->whereIn('status',['studying','paused','reserved'])->exists();
         if(! $enrolled) throw ValidationException::withMessages(['language_class_id'=>'Học viên chưa được xếp vào lớp này nên không thể tạo phiếu thu.']);
         if(LanguageTuitionCharge::where('language_student_id',$data['language_student_id'])->where('language_class_id',$data['language_class_id'])->exists()) throw ValidationException::withMessages(['language_class_id'=>'Học viên này đã có phiếu thu cho lớp đã chọn. Mỗi học viên trong một lớp chỉ tạo một lần.']);
@@ -504,16 +648,7 @@ class LanguageTuitionController extends Controller
     }
     public function export(Request $request)
     {
-        $query=LanguageTuitionCharge::with(['student','course','languageClass']);
-        if($request->filled('q')){
-            $search=$request->string('q');
-            $query->where(fn($builder)=>$builder->where('code','like',"%{$search}%")
-                ->orWhereHas('student',fn($student)=>$student->where('name','like',"%{$search}%"))
-                ->orWhereHas('languageClass',fn($class)=>$class->where('code','like',"%{$search}%")->orWhere('name','like',"%{$search}%")));
-        }
-        if($request->filled('class'))$query->where('language_class_id',$request->integer('class'));
-        if($request->filled('status'))$query->where('status',$request->status);
-        $this->applyPeriod($query,$request);
+        $query = $this->filteredTuitionQuery($request, ['student', 'course', 'languageClass']);
         return ExcelExporter::download('thu-hoc-phi-'.date('Ymd').'.xlsx',['Mã khoản thu','Học viên','Khóa học','Mã lớp','Học phí','Giảm %','Phải thu','Đã thu','Chuyển sang','Còn lại','Trạng thái','Hạn đóng'],$query->get()->map(fn($item)=>[$item->code,$item->student->name,$item->course->name,$item->languageClass?->code,$item->original_amount,$item->discount_percentage,$item->payable_amount,$item->paid_amount,$item->credit_amount,$item->remainingAmount(),$item->status,$item->due_date?->format('d/m/Y')]));
     }
 
@@ -593,6 +728,73 @@ class LanguageTuitionController extends Controller
             $query->whereMonth('created_at', '>=', $firstMonth)
                 ->whereMonth('created_at', '<=', $firstMonth + 2);
         }
+    }
+
+    private function resolveMonthlyDate(Request $request): Carbon
+    {
+        try {
+            return $request->filled('month')
+                ? Carbon::createFromFormat('!Y-m', (string) $request->input('month'))->startOfMonth()
+                : now()->startOfMonth();
+        } catch (\Throwable) {
+            return now()->startOfMonth();
+        }
+    }
+
+    private function monthlyPaymentsQuery(Request $request, Carbon $month)
+    {
+        $query = LanguageTuitionPayment::query()
+            ->with(['collector', 'charge.student.guardians', 'charge.course', 'charge.languageClass'])
+            ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()]);
+
+        if ($request->filled('q')) {
+            $search = (string) $request->string('q')->trim();
+            $query->where(function ($builder) use ($search) {
+                $builder->where('receipt_code', 'like', "%{$search}%")
+                    ->orWhereHas('charge.student', fn ($student) => $student
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhereHas('guardians', fn ($guardians) => $guardians->where('phone', 'like', "%{$search}%")))
+                    ->orWhereHas('charge.languageClass', fn ($class) => $class
+                        ->where('code', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%"));
+            });
+        }
+
+        if ($request->filled('receipt_status')) {
+            $query->where('receipt_status', $request->input('receipt_status'));
+        }
+
+        return $query;
+    }
+
+    private function filteredTuitionQuery(Request $request, array $with): Builder
+    {
+        $query = LanguageTuitionCharge::query()
+            ->with($with)
+            ->where(fn ($builder) => $builder
+                ->whereNull('language_class_id')
+                ->orWhereHas('languageClass', fn ($class) => $class->whereNull('language_classes.deleted_at')))
+            ->latest();
+
+        if ($request->filled('q')) {
+            $search = $request->string('q');
+            $query->where(fn ($builder) => $builder->where('code', 'like', "%{$search}%")
+                ->orWhereHas('student', fn ($student) => $student->where('name', 'like', "%{$search}%"))
+                ->orWhereHas('languageClass', fn ($class) => $class->where('code', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%")));
+        }
+
+        if ($request->filled('class')) {
+            $query->where('language_class_id', $request->integer('class'));
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $this->applyPeriod($query, $request);
+
+        return $query;
     }
 
     private function resolveLeadId(int $studentId, int $courseId): ?int

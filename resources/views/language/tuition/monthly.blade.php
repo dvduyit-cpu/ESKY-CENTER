@@ -10,6 +10,7 @@
     <div class="d-flex gap-2">
         <a class="btn btn-light" href="{{route('language-tuition.monthly',['month'=>$month->copy()->subMonth()->format('Y-m')])}}"><i class="bi bi-chevron-left me-1"></i>Tháng trước</a>
         <a class="btn btn-light" href="{{route('language-tuition.monthly',['month'=>$month->copy()->addMonth()->format('Y-m')])}}">Tháng sau<i class="bi bi-chevron-right ms-1"></i></a>
+        <a class="btn btn-outline-danger" href="{{route('language-tuition.monthly.pdf', request()->query() ?: ['month' => $month->format('Y-m')])}}" data-no-loading><i class="bi bi-file-earmark-pdf me-1"></i>PDF</a>
         <a class="btn btn-outline-primary" href="{{route('language-tuition.index')}}"><i class="bi bi-list-ul me-1"></i>Tất cả khoản thu</a>
     </div>
 </div>

@@ -20,6 +20,17 @@
         <a class="btn btn-primary" href="{{route('language-classes.create')}}">
             <i class="bi bi-plus-circle me-2"></i>Tạo lớp
         </a>
+        @if($canViewTrash)
+            @if(request('status')==='deleted')
+                <a class="btn btn-outline-dark" href="{{route('language-classes.index')}}">
+                    <i class="bi bi-arrow-left-circle me-2"></i>Danh sách lớp
+                </a>
+            @else
+                <a class="btn btn-outline-danger" href="{{route('language-classes.index',['status'=>'deleted'])}}">
+                    <i class="bi bi-trash3 me-2"></i>Thùng rác
+                </a>
+            @endif
+        @endif
     </div>
 </div>
 
@@ -44,6 +55,9 @@
             @foreach($labels as $k=>$v)
                 <option value="{{$k}}" @selected(request('status')===$k)>{{$v}}</option>
             @endforeach
+            @if($canViewTrash)
+                <option value="deleted" @selected(request('status')==='deleted')>Đã xóa</option>
+            @endif
         </select>
     </div>
     <div class="col-md-2">
@@ -84,19 +98,40 @@
                     <td>{{$i->teacher?->name?:'Chưa phân công'}}</td>
                     <td>{{$i->start_date?->format('d/m/Y')?:'—'}}</td>
                     <td>{{$i->enrollments_count}} / {{$i->max_students}}</td>
-                    <td><span class="badge-soft badge-info">{{$labels[$i->status]??$i->status}}</span></td>
+                    <td>
+                        @if($i->trashed())
+                            <span class="badge-soft badge-danger">Đã xóa</span>
+                            <div class="small text-muted mt-1">
+                                {{$i->deleted_at?->format('d/m/Y H:i')}}
+                                @if(($deleteLogs[$i->id] ?? null)?->user)
+                                    · {{$deleteLogs[$i->id]->user->name}}
+                                @endif
+                            </div>
+                        @else
+                            <span class="badge-soft badge-info">{{$labels[$i->status]??$i->status}}</span>
+                        @endif
+                    </td>
                     <td class="text-end">
-                        <a class="btn btn-sm btn-outline-primary" href="{{route('language-classes.edit',$i)}}"><i class="bi bi-pencil"></i></a>
-                        <form class="d-inline" method="POST" action="{{route('language-classes.destroy',$i)}}">
-                            @csrf
-                            @method('DELETE')
-                            <button class="btn btn-sm btn-outline-danger" data-confirm="Xóa lớp này?"><i class="bi bi-trash"></i></button>
-                        </form>
+                        @if($i->trashed())
+                            <form class="d-inline" method="POST" action="{{route('language-classes.restore',$i->id)}}">
+                                @csrf
+                                @method('PATCH')
+                                <button class="btn btn-sm btn-outline-success" data-confirm="Khôi phục lớp này?"><i class="bi bi-arrow-counterclockwise"></i></button>
+                            </form>
+                        @else
+                            <a class="btn btn-sm btn-outline-secondary" href="{{route('language-classes.show',$i)}}" title="Xem lớp"><i class="bi bi-eye"></i></a>
+                            <a class="btn btn-sm btn-outline-primary" href="{{route('language-classes.edit',$i)}}"><i class="bi bi-pencil"></i></a>
+                            <form class="d-inline" method="POST" action="{{route('language-classes.destroy',$i)}}">
+                                @csrf
+                                @method('DELETE')
+                                <button class="btn btn-sm btn-outline-danger" data-confirm="Xóa lớp này?"><i class="bi bi-trash"></i></button>
+                            </form>
+                        @endif
                     </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8"><div class="empty-state">Chưa có lớp học.</div></td>
+                    <td colspan="8"><div class="empty-state">{{request('status')==='deleted'?'Chưa có lớp nào trong thùng rác.':'Chưa có lớp học.'}}</div></td>
                 </tr>
             @endforelse
             </tbody>

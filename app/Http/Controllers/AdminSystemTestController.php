@@ -18,6 +18,7 @@ class AdminSystemTestController extends Controller
     private const MODULES = [
         ['group' => 'Tổng quan & công việc', 'name' => 'Tổng quan hệ thống', 'prefix' => 'dashboard', 'index' => 'dashboard'],
         ['group' => 'Tổng quan & công việc', 'name' => 'Trang chủ', 'prefix' => 'welcome', 'index' => 'welcome'],
+        ['group' => 'Tổng quan & công việc', 'name' => 'Điều hành giám đốc', 'prefix' => 'director.dashboard', 'index' => 'director.dashboard'],
         ['group' => 'Tổng quan & công việc', 'name' => 'Kế hoạch cá nhân', 'prefix' => 'plans', 'index' => 'plans.index'],
         ['group' => 'Tổng quan & công việc', 'name' => 'Giao task', 'prefix' => 'tasks', 'index' => 'tasks.index'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Tổng quan trung tâm', 'prefix' => 'language-dashboard', 'index' => 'language-dashboard.index'],
@@ -27,8 +28,10 @@ class AdminSystemTestController extends Controller
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Cộng tác viên', 'prefix' => 'language-collaborators', 'index' => 'language-collaborators.index'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Học viên', 'prefix' => 'language-students', 'index' => 'language-students.index'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Thu học phí', 'prefix' => 'language-tuition', 'index' => 'language-tuition.index'],
+        ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Thu học phí theo tháng', 'prefix' => 'language-tuition.monthly', 'index' => 'language-tuition.monthly'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Lớp học', 'prefix' => 'language-classes', 'index' => 'language-classes.index'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Lớp giảng dạy & điểm', 'prefix' => 'teacher-classes', 'index' => 'teacher-classes.index'],
+        ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Báo cáo tiết dạy', 'prefix' => 'teacher-classes.teaching-load', 'index' => 'teacher-classes.teaching-load.index'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Chương trình & cấp độ', 'prefix' => 'language-programs', 'index' => 'language-programs.index'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Khóa học trung tâm', 'prefix' => 'language-center-courses', 'index' => 'language-center-courses.index'],
         ['group' => 'Trung tâm ngoại ngữ', 'name' => 'Chỉ tiêu trung tâm', 'prefix' => 'language-targets', 'index' => 'language-targets.index'],
@@ -43,6 +46,7 @@ class AdminSystemTestController extends Controller
         ['group' => 'Quản trị', 'name' => 'Tài khoản', 'prefix' => 'users', 'index' => 'users.index'],
         ['group' => 'Quản trị', 'name' => 'Vai trò & quyền', 'prefix' => 'roles', 'index' => 'roles.index'],
         ['group' => 'Quản trị', 'name' => 'Nhật ký hệ thống', 'prefix' => 'logs', 'index' => 'logs.index'],
+        ['group' => 'Quản trị', 'name' => 'Thùng rác chung', 'prefix' => 'admin.trash', 'index' => 'admin.trash.index'],
         ['group' => 'Quản trị', 'name' => 'Cấu hình phần mềm', 'prefix' => 'settings', 'index' => 'settings.edit', 'parameters' => ['section' => 'general']],
     ];
 
@@ -118,11 +122,14 @@ class AdminSystemTestController extends Controller
             'Hai endpoint đều xác minh user có vai trò admin trong controller.'
         );
 
-        $applicationRoutes=$namedRoutes->reject(fn(LaravelRoute $route,string $name)=>$this->isFrameworkUtilityRoute($route,$name));
+        $applicationRoutes = $namedRoutes->reject(fn (LaravelRoute $route, string $name) => $this->isFrameworkUtilityRoute($route, $name));
 
         $unprotected = $applicationRoutes->filter(function (LaravelRoute $route, string $name) {
-            if (in_array($name, ['login', 'login.submit'], true)) return false;
-            return !in_array('auth', $route->gatherMiddleware(), true);
+            if (in_array($name, ['login', 'login.submit'], true)) {
+                return false;
+            }
+
+            return ! in_array('auth', $route->gatherMiddleware(), true);
         });
         $add(
             'Xác thực người dùng trên route nội bộ',
@@ -131,28 +138,31 @@ class AdminSystemTestController extends Controller
         );
 
         $mutations = $applicationRoutes->filter(fn (LaravelRoute $route) => count(array_intersect($route->methods(), ['POST', 'PUT', 'PATCH', 'DELETE'])) > 0);
-        $withoutWeb = $mutations->filter(fn (LaravelRoute $route) => !in_array('web', $route->gatherMiddleware(), true));
+        $withoutWeb = $mutations->filter(fn (LaravelRoute $route) => ! in_array('web', $route->gatherMiddleware(), true));
         $add(
             'CSRF cho thao tác ghi dữ liệu',
             $withoutWeb->isEmpty(),
             $withoutWeb->isEmpty() ? 'Các route ghi dữ liệu nằm trong nhóm web và được Laravel bảo vệ CSRF.' : 'Route ngoài nhóm web: '.$withoutWeb->keys()->implode(', ')
         );
 
-        $sensitivePrefixes = ['users.', 'roles.', 'personnels.', 'logs.', 'settings.'];
+        $sensitivePrefixes = ['users.', 'roles.', 'personnels.', 'logs.', 'settings.', 'admin.trash'];
         $missingPermission = $namedRoutes->filter(function (LaravelRoute $route, string $name) use ($sensitivePrefixes) {
-            if (!collect($sensitivePrefixes)->contains(fn ($prefix) => str_starts_with($name, $prefix))) return false;
-            return !collect($route->gatherMiddleware())->contains(fn ($middleware) => str_starts_with($middleware, 'permission:'));
+            if (! collect($sensitivePrefixes)->contains(fn ($prefix) => str_starts_with($name, $prefix))) {
+                return false;
+            }
+
+            return ! collect($route->gatherMiddleware())->contains(fn ($middleware) => str_starts_with($middleware, 'permission:'));
         });
         $add(
             'Phân quyền các module quản trị',
             $missingPermission->isEmpty(),
-            $missingPermission->isEmpty() ? 'Tài khoản, vai trò, nhân sự, log và cấu hình đều có middleware phân quyền.' : 'Thiếu permission: '.$missingPermission->keys()->implode(', ')
+            $missingPermission->isEmpty() ? 'Tài khoản, vai trò, nhân sự, log, thùng rác và cấu hình đều có middleware phân quyền.' : 'Thiếu permission: '.$missingPermission->keys()->implode(', ')
         );
 
         $production = app()->environment('production');
         $add(
             'Chế độ debug trên production',
-            !$production || !config('app.debug'),
+            ! $production || ! config('app.debug'),
             $production
                 ? (config('app.debug') ? 'APP_DEBUG đang bật: có nguy cơ lộ stack trace và thông tin cấu hình.' : 'APP_DEBUG đã tắt.')
                 : 'Môi trường hiện tại không phải production; hãy bảo đảm APP_DEBUG=false khi upload host.',
@@ -160,7 +170,7 @@ class AdminSystemTestController extends Controller
         );
         $add(
             'Cookie phiên đăng nhập',
-            (bool) config('session.http_only') && (!$production || (bool) config('session.secure')),
+            (bool) config('session.http_only') && (! $production || (bool) config('session.secure')),
             'HttpOnly: '.(config('session.http_only') ? 'bật' : 'tắt').'; Secure: '.(config('session.secure') ? 'bật' : 'tắt').'.',
             $production ? 'error' : 'warning'
         );
@@ -168,12 +178,14 @@ class AdminSystemTestController extends Controller
         return $checks;
     }
 
-    private function isFrameworkUtilityRoute(LaravelRoute $route,string $name): bool
+    private function isFrameworkUtilityRoute(LaravelRoute $route, string $name): bool
     {
-        if (str_starts_with($name,'generated::')) return true;
+        if (str_starts_with($name, 'generated::')) {
+            return true;
+        }
 
-        return in_array($name,['storage.local','storage.local.upload'],true)
-            && $route->getActionName()==='Closure';
+        return in_array($name, ['storage.local', 'storage.local.upload'], true)
+            && $route->getActionName() === 'Closure';
     }
 
     private function capabilities(array $operations): array
@@ -182,12 +194,12 @@ class AdminSystemTestController extends Controller
         $methods = collect($operations)->pluck('methods')->implode('|');
 
         return [
-            'view' => $names->contains(fn ($name) => str_ends_with($name, '.index') || in_array($name, ['dashboard', 'welcome'], true)),
+            'view' => $names->contains(fn ($name) => str_ends_with($name, '.index') || in_array($name, ['dashboard', 'welcome', 'director.dashboard'], true)),
             'search' => $names->contains(fn ($name) => str_ends_with($name, '.index')),
             'create' => str_contains($methods, 'POST'),
             'update' => str_contains($methods, 'PUT') || str_contains($methods, 'PATCH'),
             'delete' => str_contains($methods, 'DELETE'),
-            'export' => $names->contains(fn ($name) => str_contains($name, 'export') || str_contains($name, 'template')),
+            'export' => $names->contains(fn ($name) => str_contains($name, 'export') || str_contains($name, 'template') || str_contains($name, '.pdf')),
         ];
     }
 }

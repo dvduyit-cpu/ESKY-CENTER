@@ -35,6 +35,7 @@ use App\Http\Controllers\AdminSystemTestController;
 use App\Http\Controllers\AdministrativeDocumentController;
 use App\Http\Controllers\AdministrativeWeeklyReportController;
 use App\Http\Controllers\TeacherTeachingLoadController;
+use App\Http\Controllers\TrashController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -56,6 +57,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::middleware('password.changed')->group(function () {
         Route::get('/admin/system-test', [AdminSystemTestController::class, 'index'])->name('admin.system-test');
         Route::get('/admin/system-test/catalog', [AdminSystemTestController::class, 'catalog'])->name('admin.system-test.catalog');
+        Route::get('/admin/trash', [TrashController::class, 'index'])->name('admin.trash.index');
+        Route::patch('/admin/trash/{type}/{id}/restore', [TrashController::class, 'restore'])->name('admin.trash.restore');
         Route::get('/welcome', [WelcomeController::class, 'index'])->name('welcome');
         Route::get('/plans', [WelcomeController::class, 'plans'])->name('plans.index');
         Route::get('/tasks', [WorkTaskController::class, 'index'])->middleware('permission:work_tasks,view')->name('tasks.index');
@@ -123,6 +126,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/language-programs/{languageProgram}/levels/{level}', [LanguageProgramController::class, 'destroyLevel'])->middleware('permission:language_programs,delete')->name('language-programs.levels.destroy');
         Route::get('/teacher-classes',[LanguageClassController::class,'teacherIndex'])->middleware('permission:teacher_classes,view')->name('teacher-classes.index');
         Route::get('/teacher-classes/teaching-load',[TeacherTeachingLoadController::class,'index'])->middleware('permission:teacher_classes,view')->name('teacher-classes.teaching-load.index');
+        Route::get('/teacher-classes/teaching-load/pdf',[TeacherTeachingLoadController::class,'pdf'])->middleware('permission:teacher_classes,view')->name('teacher-classes.teaching-load.pdf');
         Route::post('/teacher-classes/teaching-load',[TeacherTeachingLoadController::class,'store'])->middleware('permission:teacher_classes,update')->name('teacher-classes.teaching-load.store');
         Route::get('/teacher-classes/{languageClass}/gradebook',[LanguageClassController::class,'gradebook'])->middleware('permission:teacher_classes,view')->name('teacher-classes.gradebook');
         Route::get('/teacher-classes/{languageClass}/print-lesson-book',[LanguageClassController::class,'printLessonBook'])->middleware('permission:teacher_classes,view')->name('teacher-classes.lesson-book.print');
@@ -142,6 +146,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-classes-template', [LanguageClassController::class, 'template'])->middleware('permission:language_classes,create')->name('language-classes.template');
         Route::post('/language-classes-import', [LanguageClassController::class, 'import'])->middleware('permission:language_classes,create')->name('language-classes.import');
         Route::resource('language-classes', LanguageClassController::class)->except('show')->middleware('permission:language_classes,view')->middlewareFor(['create','store'],'permission:language_classes,create')->middlewareFor(['edit','update'],'permission:language_classes,update')->middlewareFor('destroy','permission:language_classes,delete');
+        Route::patch('/language-classes/{id}/restore', [LanguageClassController::class, 'restore'])->middleware('permission:language_classes,delete')->name('language-classes.restore');
         Route::post('/language-classes/{languageClass}/duplicate', [LanguageClassController::class, 'duplicate'])->middleware('permission:language_classes,update')->name('language-classes.duplicate');
         Route::post('/language-classes/{languageClass}/enrollments', [LanguageClassController::class, 'enroll'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.store');
         Route::get('/language-classes/{languageClass}/enrollments-template', [LanguageClassController::class, 'enrollmentTemplate'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.template');
@@ -149,6 +154,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-classes/{languageClass}/enrollments/{enrollment}/transfer', [LanguageClassController::class, 'transferForm'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.transfer.create');
         Route::post('/language-classes/{languageClass}/enrollments/{enrollment}/transfer', [LanguageClassController::class, 'transfer'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.transfer.store');
         Route::delete('/language-classes/{languageClass}/enrollments/{enrollment}', [LanguageClassController::class, 'unenroll'])->middleware('permission:language_classes,update')->name('language-classes.enrollments.destroy');
+        Route::get('/language-classes/{languageClass}', [LanguageClassController::class, 'show'])->middleware('permission:language_classes,view')->name('language-classes.show');
 
         Route::get('/language-collaborators-export',[LanguageCollaboratorController::class,'export'])->middleware('permission:language_collaborators,export')->name('language-collaborators.export');
         Route::resource('language-collaborators',LanguageCollaboratorController::class)->except('show')->middleware('permission:language_collaborators,view')->middlewareFor(['create','store'],'permission:language_collaborators,create')->middlewareFor(['edit','update'],'permission:language_collaborators,update')->middlewareFor('destroy','permission:language_collaborators,delete');
@@ -159,6 +165,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-tuition-export',[LanguageTuitionController::class,'export'])->middleware('permission:language_tuition,export')->name('language-tuition.export');
         Route::get('/language-tuition',[LanguageTuitionController::class,'index'])->middleware('permission:language_tuition,view')->name('language-tuition.index');
         Route::get('/language-tuition-monthly',[LanguageTuitionController::class,'monthly'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly');
+        Route::get('/language-tuition-monthly/pdf',[LanguageTuitionController::class,'monthlyPdf'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly.pdf');
+        Route::get('/language-tuition/template',[LanguageTuitionController::class,'template'])->middleware('permission:language_tuition,update')->name('language-tuition.template');
+        Route::get('/language-tuition/outstanding-sheet',[LanguageTuitionController::class,'outstandingSheet'])->middleware('permission:language_tuition,update')->name('language-tuition.outstanding-sheet');
+        Route::post('/language-tuition/import',[LanguageTuitionController::class,'import'])->middleware('permission:language_tuition,update')->name('language-tuition.import');
         Route::get('/language-tuition/create',[LanguageTuitionController::class,'create'])->middleware('permission:language_tuition,create')->name('language-tuition.create');
         Route::get('/language-tuition/{languageTuition}',[LanguageTuitionController::class,'show'])->middleware('permission:language_tuition,view')->name('language-tuition.show');
         Route::post('/language-tuition',[LanguageTuitionController::class,'store'])->middleware('permission:language_tuition,create')->name('language-tuition.store');

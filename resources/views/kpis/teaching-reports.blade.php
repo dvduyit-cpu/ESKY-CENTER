@@ -69,6 +69,9 @@
                             <div class="small text-muted">Tổng giờ tháng này</div>
                             <div class="fs-5 fw-bold text-primary" data-month-total-display data-month-key="{{ $row['month'] }}">{{ number_format($monthTotal, 2) }}</div>
                         </div>
+                        <a class="btn btn-outline-danger" href="{{ route('teacher-classes.teaching-load.pdf', ['year' => $year, 'report_month' => $row['month']]) }}" data-no-loading>
+                            <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                        </a>
                         <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#{{ $modalId }}">
                             <i class="bi bi-eye me-1"></i>Mở
                         </button>
@@ -97,6 +100,9 @@
                                     <div class="fw-semibold">{{ $row['report']?->updated_at?->format('d/m/Y H:i') ?: 'Chưa báo cáo' }}</div>
                                     <div class="small text-muted mt-2">Tổng giờ tháng này</div>
                                     <div class="fs-5 fw-bold text-primary" data-month-total-display data-month-key="{{ $row['month'] }}">{{ number_format($monthTotal, 2) }}</div>
+                                    <a class="btn btn-sm btn-outline-danger mt-3" href="{{ route('teacher-classes.teaching-load.pdf', ['year' => $year, 'report_month' => $row['month']]) }}" data-no-loading>
+                                        <i class="bi bi-file-earmark-pdf me-1"></i>Tải PDF
+                                    </a>
                                 </div>
                             </div>
                             <form id="{{ $formId }}" method="POST" action="{{ route('teacher-classes.teaching-load.store') }}" data-teaching-report-form data-month-key="{{ $row['month'] }}">
@@ -137,7 +143,7 @@
                                                         <input class="form-control" type="text" maxlength="1000" name="rows[{{ $index }}][note]" value="{{ $detailRow['note'] ?? '' }}" placeholder="Ghi chú thêm nếu có">
                                                     </td>
                                                     <td class="text-end">
-                                                        <button class="btn btn-sm btn-outline-danger" type="button" data-remove-row>
+                                                        <button class="btn btn-sm btn-outline-danger" type="button" data-remove-row data-no-icon-tooltip>
                                                             <i class="bi bi-trash"></i>
                                                         </button>
                                                     </td>
@@ -148,7 +154,7 @@
                                 </div>
 
                                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3">
-                                    <button class="btn btn-outline-primary" type="button" data-add-row>
+                                    <button class="btn btn-outline-primary" type="button" data-add-row data-no-icon-tooltip>
                                         <i class="bi bi-plus-circle me-1"></i>Thêm dòng
                                     </button>
                                     <div class="d-flex flex-wrap align-items-center gap-3">
@@ -185,7 +191,7 @@
                 <input class="form-control" type="text" maxlength="1000" name="rows[__INDEX__][note]" placeholder="Ghi chú thêm nếu có">
             </td>
             <td class="text-end">
-                <button class="btn btn-sm btn-outline-danger" type="button" data-remove-row>
+                <button class="btn btn-sm btn-outline-danger" type="button" data-remove-row data-no-icon-tooltip>
                     <i class="bi bi-trash"></i>
                 </button>
             </td>
@@ -198,6 +204,14 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const template = document.getElementById('teaching-report-row-template');
+    document.querySelectorAll('[data-add-row],[data-remove-row]').forEach(button => {
+        button.removeAttribute('title');
+        button.removeAttribute('aria-label');
+        button.removeAttribute('data-bs-original-title');
+        if (window.bootstrap?.Tooltip) {
+            bootstrap.Tooltip.getInstance(button)?.dispose();
+        }
+    });
 
     const updateMonthTotal = form => {
         const total = [...form.querySelectorAll('[data-lesson-count]')].reduce((sum, input) => {

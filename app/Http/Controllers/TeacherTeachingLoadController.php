@@ -6,6 +6,8 @@ use App\Models\KpiPlan;
 use App\Models\KpiTarget;
 use App\Models\KpiTeachingReport;
 use App\Support\ActivityLogger;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -209,6 +211,77 @@ class TeacherTeachingLoadController extends Controller
         return redirect()
             ->route('teacher-classes.teaching-load.index', ['year' => $data['year']])
             ->with('success', 'Đã lưu báo cáo tiết dạy tháng '.$data['report_month'].'/'.$data['year'].'.');
+    }
+
+    public function pdf(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user->canTeach() || $user->isAdmin(), 403);
+
+        $personnel = $user->personnel;
+        if (! $personnel) {
+            throw ValidationException::withMessages([
+                'personnel' => 'TÃ i khoáº£n nÃ y chÆ°a liÃªn káº¿t nhÃ¢n sá»± nÃªn chÆ°a thá»ƒ táº£i bÃ¡o cÃ¡o tiáº¿t dáº¡y.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'report_month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $plan = KpiPlan::query()->where('year', $data['year'])->first();
+        if (! $plan) {
+            throw ValidationException::withMessages([
+                'year' => 'NÄƒm nÃ y chÆ°a cÃ³ káº¿ hoáº¡ch chá»‰ tiÃªu Ä‘á»ƒ gáº¯n bÃ¡o cÃ¡o tiáº¿t dáº¡y.',
+            ]);
+        }
+
+        $target = KpiTarget::query()
+            ->where('plan_id', $plan->id)
+            ->where('personnel_id', $personnel->id)
+            ->where('period_type', 'year')
+            ->first();
+
+        $report = KpiTeachingReport::query()
+            ->where('plan_id', $plan->id)
+            ->where('personnel_id', $personnel->id)
+            ->where('report_year', (int) $data['year'])
+            ->where('report_month', (int) $data['report_month'])
+            ->first();
+
+        $detailRows = collect($this->detailRowsForMonth($report));
+        $reportedTeachingLoad = round((float) $detailRows->sum(fn (array $row) => (float) ($row['lesson_count'] ?? 0)), 2);
+        if ($reportedTeachingLoad <= 0 && $report) {
+            $reportedTeachingLoad = round((float) $report->reported_teaching_load, 2);
+        }
+
+        $options = new Options();
+        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('isFontSubsettingEnabled', true);
+        $options->set('isRemoteEnabled', false);
+        $options->setChroot(public_path());
+
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml(view('kpis.teaching-report-pdf', [
+            'personnel' => $personnel,
+            'plan' => $plan,
+            'target' => $target,
+            'report' => $report,
+            'detailRows' => $detailRows,
+            'reportedTeachingLoad' => $reportedTeachingLoad,
+            'year' => (int) $data['year'],
+            'reportMonth' => (int) $data['report_month'],
+        ])->render(), 'UTF-8');
+        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->render();
+
+        $monthLabel = str_pad((string) $data['report_month'], 2, '0', STR_PAD_LEFT);
+
+        return response($dompdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="bao-cao-tiet-day-'.$data['year'].'-'.$monthLabel.'.pdf"',
+        ]);
     }
 
     private function detailRowsForMonth(?KpiTeachingReport $report): array

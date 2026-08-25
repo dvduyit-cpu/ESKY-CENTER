@@ -30,7 +30,7 @@
         return names[icon]||'Thao tác';
     };
     const convert=element=>{
-        if(element.dataset.iconOnlyReady||element.matches('.w-100,[data-bulk-submit],[data-loading-preview],[data-keep-label]')||element.querySelector('[data-bulk-count]'))return;
+        if(element.dataset.iconOnlyReady||element.matches('.w-100,[data-bulk-submit],[data-loading-preview],[data-keep-label],[data-no-icon-tooltip],[data-add-row],[data-remove-row]')||element.querySelector('[data-bulk-count]'))return;
         const directText=[...element.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE).map(node=>node.textContent).join(' ').replace(/\s+/g,' ').trim();
         const currentIcon=element.querySelector(':scope > i.bi');
         const currentIconClass=currentIcon?[...currentIcon.classList].find(name=>name.startsWith('bi-')):null;

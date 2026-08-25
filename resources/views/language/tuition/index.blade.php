@@ -6,12 +6,35 @@
 @section('content')
 @php($labels = ['unpaid' => 'Chưa đóng', 'partial' => 'Đóng một phần', 'pending_receipt' => 'Chờ bổ sung phiếu thu', 'paid' => 'Đã đóng đủ', 'transferred' => 'Đã quyết toán chuyển lớp'])
 
+@if(session('tuition_import_errors'))
+<div class="alert alert-danger border-0 shadow-sm">
+    <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
+        <strong><i class="bi bi-exclamation-triangle-fill me-2"></i>Chi tiết lỗi import học phí</strong>
+        <span class="small">Các dòng này chưa được lưu</span>
+    </div>
+    <div class="mt-3 overflow-auto" style="max-height:320px">
+        <ol class="mb-0">@foreach(session('tuition_import_errors') as $error)<li class="mb-1">{{$error}}</li>@endforeach</ol>
+    </div>
+</div>
+@endif
+
 <div class="d-flex flex-column flex-lg-row align-items-start gap-3 mb-4">
     <div class="me-lg-auto">
         <h1 class="page-title">Thu học phí</h1>
         <div class="page-subtitle">Danh sách khoản phải thu của từng học viên và lớp học. Chọn nhiều dòng để xuất nhanh hoặc áp dụng lại mức miễn giảm cao nhất.</div>
     </div>
     <div class="d-flex flex-wrap gap-2 ms-lg-auto justify-content-lg-end">
+        @if(auth()->user()->allowed('language_tuition', 'update'))
+            <a class="btn btn-outline-primary" href="{{ route('language-tuition.template') }}" data-no-loading download>
+                <i class="bi bi-file-earmark-arrow-down me-2"></i>File mẫu
+            </a>
+            <a class="btn btn-outline-warning" href="{{ route('language-tuition.outstanding-sheet', request()->query()) }}" data-no-loading>
+                <i class="bi bi-journal-arrow-down me-2"></i>DS còn nợ
+            </a>
+            <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#tuitionImportModal">
+                <i class="bi bi-cloud-arrow-up me-2"></i>Nhập Excel
+            </button>
+        @endif
         <a class="btn btn-outline-primary" href="{{ route('language-tuition.monthly') }}">
             <i class="bi bi-calendar2-check me-2"></i>Theo tháng
         </a>
@@ -23,6 +46,76 @@
         </a>
     </div>
 </div>
+
+@if(auth()->user()->allowed('language_tuition', 'update'))
+<div class="modal fade" id="tuitionImportModal" tabindex="-1" aria-labelledby="tuitionImportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <form method="POST" action="{{route('language-tuition.import')}}" enctype="multipart/form-data" data-tuition-import-form>
+                @csrf
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title" id="tuitionImportModalLabel">Cập nhật thu học phí từ Excel</h5>
+                        <div class="small text-muted mt-1">Đối chiếu theo họ tên + ngày sinh, hỗ trợ file .xlsx, .xls hoặc .csv tối đa 10 MB.</div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" data-tuition-import-close aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div data-tuition-import-picker>
+                        <label class="form-label" for="tuition-import-file">Chọn file Excel <span class="text-danger">*</span></label>
+                        <input class="form-control" id="tuition-import-file" type="file" name="file" accept=".xlsx,.xls,.csv" required>
+                        <div class="form-text mt-2">Nếu học viên học nửa lớp, điền `Thu nửa lớp = Có` hoặc `Tỷ lệ thu (%) = 50` trong file mẫu để hệ thống tính lại đúng số tiền.</div>
+                    </div>
+                    <div class="d-none" data-tuition-import-progress aria-live="polite">
+                        <div class="d-flex justify-content-between align-items-center gap-3 mb-2">
+                            <strong data-tuition-import-status>Đang đọc file Excel...</strong>
+                            <span class="badge student-import-count-badge" data-tuition-import-count>0/0 dòng</span>
+                        </div>
+                        <div class="progress" role="progressbar" aria-label="Tiến trình import học phí" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="height:12px">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" data-tuition-import-bar style="width:0%"></div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 mt-3 small">
+                            <span class="badge student-import-summary-badge is-created">Tạo mới: <span data-tuition-import-created>0</span></span>
+                            <span class="badge student-import-summary-badge is-updated">Cập nhật: <span data-tuition-import-updated>0</span></span>
+                            <span class="badge student-import-summary-badge is-failed">Lỗi: <span data-tuition-import-failed>0</span></span>
+                        </div>
+                        <div class="student-import-live-log mt-3 border rounded-3 bg-light" data-tuition-import-log></div>
+                        <div class="alert alert-danger d-none mt-3 mb-0" data-tuition-import-error></div>
+                        <div class="d-none mt-3" data-tuition-import-preview>
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                                <strong>Xem trước dữ liệu hợp lệ</strong>
+                                <span class="small text-muted" data-tuition-import-preview-note></span>
+                            </div>
+                            <div class="table-responsive border rounded-3">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Học viên</th>
+                                            <th>Lớp / khoản thu</th>
+                                            <th>Số phiếu</th>
+                                            <th>Thu dự kiến</th>
+                                            <th>Hình thức</th>
+                                            <th>Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody data-tuition-import-preview-body></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-light me-auto" href="{{route('language-tuition.template')}}" data-no-loading download data-tuition-import-action><i class="bi bi-download me-2"></i>Tải file mẫu</a>
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal" data-tuition-import-close data-tuition-import-action>Hủy</button>
+                    <button type="button" class="btn btn-outline-primary" data-tuition-import-validate data-tuition-import-action><i class="bi bi-clipboard2-check me-2"></i>Kiểm tra file</button>
+                    <button class="btn btn-primary" data-tuition-import-action data-tuition-import-submit disabled><i class="bi bi-cash-coin me-2"></i>Cập nhật học phí</button>
+                    <button type="button" class="btn btn-primary d-none" data-tuition-import-finish><i class="bi bi-arrow-clockwise me-2"></i>Đóng và tải lại danh sách</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 <form class="filter-panel row g-3 mb-4">
     <div class="col-lg-3">
@@ -152,3 +245,7 @@
     <div class="card-footer bg-white border-0">{{ $items->links() }}</div>
 </div>
 @endsection
+
+@push('scripts')
+<script src="{{asset('js/tuition-import.js')}}?v={{filemtime(public_path('js/tuition-import.js'))}}"></script>
+@endpush
