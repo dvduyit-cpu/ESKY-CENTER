@@ -57,8 +57,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::middleware('password.changed')->group(function () {
         Route::get('/admin/system-test', [AdminSystemTestController::class, 'index'])->name('admin.system-test');
         Route::get('/admin/system-test/catalog', [AdminSystemTestController::class, 'catalog'])->name('admin.system-test.catalog');
-        Route::get('/admin/trash', [TrashController::class, 'index'])->name('admin.trash.index');
-        Route::patch('/admin/trash/{type}/{id}/restore', [TrashController::class, 'restore'])->name('admin.trash.restore');
+        Route::get('/admin/trash', [TrashController::class, 'index'])->middleware('permission:logs,view')->name('admin.trash.index');
+        Route::patch('/admin/trash/{type}/{id}/restore', [TrashController::class, 'restore'])->middleware('permission:logs,view')->name('admin.trash.restore');
         Route::get('/welcome', [WelcomeController::class, 'index'])->name('welcome');
         Route::get('/plans', [WelcomeController::class, 'plans'])->name('plans.index');
         Route::get('/tasks', [WorkTaskController::class, 'index'])->middleware('permission:work_tasks,view')->name('tasks.index');
