@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
 use App\Models\{LanguageClass, LanguageClassLesson, LanguageCourse, LanguageDiscountPolicy, LanguageEnrollment, LanguageLevel, LanguageProgram, LanguageStudent, LanguageStudentMonthlyProgress, LanguageStudentScore, LanguageTuitionCharge, Module, User, UserPermission};
+use Illuminate\Database\QueryException;
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Illuminate\Validation\ValidationException;
@@ -164,6 +166,7 @@ class LanguageClassController extends Controller
     public function storeAttendance(Request $request, LanguageClass $languageClass): RedirectResponse
     {
         $this->authorizeTeachingClass($request,$languageClass);
+        $this->ensureLessonTrackingInfrastructureReady(requireAttendanceTable: true, requireMonthlyProgressTable: true);
         $data=$request->validate([
             'lesson_id'=>'nullable|integer|exists:language_class_lessons,id',
             'lesson_date'=>'required|date|before_or_equal:today',
@@ -171,37 +174,43 @@ class LanguageClassController extends Controller
             'end_time'=>'required|date_format:H:i|after:start_time',
             'attendance'=>'required|array|min:1',
             'attendance.*.status'=>['required',Rule::in(['present','absent','late','excused'])],
-            'attendance.*.note'=>'nullable|string|max:500',
+            'attendance.*.note'=>'nullable|string|max:255',
         ]);
         $enrollments=$languageClass->enrollments()->whereIn('status',['studying','paused','reserved'])->get();
         if($enrollments->isEmpty())throw ValidationException::withMessages(['attendance'=>'Lớp chưa có học viên đang học để điểm danh.']);
         foreach($enrollments as $enrollment){
             if(!isset($data['attendance'][$enrollment->id]))throw ValidationException::withMessages(['attendance'=>'Vui lòng điểm danh đầy đủ tất cả học viên đang có trong lớp.']);
         }
+        $this->ensureLessonSlotAvailable($languageClass, $data['lesson_date'], $data['start_time'], !empty($data['lesson_id']) ? (int) $data['lesson_id'] : null);
 
         $oldMonth=null;
-        $lesson=DB::transaction(function()use($request,$languageClass,$data,$enrollments,&$oldMonth){
-            if(!empty($data['lesson_id'])){
-                $lesson=$languageClass->lessons()->lockForUpdate()->findOrFail($data['lesson_id']);
-                $oldMonth=$lesson->lesson_date->copy()->startOfMonth()->toDateString();
-                $lesson->update(['lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time'],'end_time'=>$data['end_time'],'teacher_user_id'=>$request->user()->id]);
-            }else{
-                $lesson=$languageClass->lessons()->firstOrCreate(
-                    ['lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time']],
-                    ['end_time'=>$data['end_time'],'teacher_user_id'=>$request->user()->id]
-                );
-                $lesson->update(['end_time'=>$data['end_time'],'teacher_user_id'=>$lesson->teacher_user_id?:$request->user()->id]);
-            }
-            foreach($enrollments as $enrollment){
-                $row=$data['attendance'][$enrollment->id];
-                $lesson->attendances()->updateOrCreate(
-                    ['language_enrollment_id'=>$enrollment->id],
-                    ['status'=>$row['status'],'note'=>$row['note']??null,'marked_by'=>$request->user()->id]
-                );
-            }
-            $lesson->update(['attendance_marked_at'=>now(),'attendance_marked_by'=>$request->user()->id]);
-            return $lesson;
-        });
+        try {
+            $lesson=DB::transaction(function()use($request,$languageClass,$data,$enrollments,&$oldMonth){
+                if(!empty($data['lesson_id'])){
+                    $lesson=$languageClass->lessons()->lockForUpdate()->findOrFail($data['lesson_id']);
+                    $oldMonth=$lesson->lesson_date->copy()->startOfMonth()->toDateString();
+                    $lesson->update(['lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time'],'end_time'=>$data['end_time'],'teacher_user_id'=>$request->user()->id]);
+                }else{
+                    $lesson=$languageClass->lessons()->firstOrCreate(
+                        ['lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time']],
+                        ['end_time'=>$data['end_time'],'teacher_user_id'=>$request->user()->id]
+                    );
+                    $lesson->update(['end_time'=>$data['end_time'],'teacher_user_id'=>$lesson->teacher_user_id?:$request->user()->id]);
+                }
+                foreach($enrollments as $enrollment){
+                    $row=$data['attendance'][$enrollment->id];
+                    $lesson->attendances()->updateOrCreate(
+                        ['language_enrollment_id'=>$enrollment->id],
+                        ['status'=>$row['status'],'note'=>$row['note']??null,'marked_by'=>$request->user()->id]
+                    );
+                }
+                $lesson->update(['attendance_marked_at'=>now(),'attendance_marked_by'=>$request->user()->id]);
+                return $lesson;
+            });
+        } catch (QueryException $exception) {
+            $this->throwIfLessonSlotConflict($exception, $data['lesson_date'], $data['start_time']);
+            throw $exception;
+        }
 
         $months=collect([$oldMonth,$lesson->lesson_date->copy()->startOfMonth()->toDateString()])->filter()->unique();
         foreach($months as $attendanceMonth)$this->syncMonthlyAttendance($languageClass,$attendanceMonth,$request->user()->id);
@@ -213,6 +222,7 @@ class LanguageClassController extends Controller
     public function storeLessonBook(Request $request, LanguageClass $languageClass): RedirectResponse
     {
         $this->authorizeTeachingClass($request,$languageClass);
+        $this->ensureLessonTrackingInfrastructureReady(requireMonthlyProgressTable: true);
         $data=$request->validate([
             'lesson_id'=>'nullable|integer|exists:language_class_lessons,id',
             'lesson_date'=>'required|date|before_or_equal:today',
@@ -223,20 +233,26 @@ class LanguageClassController extends Controller
             'teacher_signature'=>'required|string|max:255',
             'note'=>'nullable|string|max:3000',
         ]);
+        $this->ensureLessonSlotAvailable($languageClass, $data['lesson_date'], $data['start_time'], !empty($data['lesson_id']) ? (int) $data['lesson_id'] : null);
         $oldMonth=null;
-        $lesson=DB::transaction(function()use($request,$languageClass,$data,&$oldMonth){
-            if(!empty($data['lesson_id'])){
-                $lesson=$languageClass->lessons()->lockForUpdate()->findOrFail($data['lesson_id']);
-                $oldMonth=$lesson->lesson_date->copy()->startOfMonth()->toDateString();
-            }else $lesson=$languageClass->lessons()->firstOrNew(['lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time']]);
-            $lesson->fill([
-                'lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time'],'end_time'=>$data['end_time'],
-                'content'=>$data['content'],'evaluation'=>$data['evaluation']??null,'teacher_signature'=>$data['teacher_signature'],
-                'note'=>$data['note']??null,'teacher_user_id'=>$request->user()->id,
-            ]);
-            $lesson->save();
-            return $lesson;
-        });
+        try {
+            $lesson=DB::transaction(function()use($request,$languageClass,$data,&$oldMonth){
+                if(!empty($data['lesson_id'])){
+                    $lesson=$languageClass->lessons()->lockForUpdate()->findOrFail($data['lesson_id']);
+                    $oldMonth=$lesson->lesson_date->copy()->startOfMonth()->toDateString();
+                }else $lesson=$languageClass->lessons()->firstOrNew(['lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time']]);
+                $lesson->fill([
+                    'lesson_date'=>$data['lesson_date'],'start_time'=>$data['start_time'],'end_time'=>$data['end_time'],
+                    'content'=>$data['content'],'evaluation'=>$data['evaluation']??null,'teacher_signature'=>$data['teacher_signature'],
+                    'note'=>$data['note']??null,'teacher_user_id'=>$request->user()->id,
+                ]);
+                $lesson->save();
+                return $lesson;
+            });
+        } catch (QueryException $exception) {
+            $this->throwIfLessonSlotConflict($exception, $data['lesson_date'], $data['start_time']);
+            throw $exception;
+        }
         if($lesson->attendance_marked_at){
             $months=collect([$oldMonth,$lesson->lesson_date->copy()->startOfMonth()->toDateString()])->filter()->unique();
             foreach($months as $attendanceMonth)$this->syncMonthlyAttendance($languageClass,$attendanceMonth,$request->user()->id);
@@ -608,16 +624,97 @@ class LanguageClassController extends Controller
 
     private function syncMonthlyAttendance(LanguageClass $languageClass,string $month,int $teacherId):void
     {
+        $this->ensureLessonTrackingInfrastructureReady(requireAttendanceTable: true, requireMonthlyProgressTable: true);
         $monthDate=\Carbon\Carbon::parse($month)->startOfMonth();
         $enrollments=$languageClass->enrollments()->get();
         foreach($enrollments as $enrollment){
             $records=$enrollment->attendances()->whereHas('lesson',fn($query)=>$query->whereYear('lesson_date',$monthDate->year)->whereMonth('lesson_date',$monthDate->month))->get();
             $progress=$enrollment->monthlyProgress()->whereDate('month',$monthDate)->first();
-            if($records->isEmpty()&&!$progress)continue;
+            $plannedSessions=(int)$records->count();
+            $attendedSessions=(int)$records->whereIn('status',['present','late'])->count();
+            if($plannedSessions===0&&!$progress)continue;
             $enrollment->monthlyProgress()->updateOrCreate(
                 ['month'=>$monthDate->toDateString()],
-                ['planned_sessions'=>$records->count(),'attended_sessions'=>$records->whereIn('status',['present','late'])->count(),'teacher_user_id'=>$teacherId]
+                ['planned_sessions'=>$plannedSessions,'attended_sessions'=>$attendedSessions,'teacher_user_id'=>$teacherId]
             );
+        }
+    }
+
+    private function ensureLessonTrackingInfrastructureReady(bool $requireAttendanceTable = false, bool $requireMonthlyProgressTable = false): void
+    {
+        $missing = [];
+
+        if (!Schema::hasTable('language_class_lessons')) {
+            $missing[] = 'language_class_lessons';
+        } else {
+            foreach (['lesson_date', 'start_time', 'end_time', 'content', 'evaluation', 'teacher_signature', 'note', 'teacher_user_id'] as $column) {
+                if (!Schema::hasColumn('language_class_lessons', $column)) {
+                    $missing[] = 'language_class_lessons.'.$column;
+                }
+            }
+        }
+
+        if ($requireAttendanceTable) {
+            if (!Schema::hasTable('language_class_attendances')) {
+                $missing[] = 'language_class_attendances';
+            } else {
+                foreach (['language_class_lesson_id', 'language_enrollment_id', 'status', 'note', 'marked_by'] as $column) {
+                    if (!Schema::hasColumn('language_class_attendances', $column)) {
+                        $missing[] = 'language_class_attendances.'.$column;
+                    }
+                }
+            }
+        }
+
+        if ($requireMonthlyProgressTable) {
+            if (!Schema::hasTable('language_student_monthly_progress')) {
+                $missing[] = 'language_student_monthly_progress';
+            } else {
+                foreach (['language_enrollment_id', 'month', 'planned_sessions', 'attended_sessions', 'teacher_user_id'] as $column) {
+                    if (!Schema::hasColumn('language_student_monthly_progress', $column)) {
+                        $missing[] = 'language_student_monthly_progress.'.$column;
+                    }
+                }
+            }
+        }
+
+        if ($missing !== []) {
+            throw ValidationException::withMessages([
+                'lesson_book' => 'Máy chủ đang thiếu migration cho sổ đầu bài/điểm danh/chuyên cần tháng: '.implode(', ', $missing).'. Vui lòng chạy migrate trên host rồi thử lại.',
+            ]);
+        }
+    }
+
+    private function ensureLessonSlotAvailable(LanguageClass $languageClass, string $lessonDate, string $startTime, ?int $ignoreLessonId = null): void
+    {
+        if ($ignoreLessonId === null) {
+            return;
+        }
+
+        $conflictExists = $languageClass->lessons()
+            ->whereDate('lesson_date', $lessonDate)
+            ->where('start_time', $startTime)
+            ->whereKeyNot($ignoreLessonId)
+            ->exists();
+
+        if ($conflictExists) {
+            throw ValidationException::withMessages([
+                'lesson_date' => 'Lớp đã có buổi học vào '.\Carbon\Carbon::parse($lessonDate)->format('d/m/Y').' lúc '.substr($startTime, 0, 5).'. Vui lòng mở buổi cũ để sửa hoặc đổi giờ bắt đầu.',
+            ]);
+        }
+    }
+
+    private function throwIfLessonSlotConflict(QueryException $exception, string $lessonDate, string $startTime): void
+    {
+        $message = mb_strtolower($exception->getMessage());
+
+        if (
+            (string) $exception->getCode() === '23000'
+            && (str_contains($message, 'language_class_lesson_slot_uq') || str_contains($message, 'duplicate entry'))
+        ) {
+            throw ValidationException::withMessages([
+                'lesson_date' => 'Lớp đã có buổi học vào '.\Carbon\Carbon::parse($lessonDate)->format('d/m/Y').' lúc '.substr($startTime, 0, 5).'. Vui lòng mở buổi cũ để sửa hoặc đổi giờ bắt đầu.',
+            ]);
         }
     }
 

@@ -29,7 +29,7 @@ class SystemHealthMonitor
                 'users', 'roles', 'modules', 'role_permissions', 'user_permissions',
                 'language_students', 'language_classes', 'language_enrollments',
                 'language_tuition_charges', 'language_tuition_payments',
-                'language_class_lessons', 'language_class_attendances',
+                'language_class_lessons', 'language_class_attendances', 'language_student_monthly_progress',
             ];
             $missingTables = collect($requiredTables)->reject(fn (string $table) => Schema::hasTable($table))->values();
             $add(
@@ -44,6 +44,7 @@ class SystemHealthMonitor
                 'language_classes' => ['teacher_user_id', 'expected_sessions', 'completed_sessions', 'completion_requested_at'],
                 'language_tuition_charges' => ['paid_amount', 'credit_amount', 'status'],
                 'language_class_lessons' => ['lesson_date', 'content', 'teacher_signature', 'attendance_marked_at'],
+                'language_student_monthly_progress' => ['month', 'planned_sessions', 'attended_sessions'],
             ];
             $missingColumns = collect($requiredColumns)->flatMap(function (array $columns, string $table) {
                 if (! Schema::hasTable($table)) {

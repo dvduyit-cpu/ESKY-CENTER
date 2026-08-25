@@ -136,7 +136,7 @@
                                 <tr>
                                     <td><strong>{{$enrollment->student?->name}}</strong><div class="small text-muted">{{$enrollment->student?->code}} · {{$statusLabels[$enrollment->status]??$enrollment->status}}</div></td>
                                     <td><select class="form-select" name="attendance[{{$enrollment->id}}][status]" data-attendance-status required>@foreach($attendanceStatuses as $key=>$label)<option value="{{$key}}" @selected(old('attendance.'.$enrollment->id.'.status',$savedAttendance?->status?:'present')===$key)>{{$label}}</option>@endforeach</select></td>
-                                    <td><input class="form-control" name="attendance[{{$enrollment->id}}][note]" value="{{old('attendance.'.$enrollment->id.'.note',$savedAttendance?->note)}}" placeholder="Lý do vắng, đi trễ..."></td>
+                                    <td><input class="form-control" name="attendance[{{$enrollment->id}}][note]" value="{{old('attendance.'.$enrollment->id.'.note',$savedAttendance?->note)}}" maxlength="255" placeholder="Lý do vắng, đi trễ..."></td>
                                 </tr>
                             @empty
                                 <tr><td colspan="3"><div class="empty-state">Lớp chưa có học viên đang học.</div></td></tr>
