@@ -126,7 +126,9 @@ class DirectorDashboardController extends Controller
         ];
 
         $periodCharges = LanguageTuitionCharge::query()->whereBetween('created_at', [$start, $end]);
-        $periodReceipts = LanguageTuitionPayment::query()->whereBetween('paid_at', [$start, $end]);
+        $periodReceipts = LanguageTuitionPayment::query()
+            ->where('receipt_status', 'confirmed')
+            ->whereBetween('paid_at', [$start, $end]);
         $periodExpenses = ExcessPayment::query()
             ->where('status', 'paid')
             ->whereBetween('paid_at', [$start, $end]);

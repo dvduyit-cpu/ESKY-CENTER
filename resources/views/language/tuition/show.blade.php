@@ -69,8 +69,9 @@
                             <div class="small text-muted">{{ $item->discount?->name ?: 'Không miễn giảm' }} · mức cao nhất</div>
                         </div>
                         <div class="col-6 col-md-3">
-                            <div class="small text-muted">Đã thu</div>
+                            <div class="small text-muted">Đã thu xác nhận</div>
                             <strong class="text-success">{{ number_format($item->paid_amount) }}đ</strong>
+                            <div class="small text-muted">Chỉ tính phiếu đã xác nhận</div>
                         </div>
                         <div class="col-6 col-md-3">
                             <div class="small text-muted">Học phí chuyển sang</div>

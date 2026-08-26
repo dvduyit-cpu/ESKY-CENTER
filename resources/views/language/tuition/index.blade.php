@@ -22,6 +22,7 @@
     <div class="me-lg-auto">
         <h1 class="page-title">Thu học phí</h1>
         <div class="page-subtitle">Danh sách khoản phải thu của từng học viên và lớp học. Chọn nhiều dòng để xuất nhanh hoặc áp dụng lại mức miễn giảm cao nhất.</div>
+        <div class="small text-muted mt-2">Số đã thu chỉ tính phiếu đã xác nhận. Phiếu chờ bổ sung số phiếu/ngày thu sẽ chưa trừ công nợ.</div>
     </div>
     <div class="d-flex flex-wrap gap-2 ms-lg-auto justify-content-lg-end">
         @if(auth()->user()->allowed('language_tuition', 'update'))
@@ -64,7 +65,7 @@
                     <div data-tuition-import-picker>
                         <label class="form-label" for="tuition-import-file">Chọn file Excel <span class="text-danger">*</span></label>
                         <input class="form-control" id="tuition-import-file" type="file" name="file" accept=".xlsx,.xls,.csv" required>
-                        <div class="form-text mt-2">Nếu học viên học nửa lớp, điền `Thu nửa lớp = Có` hoặc `Tỷ lệ thu (%) = 50` trong file mẫu để hệ thống tính lại đúng số tiền.</div>
+                        <div class="form-text mt-2">Nếu học viên học nửa lớp, điền `Thu nửa lớp = Có` hoặc `Tỷ lệ thu (%) = 50` trong file mẫu để hệ thống tính lại đúng số tiền. Với file công nợ, chỉ khi bổ sung đủ số phiếu/ngày thu thì hệ thống mới trừ công nợ trên các trang.</div>
                     </div>
                     <div class="d-none" data-tuition-import-progress aria-live="polite">
                         <div class="d-flex justify-content-between align-items-center gap-3 mb-2">

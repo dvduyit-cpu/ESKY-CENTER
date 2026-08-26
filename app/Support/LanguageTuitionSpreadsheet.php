@@ -585,6 +585,10 @@ class LanguageTuitionSpreadsheet
         );
 
         $rawReceiptCode = $this->nullableString($this->cell($row, $headers, 'SO PHIEU THU'));
+        $receiptLooksLikeTransferMarker = $this->receiptCodeLooksLikeTransferMarker($rawReceiptCode);
+        if ($receiptLooksLikeTransferMarker) {
+            $rawReceiptCode = null;
+        }
         $rawPaidAtValue = $this->cell($row, $headers, 'NGAY THU');
         $rawTuitionValue = $this->cell($row, $headers, 'SO TIEN HOC PHI');
         $rawBookValue = $this->cell($row, $headers, 'TIEN SACH');
@@ -597,7 +601,11 @@ class LanguageTuitionSpreadsheet
 
         $charge->loadMissing(['languageClass', 'lead', 'payments']);
         $ratio = $this->resolveCollectionRatio($row, $headers);
-        $hasManualChange = $rawReceiptCode !== null || $hasPaidAt || $hasTuition || $hasBook || $hasMethod || $ratio !== null || $rawNote !== null;
+        $shouldInferTransferMethod = ! $hasMethod
+            && $receiptLooksLikeTransferMarker
+            && ($hasPaidAt || $hasTuition || $hasBook || $ratio !== null || $rawNote !== null);
+        $hasMethod = $hasMethod || $shouldInferTransferMethod;
+        $hasManualChange = $rawReceiptCode !== null || $hasPaidAt || $hasTuition || $hasBook || $this->hasCellInput($rawMethodValue) || $ratio !== null || $rawNote !== null;
 
         if ($ratio !== null) {
             $this->applyCollectionRatio($charge, $ratio);
@@ -613,7 +621,7 @@ class LanguageTuitionSpreadsheet
             'paid_at' => $hasPaidAt ? $this->parseDateTime($rawPaidAtValue, 'ngày thu') : null,
             'tuition_amount' => $hasTuition ? $this->parseMoney($rawTuitionValue, 'số tiền học phí') : null,
             'book_amount' => $hasBook ? ($this->parseMoney($rawBookValue, 'tiền sách') ?? 0.0) : 0.0,
-            'payment_method' => $hasMethod ? $this->paymentMethod($rawMethodValue) : 'cash',
+            'payment_method' => $this->resolvePaymentMethod($rawMethodValue, $shouldInferTransferMethod),
             'note' => $rawNote,
             'has_paid_at' => $hasPaidAt,
             'has_tuition' => $hasTuition,
@@ -629,7 +637,7 @@ class LanguageTuitionSpreadsheet
     private function simulateChargeTotals(LanguageTuitionCharge $charge, ?float $ratio): array
     {
         $charge->loadMissing(['payments', 'languageClass']);
-        $paidAmount = (float) $charge->payments()->where('receipt_status', '!=', 'cancelled')->sum('amount');
+        $paidAmount = (float) $charge->payments()->where('receipt_status', 'confirmed')->sum('amount');
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
 
         if ($ratio === null) {
@@ -801,7 +809,7 @@ class LanguageTuitionSpreadsheet
         $discountPercentage = (float) $charge->discount_percentage;
         $discountAmount = round($originalAmount * $discountPercentage / 100, 2);
         $payableAmount = max(0, round($originalAmount - $discountAmount, 2));
-        $paidAmount = (float) $charge->payments()->where('receipt_status', '!=', 'cancelled')->sum('amount');
+        $paidAmount = (float) $charge->payments()->where('receipt_status', 'confirmed')->sum('amount');
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
 
         if ($payableAmount + 0.001 < $settledAmount) {
@@ -845,10 +853,38 @@ class LanguageTuitionSpreadsheet
         }
     }
 
+    private function receiptCodeLooksLikeTransferMarker(?string $receiptCode): bool
+    {
+        if ($receiptCode === null || $receiptCode === '') {
+            return false;
+        }
+
+        return in_array(TextNormalizer::header($receiptCode), [
+            'CK',
+            'CHUYEN KHOAN',
+            'CK NAM A',
+            'CK NAMA',
+            'NAM A',
+            'NAMA',
+            'NAM A BANK',
+            'NAMABANK',
+        ], true);
+    }
+
+    private function resolvePaymentMethod(mixed $value, bool $inferTransfer = false): string
+    {
+        if ($this->hasCellInput($value)) {
+            return $this->paymentMethod($value);
+        }
+
+        return $inferTransfer ? 'transfer' : 'cash';
+    }
+
     private function refreshCharge(LanguageTuitionCharge $charge, LanguageTuitionPayment $payment): void
     {
         $activePayments = $charge->payments()->where('receipt_status', '!=', 'cancelled');
-        $paidAmount = (float) (clone $activePayments)->sum('amount');
+        $confirmedPayments = $charge->payments()->where('receipt_status', 'confirmed');
+        $paidAmount = (float) (clone $confirmedPayments)->sum('amount');
         $hasPendingReceipt = (clone $activePayments)->where('receipt_status', 'pending')->exists();
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
         $status = $hasPendingReceipt
@@ -885,6 +921,15 @@ class LanguageTuitionSpreadsheet
     private function paymentMethod(mixed $value): string
     {
         $normalized = TextNormalizer::header((string) $value);
+
+        if (
+            $normalized === 'CK'
+            || str_starts_with($normalized, 'CK ')
+            || str_contains($normalized, 'CHUYEN KHOAN')
+            || in_array($normalized, ['NAM A', 'NAMA', 'NAM A BANK', 'NAMABANK'], true)
+        ) {
+            return 'transfer';
+        }
 
         return match ($normalized) {
             '', 'TIEN MAT', 'CASH' => 'cash',

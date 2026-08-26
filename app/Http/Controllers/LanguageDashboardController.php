@@ -150,7 +150,7 @@ class LanguageDashboardController extends Controller
         $converted = (clone $leads)->where('status', 'registered')->count();
 
         $charges=LanguageTuitionCharge::where('created_at','>=',$filterStart)->where('created_at','<',$filterEnd);
-        $tuitionPayments=LanguageTuitionPayment::where('paid_at','>=',$filterStart)->where('paid_at','<',$filterEnd);
+        $tuitionPayments=LanguageTuitionPayment::where('receipt_status','confirmed')->where('paid_at','>=',$filterStart)->where('paid_at','<',$filterEnd);
         $expenses=ExcessPayment::where('status','paid')->where('paid_at','>=',$filterStart)->where('paid_at','<',$filterEnd);
         if (! $canViewAll) {
             $charges->whereHas('student.enrollments.languageClass',fn($query)=>$query->where('teacher_user_id',$user->id));

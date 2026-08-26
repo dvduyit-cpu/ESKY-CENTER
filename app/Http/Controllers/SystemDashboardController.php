@@ -26,7 +26,7 @@ class SystemDashboardController extends Controller
         $activities=ActivityLog::with('user')->whereBetween('created_at',[$start,$end])->latest();
         $imports=ImportBatch::with('user')->whereBetween('created_at',[$start,$end])->latest();
         $charges=LanguageTuitionCharge::whereBetween('created_at',[$start,$end]);
-        $receipts=LanguageTuitionPayment::whereBetween('paid_at',[$start,$end]);
+        $receipts=LanguageTuitionPayment::where('receipt_status','confirmed')->whereBetween('paid_at',[$start,$end]);
         $expenses=ExcessPayment::where('status','paid')->whereBetween('paid_at',[$start,$end]);
         if(!$canViewAll){
             $students->whereHas('enrollments.languageClass',fn($q)=>$q->where('teacher_user_id',$user->id));

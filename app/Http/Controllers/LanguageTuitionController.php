@@ -39,7 +39,7 @@ class LanguageTuitionController extends Controller
     {
         $month = $this->resolveMonthlyDate($request);
         $query = $this->monthlyPaymentsQuery($request, $month);
-        $summaryQuery = (clone $query)->where('receipt_status', '!=', 'cancelled');
+        $summaryQuery = (clone $query)->where('receipt_status', 'confirmed');
 
         $tuitionCollected = (float) (clone $summaryQuery)->sum('amount');
         $bookCollected = (float) (clone $summaryQuery)->sum('book_amount');
@@ -58,7 +58,7 @@ class LanguageTuitionController extends Controller
     {
         $month = $this->resolveMonthlyDate($request);
         $query = $this->monthlyPaymentsQuery($request, $month);
-        $summaryQuery = (clone $query)->where('receipt_status', '!=', 'cancelled');
+        $summaryQuery = (clone $query)->where('receipt_status', 'confirmed');
         $items = $query->orderByDesc('paid_at')->get();
         $tuitionCollected = (float) (clone $summaryQuery)->sum('amount');
         $bookCollected = (float) (clone $summaryQuery)->sum('book_amount');
@@ -852,7 +852,8 @@ class LanguageTuitionController extends Controller
     private function refreshCharge(LanguageTuitionCharge $charge, LanguageTuitionPayment $payment): void
     {
         $activePayments = $charge->payments()->where('receipt_status', '!=', 'cancelled');
-        $paidAmount = (float) (clone $activePayments)->sum('amount');
+        $confirmedPayments = $charge->payments()->where('receipt_status', 'confirmed');
+        $paidAmount = (float) (clone $confirmedPayments)->sum('amount');
         $hasPendingReceipt = (clone $activePayments)->where('receipt_status', 'pending')->exists();
         $settledAmount = $paidAmount + (float) $charge->credit_amount;
         $status = $hasPendingReceipt
