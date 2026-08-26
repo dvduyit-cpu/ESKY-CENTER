@@ -428,8 +428,8 @@ class LanguageTuitionSpreadsheet
             $this->ensureUniqueReceiptCode($context['receipt_code'], $payment->id);
             $payment->update([
                 'receipt_code' => $context['receipt_code'],
-                'receipt_status' => $context['receipt_code'] ? 'confirmed' : 'pending',
-                'confirmed_at' => $context['receipt_code'] ? now() : null,
+                'receipt_status' => 'pending',
+                'confirmed_at' => null,
                 'paid_at' => $context['paid_at'] ?? $payment->paid_at,
                 'payment_method' => $context['has_method'] ? $context['payment_method'] : $payment->payment_method,
                 'note' => $context['note'] ?: $payment->note,
@@ -467,8 +467,8 @@ class LanguageTuitionSpreadsheet
 
         $payment = $charge->payments()->create([
             'receipt_code' => $context['receipt_code'],
-            'receipt_status' => $context['receipt_code'] ? 'confirmed' : 'pending',
-            'confirmed_at' => $context['receipt_code'] ? now() : null,
+            'receipt_status' => 'pending',
+            'confirmed_at' => null,
             'amount' => $tuitionAmount,
             'book_amount' => $context['book_amount'],
             'paid_at' => $context['paid_at'] ?? now(),

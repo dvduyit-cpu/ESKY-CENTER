@@ -245,6 +245,49 @@ class LanguageTuitionController extends Controller
         return $redirect;
     }
 
+    public function confirmPendingReceipt(Request $request, LanguageTuitionPayment $languageTuitionPayment): RedirectResponse
+    {
+        $data = $request->validate([
+            'receipt_code' => [
+                'nullable',
+                'string',
+                'max:30',
+                Rule::unique('language_tuition_payments', 'receipt_code')->ignore($languageTuitionPayment->id),
+            ],
+        ], [
+            'receipt_code.unique' => 'Sá»‘ phiáº¿u thu Ä‘Ã£ tá»“n táº¡i.',
+        ]);
+
+        $receiptCode = trim((string) ($data['receipt_code'] ?? $languageTuitionPayment->receipt_code ?? ''));
+        if ($receiptCode === '') {
+            throw ValidationException::withMessages([
+                'receipt_code' => 'Vui lÃ²ng nháº­p sá»‘ phiáº¿u thu.',
+            ]);
+        }
+
+        DB::transaction(function () use ($languageTuitionPayment, $receiptCode) {
+            $payment = LanguageTuitionPayment::lockForUpdate()->findOrFail($languageTuitionPayment->id);
+            abort_if($payment->receipt_status === 'confirmed', 422, 'Phiáº¿u thu nÃ y Ä‘Ã£ Ä‘Æ°á»£c xÃ¡c nháº­n.');
+            abort_if($payment->receipt_status === 'cancelled', 422, 'Phiáº¿u thu nÃ y Ä‘Ã£ bá»‹ há»§y nÃªn khÃ´ng thá»ƒ xÃ¡c nháº­n láº¡i.');
+
+            $payment->update([
+                'receipt_code' => $receiptCode,
+                'receipt_status' => 'confirmed',
+                'confirmed_at' => now(),
+            ]);
+
+            $this->refreshCharge(
+                LanguageTuitionCharge::lockForUpdate()->findOrFail($payment->language_tuition_charge_id),
+                $payment
+            );
+        });
+
+        return redirect()
+            ->route('language-tuition.show', $languageTuitionPayment->language_tuition_charge_id)
+            ->with('success', 'ÄÃ£ bá»• sung vÃ  xÃ¡c nháº­n sá»‘ phiáº¿u thu.')
+            ->with('receipt_ready', $languageTuitionPayment->id);
+    }
+
     public function template(LanguageTuitionSpreadsheet $spreadsheet): StreamedResponse
     {
         return $spreadsheet->template();
