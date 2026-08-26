@@ -328,6 +328,31 @@ class LanguageTuitionController extends Controller
             ->with('tuition_monthly_sync_report', $report);
     }
 
+    public function shiftPaidAtDate(Request $request, LanguageTuitionMonthlySync $sync): RedirectResponse
+    {
+        $data = $request->validate([
+            'sync_date' => ['nullable', 'date_format:Y-m-d'],
+            'target_paid_date' => ['required', 'date_format:Y-m-d'],
+        ], [
+            'target_paid_date.required' => 'Vui lòng chọn ngày thu muốn chuyển tới.',
+            'target_paid_date.date_format' => 'Ngày thu mới không đúng định dạng YYYY-MM-DD.',
+        ]);
+
+        $result = $sync->movePaidAtDate($data['sync_date'] ?? null, $data['target_paid_date']);
+        $report = $sync->inspect($data['sync_date'] ?? null);
+
+        $message = 'Đã đổi ngày thu về '.$result['target_date']
+            .' cho '.$result['updated_payments'].' phiếu trong '.$result['scanned_payments'].' phiếu đã rà, '
+            .'đồng thời cập nhật '.$result['created_monthly_records'].' bản ghi tháng mới và '
+            .$result['updated_monthly_records'].' bản ghi tháng hiện có.';
+
+        return redirect()
+            ->route('language-tuition.index')
+            ->with('success', $message)
+            ->with('tuition_monthly_sync_report', $report)
+            ->with('tuition_target_paid_date', $result['target_date']);
+    }
+
     public function outstandingSheet(Request $request, LanguageTuitionSpreadsheet $spreadsheet): StreamedResponse
     {
         $charges = $this->filteredTuitionQuery($request, ['student', 'languageClass', 'payments'])

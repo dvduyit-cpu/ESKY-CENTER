@@ -261,6 +261,94 @@ class LanguageTuitionMonthlySync
         return $result;
     }
 
+    /**
+     * @return array{
+     *     scanned_payments:int,
+     *     updated_payments:int,
+     *     created_monthly_records:int,
+     *     updated_monthly_records:int,
+     *     removed_monthly_records:int,
+     *     target_date:?string
+     * }
+     */
+    public function movePaidAtDate(?string $scopeDate, ?string $targetDate): array
+    {
+        $dateRange = $this->resolveScopeDateRange($scopeDate);
+        $target = $this->resolveTargetDate($targetDate);
+
+        $result = [
+            'scanned_payments' => 0,
+            'updated_payments' => 0,
+            'created_monthly_records' => 0,
+            'updated_monthly_records' => 0,
+            'removed_monthly_records' => 0,
+            'target_date' => $target?->format('Y-m-d'),
+        ];
+
+        if (! $target) {
+            return $result;
+        }
+
+        $this->paymentsQuery($dateRange)
+            ->with(['charge.lead'])
+            ->where('receipt_status', '!=', 'cancelled')
+            ->whereNotNull('paid_at')
+            ->orderBy('id')
+            ->chunkById(200, function ($payments) use (&$result, $target): void {
+                $paymentIds = $payments->pluck('id')->all();
+                $records = LanguageMonthlyTargetRecord::query()
+                    ->whereIn('language_tuition_payment_id', $paymentIds)
+                    ->get()
+                    ->keyBy('language_tuition_payment_id');
+
+                foreach ($payments as $payment) {
+                    $result['scanned_payments']++;
+                    $record = $records->get($payment->id);
+
+                    if (! $payment->paid_at instanceof CarbonInterface) {
+                        continue;
+                    }
+
+                    if ($payment->paid_at->format('Y-m-d') !== $target->format('Y-m-d')) {
+                        $payment->update([
+                            'paid_at' => $target->copy()->setTime(
+                                $payment->paid_at->hour,
+                                $payment->paid_at->minute,
+                                $payment->paid_at->second
+                            ),
+                        ]);
+                        $payment->refresh();
+                        $result['updated_payments']++;
+                    }
+
+                    $expected = $this->expectedMonthlyRecord($payment);
+                    if ($expected === null) {
+                        if ($record) {
+                            $record->delete();
+                            $result['removed_monthly_records']++;
+                        }
+
+                        continue;
+                    }
+
+                    if (! $record) {
+                        LanguageMonthlyTargetRecord::create(
+                            ['language_tuition_payment_id' => $payment->id] + $expected
+                        );
+                        $result['created_monthly_records']++;
+                        continue;
+                    }
+
+                    if ($this->recordNeedsUpdate($record, $expected)) {
+                        $record->update($expected);
+                        $result['updated_monthly_records']++;
+                    }
+                }
+            });
+
+        return $result;
+    }
+
     private function paymentsQuery(?object $dateRange): Builder
     {
         return LanguageTuitionPayment::query()
@@ -309,6 +397,20 @@ class LanguageTuitionMonthlySync
                 'start' => $date,
                 'end' => $date->copy()->endOfDay(),
             ];
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function resolveTargetDate(?string $targetDate): ?Carbon
+    {
+        $targetDate = trim((string) $targetDate);
+        if ($targetDate === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::createFromFormat('Y-m-d', $targetDate)->startOfDay();
         } catch (\Throwable) {
             return null;
         }

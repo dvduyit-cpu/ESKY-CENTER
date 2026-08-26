@@ -20,6 +20,7 @@
 
 @php($monthlySyncReport = session('tuition_monthly_sync_report'))
 @php($syncDate = $monthlySyncReport['scope_date'] ?? now()->format('Y-m-d'))
+@php($targetPaidDate = session('tuition_target_paid_date', now()->format('Y-m-d')))
 @if(auth()->user()->allowed('language_tuition', 'update'))
 <div class="card card-soft mb-4">
     <div class="card-body p-4">
@@ -107,6 +108,29 @@
                 @endif
             </div>
         @endif
+
+        <div class="border-top mt-4 pt-4">
+            <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
+                <div class="me-lg-auto">
+                    <h6 class="mb-1">Sửa nhanh ngày thu bị nhập sai</h6>
+                    <div class="text-muted small">Dùng khi các phiếu vừa import sáng nay bị sai `Ngày thu`. Hệ thống sẽ đổi phần ngày về ngày bạn chọn, giữ nguyên giờ thu, rồi cập nhật lại dữ liệu `Thu học phí theo tháng`.</div>
+                </div>
+                <form method="POST" action="{{ route('language-tuition.monthly-sync.shift-paid-date') }}" class="d-flex flex-wrap gap-2 align-items-end" data-confirm="Xác nhận đổi ngày thu cho các phiếu đã cập nhật trong ngày đã chọn? Thao tác này sẽ ảnh hưởng báo cáo doanh thu theo ngày/tháng.">
+                    @csrf
+                    <div>
+                        <label class="form-label small mb-1">Ngày import / cập nhật</label>
+                        <input class="form-control" type="date" name="sync_date" value="{{ $syncDate }}">
+                    </div>
+                    <div>
+                        <label class="form-label small mb-1">Chuyển ngày thu về</label>
+                        <input class="form-control" type="date" name="target_paid_date" value="{{ $targetPaidDate }}" required>
+                    </div>
+                    <button class="btn btn-outline-danger">
+                        <i class="bi bi-calendar-date me-2"></i>Đổi ngày thu
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 @endif

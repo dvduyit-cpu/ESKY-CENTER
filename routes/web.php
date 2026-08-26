@@ -172,6 +172,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/language-tuition/import',[LanguageTuitionController::class,'import'])->middleware('permission:language_tuition,update')->name('language-tuition.import');
         Route::post('/language-tuition/monthly-sync/check',[LanguageTuitionController::class,'checkMonthlySync'])->middleware('permission:language_tuition,update')->name('language-tuition.monthly-sync.check');
         Route::post('/language-tuition/monthly-sync/apply',[LanguageTuitionController::class,'applyMonthlySync'])->middleware('permission:language_tuition,update')->name('language-tuition.monthly-sync.apply');
+        Route::post('/language-tuition/monthly-sync/shift-paid-date',[LanguageTuitionController::class,'shiftPaidAtDate'])->middleware('permission:language_tuition,update')->name('language-tuition.monthly-sync.shift-paid-date');
         Route::get('/language-tuition/create',[LanguageTuitionController::class,'create'])->middleware('permission:language_tuition,create')->name('language-tuition.create');
         Route::get('/language-tuition/{languageTuition}',[LanguageTuitionController::class,'show'])->middleware('permission:language_tuition,view')->name('language-tuition.show');
         Route::post('/language-tuition',[LanguageTuitionController::class,'store'])->middleware('permission:language_tuition,create')->name('language-tuition.store');
