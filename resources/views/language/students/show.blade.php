@@ -17,6 +17,9 @@ $receiptStatuses=['confirmed'=>'Đã xác nhận','pending'=>'Chờ phiếu','ca
 $paymentMethods=['cash'=>'Tiền mặt','transfer'=>'Chuyển khoản','card'=>'Thẻ','other'=>'Khác'];
 $genderLabels=['male'=>'Nam','female'=>'Nữ','other'=>'Khác'];
 $guardianLabels=['father'=>'Cha','mother'=>'Mẹ','guardian'=>'Người giám hộ'];
+$activeEnrollments=$item->enrollments->whereIn('status',['studying','paused','reserved'])->values();
+$canManageEnrollments=auth()->user()->isRegistrar()&&auth()->user()->allowed('language_classes','update')&&auth()->user()->allowed('language_students','update');
+$defaultEnrolledAt=old('enrolled_at',$item->official_enrollment_date?->format('Y-m-d')?:($item->registered_at?->format('Y-m-d')?:now()->format('Y-m-d')));
 @endphp
 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4"><div><h1 class="page-title">{{$item->code}} – {{$item->name}}</h1><div class="page-subtitle">Hồ sơ cá nhân, lịch sử lớp học, điểm kiểm tra và đánh giá quá trình.</div></div><div class="d-flex gap-2"><a class="btn btn-light" href="{{route('language-students.index')}}"><i class="bi bi-arrow-left me-2"></i>Danh sách</a>@if(auth()->user()->allowed('language_students','update'))<a class="btn btn-primary" href="{{route('language-students.edit',$item)}}"><i class="bi bi-pencil me-2"></i>Chỉnh sửa</a>@endif</div></div>
 
@@ -66,6 +69,117 @@ $guardianLabels=['father'=>'Cha','mother'=>'Mẹ','guardian'=>'Người giám h�
 <div class="card card-soft mb-4"><div class="card-header bg-white p-4"><h5 class="mb-1">Chi tiết khoản thu và các lần đóng tiền</h5><div class="small text-muted">Bao gồm cả khoản thu chưa gắn lớp.</div></div><div class="table-responsive"><table class="table table-modern mb-0"><thead><tr><th>Khoản thu</th><th>Khóa học / lớp</th><th>Phải đóng</th><th>Đã đóng</th><th>Còn lại</th><th>Trạng thái</th><th>Lần đóng gần nhất</th><th></th></tr></thead><tbody>@foreach($item->tuitionCharges as $charge)@php($remaining=$charge->remainingAmount())@php($latestPayment=$charge->payments->where('receipt_status','!=','cancelled')->sortByDesc('paid_at')->first())<tr><td><strong>{{$charge->code}}</strong><div class="small text-muted">{{$charge->created_at?->format('d/m/Y')}}</div></td><td>{{$charge->course?->name}}<div class="small text-muted">{{$charge->languageClass?->code?:'Chưa gắn lớp'}}</div></td><td>{{number_format($charge->payable_amount)}}đ</td><td class="fw-bold text-success">{{number_format($charge->paid_amount)}}đ @if((float)$charge->credit_amount>0)<div class="small text-primary">Chuyển sang {{number_format($charge->credit_amount)}}đ</div>@endif</td><td class="fw-bold {{$remaining>0?'text-danger':'text-muted'}}">{{number_format($remaining)}}đ</td><td><span class="badge-soft {{in_array($charge->status,['paid','transferred'])?'badge-success':(in_array($charge->status,['partial','pending_receipt'])?'badge-warning':'badge-danger')}}">{{$tuitionLabels[$charge->status]??$charge->status}}</span></td><td>@if($latestPayment){{$latestPayment->paid_at?->format('d/m/Y')}}<div class="small text-muted">{{number_format((float)$latestPayment->amount+(float)$latestPayment->book_amount)}}đ · {{$paymentMethods[$latestPayment->payment_method]??$latestPayment->payment_method}}</div><div class="small {{ $latestPayment->receipt_status === 'confirmed' ? 'text-success' : 'text-warning' }}">{{ $receiptStatuses[$latestPayment->receipt_status] ?? $latestPayment->receipt_status }}</div>@else<span class="text-muted">Chưa đóng</span>@endif</td><td>@if(auth()->user()->allowed('language_tuition'))<a class="btn btn-sm btn-outline-success" href="{{route('language-tuition.show',$charge)}}"><i class="bi bi-eye"></i></a>@endif</td></tr>@endforeach</tbody></table></div></div>
 @endif
 
+@if($canManageEnrollments)
+<div class="card card-soft mb-4">
+    <div class="card-header bg-white p-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-easel2 me-2 text-primary"></i>Quản lý lớp học</h5>
+            <div class="small text-muted">Thêm học viên vào lớp mới hoặc đưa khỏi lớp ngay tại hồ sơ này.</div>
+        </div>
+        @if($availableClasses->isNotEmpty())
+            <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#studentEnrollmentModal">
+                <i class="bi bi-plus-circle me-1"></i>Thêm vào lớp
+            </button>
+        @endif
+    </div>
+    <div class="card-body p-4">
+        @if($activeEnrollments->isEmpty())
+            <div class="alert alert-light border mb-0">Học viên hiện chưa ở lớp nào đang hiệu lực.</div>
+        @else
+            <div class="table-responsive">
+                <table class="table table-modern align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Lớp</th>
+                            <th>Chương trình</th>
+                            <th>Ngày vào lớp</th>
+                            <th>Trạng thái</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($activeEnrollments as $enrollment)
+                            <tr>
+                                <td>
+                                    <strong>{{ $enrollment->languageClass?->code ?: 'Lớp đã ẩn' }}</strong>
+                                    <div class="small text-muted">{{ $enrollment->languageClass?->name ?: 'Không còn thông tin lớp' }}</div>
+                                </td>
+                                <td>
+                                    {{ $enrollment->languageClass?->program?->name ?: '—' }}
+                                    <div class="small text-muted">{{ $enrollment->languageClass?->level?->name ?: '—' }}</div>
+                                </td>
+                                <td>{{ $enrollment->enrolled_at?->format('d/m/Y') ?: '—' }}</td>
+                                <td><span class="badge-soft {{ $enrollment->status === 'studying' ? 'badge-success' : 'badge-warning' }}">{{ $enrollmentStatuses[$enrollment->status] ?? $enrollment->status }}</span></td>
+                                <td class="text-end">
+                                    @if($enrollment->languageClass)
+                                        <a class="btn btn-sm btn-outline-primary" href="{{ route('teacher-classes.gradebook', $enrollment->languageClass) }}" title="Mở sổ lớp">
+                                            <i class="bi bi-journal-text"></i>
+                                        </a>
+                                    @endif
+                                    <form class="d-inline" method="POST" action="{{ route('language-students.enrollments.destroy', [$item, $enrollment]) }}">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="Xác nhận đưa học viên ra khỏi lớp này?">
+                                            <i class="bi bi-person-dash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+
+        @if($availableClasses->isEmpty())
+            <div class="small text-muted mt-3">Không còn lớp đang tuyển, sắp khai giảng hoặc đang học nào để thêm mới cho học viên này.</div>
+        @endif
+    </div>
+</div>
+
+@if($availableClasses->isNotEmpty())
+<div class="modal fade" id="studentEnrollmentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="POST" action="{{ route('language-students.enrollments.store', $item) }}">
+                @csrf
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title">Thêm học viên vào lớp</h5>
+                        <div class="small text-muted">Hệ thống sẽ đồng bộ luôn khoản học phí của lớp mới.</div>
+                    </div>
+                    <button class="btn-close" type="button" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Chọn lớp</label>
+                        <select class="form-select @error('language_class_id') is-invalid @enderror" name="language_class_id" required>
+                            <option value="">Chọn lớp cần thêm</option>
+                            @foreach($availableClasses as $class)
+                                <option value="{{ $class->id }}" @selected((int) old('language_class_id') === (int) $class->id)>{{ $class->code }} - {{ $class->name }} · {{ $class->program?->name }} / {{ $class->level?->name }}</option>
+                            @endforeach
+                        </select>
+                        @error('language_class_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div>
+                        <label class="form-label">Ngày vào lớp</label>
+                        <input class="form-control @error('enrolled_at') is-invalid @enderror" type="date" name="enrolled_at" value="{{ $defaultEnrolledAt }}" required>
+                        @error('enrolled_at')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-light" type="button" data-bs-dismiss="modal">Hủy</button>
+                    <button class="btn btn-primary" type="submit">
+                        <i class="bi bi-plus-circle me-1"></i>Thêm vào lớp
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+@endif
+
 @if($item->classTransfers->isNotEmpty())
 <div class="card card-soft mb-4"><div class="card-header bg-white p-4"><h5 class="mb-1"><i class="bi bi-arrow-left-right me-2 text-primary"></i>Lịch sử chuyển lớp</h5><div class="small text-muted">Theo dõi học phí đã sử dụng, chuyển sang và số dư chờ xử lý.</div></div><div class="table-responsive"><table class="table table-modern mb-0"><thead><tr><th>Ngày</th><th>Từ lớp</th><th>Sang lớp</th><th>Số tiết đã học</th><th>Đã sử dụng</th><th>Chuyển sang</th><th>Số dư</th><th>Người thực hiện</th></tr></thead><tbody>@foreach($item->classTransfers as $transfer)<tr><td>{{$transfer->effective_date->format('d/m/Y')}}</td><td><strong>{{$transfer->fromClass?->code}}</strong></td><td><strong>{{$transfer->toClass?->code}}</strong></td><td>{{$transfer->sessions_used}}</td><td>{{number_format($transfer->used_amount)}}đ</td><td class="fw-bold text-primary">{{number_format($transfer->applied_amount)}}đ</td><td class="fw-bold {{(float)$transfer->surplus_amount>0?'text-warning':'text-muted'}}">{{number_format($transfer->surplus_amount)}}đ</td><td>{{$transfer->creator?->name?:'—'}}</td></tr>@endforeach</tbody></table></div></div>
 @endif
@@ -97,3 +211,16 @@ $guardianLabels=['father'=>'Cha','mother'=>'Mẹ','guardian'=>'Người giám h�
 </div>
 @endif
 @endsection
+
+@if($availableClasses->isNotEmpty() && ($errors->has('language_class_id') || $errors->has('enrolled_at')))
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('studentEnrollmentModal');
+    if (modal && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+});
+</script>
+@endpush
+@endif

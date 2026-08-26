@@ -12,6 +12,7 @@ use App\Models\LanguageStudent;
 use App\Models\LanguageTuitionCharge;
 use App\Support\LanguageEnrollmentManager;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class LanguageEnrollmentManagerTest extends TestCase
@@ -126,6 +127,85 @@ class LanguageEnrollmentManagerTest extends TestCase
             'id' => $enrollment->id,
             'status' => 'dropped',
             'exit_reason' => 'Giáo vụ đưa khỏi lớp',
+        ]);
+    }
+
+    public function test_enroll_rejects_reusing_a_class_with_dropped_history(): void
+    {
+        [$student, $course] = $this->createStudentAndCourse('003');
+        $class = $this->createClass($course, '003A');
+
+        $enrollment = LanguageEnrollment::create([
+            'language_class_id' => $class->id,
+            'language_student_id' => $student->id,
+            'enrolled_at' => '2026-08-01',
+            'tuition' => 1200000,
+            'discount' => 0,
+            'status' => 'dropped',
+            'ended_at' => '2026-08-10',
+            'exit_reason' => 'Gi lich su cu',
+        ]);
+
+        try {
+            app(LanguageEnrollmentManager::class)->enroll($class, $student, '2026-08-20');
+            $this->fail('Expected ValidationException was not thrown.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('class', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('language_enrollments', [
+            'id' => $enrollment->id,
+            'status' => 'dropped',
+            'ended_at' => '2026-08-10',
+        ]);
+    }
+
+    public function test_enroll_reopens_existing_active_enrollment_and_sets_student_back_to_studying(): void
+    {
+        [$student, $course] = $this->createStudentAndCourse('004');
+        $student->update([
+            'status' => 'paused',
+            'official_enrollment_date' => '2026-08-01',
+        ]);
+
+        $class = $this->createClass($course, '004A');
+        $enrollment = LanguageEnrollment::create([
+            'language_class_id' => $class->id,
+            'language_student_id' => $student->id,
+            'enrolled_at' => '2026-08-01',
+            'tuition' => 1200000,
+            'discount' => 0,
+            'status' => 'paused',
+            'ended_at' => '2026-08-12',
+            'exit_reason' => 'Tam nghi',
+        ]);
+
+        LanguageTuitionCharge::create([
+            'code' => 'HP-REOPEN-004',
+            'language_student_id' => $student->id,
+            'language_course_id' => $course->id,
+            'language_class_id' => $class->id,
+            'original_amount' => 1200000,
+            'discount_percentage' => 0,
+            'discount_amount' => 0,
+            'payable_amount' => 1200000,
+            'paid_amount' => 0,
+            'credit_amount' => 0,
+            'due_date' => '2026-08-01',
+            'status' => 'unpaid',
+        ]);
+
+        app(LanguageEnrollmentManager::class)->enroll($class, $student->fresh(), '2026-08-20');
+
+        $this->assertDatabaseHas('language_enrollments', [
+            'id' => $enrollment->id,
+            'status' => 'studying',
+            'ended_at' => null,
+            'exit_reason' => null,
+        ]);
+        $this->assertDatabaseHas('language_students', [
+            'id' => $student->id,
+            'status' => 'studying',
         ]);
     }
 

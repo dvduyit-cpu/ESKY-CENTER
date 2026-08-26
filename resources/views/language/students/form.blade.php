@@ -123,16 +123,20 @@ $activeEnrollment = $item->enrollments?->whereIn('status', ['studying', 'paused'
                     </select>
                 </div>
                 @if(auth()->user()->isRegistrar())
-                    @if($item->exists && $activeEnrollment)
+                    @if($item->exists)
                         <div class="col-md-6">
-                            <label class="form-label">Lớp đang hiệu lực</label>
+                            <label class="form-label">Giáo vụ xếp lớp (chương trình / cấp độ)</label>
                             <div class="form-control bg-light">
-                                {{ $activeEnrollment->languageClass?->code ?: 'Lớp không còn hoạt động' }}
-                                @if($activeEnrollment->languageClass?->name)
-                                    – {{ $activeEnrollment->languageClass->name }}
+                                @if($activeEnrollment)
+                                    {{ $activeEnrollment->languageClass?->code ?: 'Lớp không còn hoạt động' }}
+                                    @if($activeEnrollment->languageClass?->name)
+                                        – {{ $activeEnrollment->languageClass->name }}
+                                    @endif
+                                @else
+                                    Chưa xếp lớp
                                 @endif
                             </div>
-                            <div class="form-text">Muốn đổi lớp, hãy dùng chức năng Chuyển lớp hoặc Đưa khỏi lớp trong Quản lý lớp học để giữ đúng lịch sử học phí.</div>
+                            <div class="form-text">Thêm hoặc đưa khỏi lớp trực tiếp tại hồ sơ học viên để giữ đúng lịch sử học phí.</div>
                         </div>
                     @else
                         <div class="col-md-6">

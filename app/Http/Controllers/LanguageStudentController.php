@@ -417,7 +417,7 @@ class LanguageStudentController extends Controller
         return $spreadsheet->template();
     }
 
-    public function show(LanguageStudent $languageStudent): View
+    public function show(Request $request, LanguageStudent $languageStudent): View
     {
         $languageStudent->load([
             'guardians', 'course', 'discountPolicy',
@@ -429,7 +429,84 @@ class LanguageStudentController extends Controller
             'tuitionCharges'=>fn($query)=>$query->with(['course','languageClass','payments.collector'])->orderByDesc('created_at'),
             'classTransfers'=>fn($query)=>$query->with(['fromClass','toClass','creator'])->orderByDesc('effective_date'),
         ]);
-        return view('language.students.show',['item'=>$languageStudent]);
+        $usedClassIds = $languageStudent->enrollments
+            ->pluck('language_class_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $availableClasses = $request->user()?->isRegistrar()
+            ? LanguageClass::query()
+                ->whereIn('status', ['recruiting', 'upcoming', 'active'])
+                ->whereNotIn('id', $usedClassIds)
+                ->with(['program', 'level'])
+                ->orderBy('name')
+                ->get()
+            : collect();
+
+        return view('language.students.show', [
+            'item' => $languageStudent,
+            'availableClasses' => $availableClasses,
+        ]);
+    }
+
+    public function storeEnrollment(Request $request, LanguageStudent $languageStudent): RedirectResponse
+    {
+        abort_unless($request->user()?->isRegistrar(), 403, 'Chỉ giáo vụ hoặc quản trị viên mới được xếp học viên vào lớp.');
+
+        $data = $request->validate([
+            'language_class_id' => ['required', 'integer', 'exists:language_classes,id'],
+            'enrolled_at' => ['required', 'date'],
+        ], [
+            'language_class_id.required' => 'Vui lòng chọn lớp cần thêm học viên vào.',
+            'enrolled_at.required' => 'Vui lòng chọn ngày vào lớp.',
+        ]);
+
+        $class = LanguageClass::findOrFail($data['language_class_id']);
+
+        DB::transaction(function () use ($request, $languageStudent, $class, $data): void {
+            $this->enrollmentManager->enroll(
+                $class,
+                $languageStudent,
+                $data['enrolled_at'],
+                $request->user()?->id,
+                'studying'
+            );
+        });
+
+        ActivityLogger::log(
+            'language_students',
+            'enroll',
+            'Xếp học viên '.$languageStudent->name.' vào lớp '.$class->code,
+            $languageStudent
+        );
+
+        return back()->with('success', 'Đã thêm học viên vào lớp '.$class->code.'.');
+    }
+
+    public function destroyEnrollment(Request $request, LanguageStudent $languageStudent, LanguageEnrollment $enrollment): RedirectResponse
+    {
+        abort_unless($request->user()?->isRegistrar(), 403, 'Chỉ giáo vụ hoặc quản trị viên mới được đưa học viên khỏi lớp.');
+        abort_unless((int) $enrollment->language_student_id === (int) $languageStudent->id, 404);
+
+        $class = $enrollment->languageClass ?: LanguageClass::withTrashed()->find($enrollment->language_class_id);
+        abort_unless($class, 404);
+
+        $chargeDeleted = $this->enrollmentManager->unenroll($class, $enrollment);
+
+        ActivityLogger::log(
+            'language_students',
+            'unenroll',
+            'Đưa học viên '.$languageStudent->name.' khỏi lớp '.$class->code,
+            $languageStudent
+        );
+
+        return back()->with(
+            'success',
+            $chargeDeleted
+                ? 'Đã đưa học viên khỏi lớp và xóa khoản học phí chưa thu.'
+                : 'Đã đưa học viên khỏi lớp.'
+        );
     }
 
     public function store(Request $request): RedirectResponse
@@ -515,6 +592,60 @@ class LanguageStudentController extends Controller
 
     private function syncCurrentClass(Request $request, LanguageStudent $student): void
     {
+        if ($request->has('_sync_active_classes')) {
+            $user = $request->user();
+            $activeEnrollments = $student->enrollments()
+                ->whereIn('status', ['studying', 'paused', 'reserved'])
+                ->with('languageClass')
+                ->orderByDesc('enrolled_at')
+                ->get();
+
+            $data = $request->validate([
+                'active_class_ids' => ['nullable', 'array'],
+                'active_class_ids.*' => ['required', 'integer', 'distinct', 'exists:language_classes,id'],
+            ]);
+
+            $targetClassIds = collect($data['active_class_ids'] ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+
+            if ($targetClassIds->isEmpty() && $activeEnrollments->isEmpty()) {
+                return;
+            }
+
+            abort_unless($user?->isRegistrar(), 403, 'Chi tai khoan duoc danh dau Giao vu hoac quan tri vien moi duoc xep hoac dua hoc vien khoi lop.');
+
+            $currentByClassId = $activeEnrollments->keyBy(fn ($enrollment) => (int) $enrollment->language_class_id);
+
+            foreach ($activeEnrollments as $enrollment) {
+                if ($targetClassIds->contains((int) $enrollment->language_class_id)) {
+                    continue;
+                }
+
+                $class = $enrollment->languageClass ?: LanguageClass::withTrashed()->find($enrollment->language_class_id);
+                if ($class) {
+                    $this->enrollmentManager->unenroll($class, $enrollment);
+                }
+            }
+
+            $targetClassIds
+                ->reject(fn ($classId) => $currentByClassId->has((int) $classId))
+                ->each(function (int $classId) use ($request, $student): void {
+                    $this->enrollmentManager->enroll(
+                        LanguageClass::findOrFail($classId),
+                        $student,
+                        $student->official_enrollment_date ?? $student->registered_at ?? now(),
+                        $request->user()?->id,
+                        in_array($student->status, ['paused', 'reserved', 'completed', 'dropped'], true)
+                            ? $student->status
+                            : 'studying'
+                    );
+                });
+
+            return;
+        }
+
         $data = $request->validate(['language_class_id'=>'nullable|exists:language_classes,id']);
         $activeEnrollments = $student->enrollments()
             ->whereIn('status', ['studying', 'paused', 'reserved'])

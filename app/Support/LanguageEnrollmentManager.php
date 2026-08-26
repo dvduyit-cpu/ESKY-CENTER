@@ -38,6 +38,11 @@ class LanguageEnrollmentManager
                 ->where('language_class_id', $lockedClass->id)
                 ->where('language_student_id', $student->id)
                 ->first();
+            if ($existing && in_array($existing->status, ['completed', 'dropped'], true)) {
+                throw ValidationException::withMessages([
+                    'class' => 'Hoc vien da tung co ho so trong lop nay. Vui long chon lop khac de khong ghi de lich su cu.',
+                ]);
+            }
             if ($enrollmentStatus === 'studying' && (! $existing || $existing->status !== 'studying')
                 && $lockedClass->enrollments()->where('status', 'studying')->count() >= $lockedClass->max_students) {
                 throw ValidationException::withMessages(['class' => 'Lớp đã đủ sĩ số.']);
@@ -60,7 +65,7 @@ class LanguageEnrollmentManager
             $studentUpdates = [
                 'language_course_id' => $course->id,
             ];
-            if (in_array($student->status, ['new', 'placement_test', 'waiting_class'], true)) {
+            if ($enrollmentStatus === 'studying' && $student->status !== 'studying') {
                 $studentUpdates['status'] = 'studying';
             }
             if (! $student->official_enrollment_date) {
