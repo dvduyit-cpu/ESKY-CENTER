@@ -426,10 +426,11 @@ class LanguageTuitionSpreadsheet
         if ($pendingPayments->count() === 1 && ! $context['has_tuition'] && ! $context['has_book']) {
             $payment = $pendingPayments->first();
             $this->ensureUniqueReceiptCode($context['receipt_code'], $payment->id);
+            $isConfirmed = $context['receipt_code'] !== null;
             $payment->update([
                 'receipt_code' => $context['receipt_code'],
-                'receipt_status' => 'pending',
-                'confirmed_at' => null,
+                'receipt_status' => $isConfirmed ? 'confirmed' : 'pending',
+                'confirmed_at' => $isConfirmed ? now() : null,
                 'paid_at' => $context['paid_at'] ?? $payment->paid_at,
                 'payment_method' => $context['has_method'] ? $context['payment_method'] : $payment->payment_method,
                 'note' => $context['note'] ?: $payment->note,
@@ -464,11 +465,12 @@ class LanguageTuitionSpreadsheet
         }
 
         $this->ensureUniqueReceiptCode($context['receipt_code']);
+        $isConfirmed = $context['receipt_code'] !== null;
 
         $payment = $charge->payments()->create([
             'receipt_code' => $context['receipt_code'],
-            'receipt_status' => 'pending',
-            'confirmed_at' => null,
+            'receipt_status' => $isConfirmed ? 'confirmed' : 'pending',
+            'confirmed_at' => $isConfirmed ? now() : null,
             'amount' => $tuitionAmount,
             'book_amount' => $context['book_amount'],
             'paid_at' => $context['paid_at'] ?? now(),
