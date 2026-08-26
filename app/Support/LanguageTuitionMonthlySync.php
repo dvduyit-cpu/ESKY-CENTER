@@ -309,14 +309,123 @@ class LanguageTuitionMonthlySync
                         continue;
                     }
 
-                    if ($payment->paid_at->format('Y-m-d') !== $target->format('Y-m-d')) {
-                        $payment->update([
-                            'paid_at' => $target->copy()->setTime(
-                                $payment->paid_at->hour,
-                                $payment->paid_at->minute,
-                                $payment->paid_at->second
-                            ),
-                        ]);
+                    $rawPaidAt = (string) $payment->getRawOriginal('paid_at');
+                    $timePart = strlen($rawPaidAt) >= 19 ? substr($rawPaidAt, 11, 8) : $payment->paid_at->format('H:i:s');
+                    $targetPaidAt = $target->format('Y-m-d').' '.$timePart;
+
+                    if ($rawPaidAt !== $targetPaidAt) {
+                        $payment->newQuery()
+                            ->whereKey($payment->id)
+                            ->update([
+                                'paid_at' => $targetPaidAt,
+                                'updated_at' => now(),
+                            ]);
+                        $payment->refresh();
+                        $result['updated_payments']++;
+                    }
+
+                    $expected = $this->expectedMonthlyRecord($payment);
+                    if ($expected === null) {
+                        if ($record) {
+                            $record->delete();
+                            $result['removed_monthly_records']++;
+                        }
+
+                        continue;
+                    }
+
+                    if (! $record) {
+                        LanguageMonthlyTargetRecord::create(
+                            ['language_tuition_payment_id' => $payment->id] + $expected
+                        );
+                        $result['created_monthly_records']++;
+                        continue;
+                    }
+
+                    if ($this->recordNeedsUpdate($record, $expected)) {
+                        $record->update($expected);
+                        $result['updated_monthly_records']++;
+                    }
+                }
+            });
+
+        return $result;
+    }
+
+    /**
+     * @param array<int, int|string> $paymentIds
+     * @return array{
+     *     selected_payments:int,
+     *     scanned_payments:int,
+     *     updated_payments:int,
+     *     skipped_payments:int,
+     *     created_monthly_records:int,
+     *     updated_monthly_records:int,
+     *     removed_monthly_records:int,
+     *     target_date:?string
+     * }
+     */
+    public function movePaidAtDateForPayments(array $paymentIds, ?string $scopeDate, ?string $targetDate): array
+    {
+        $ids = collect($paymentIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values();
+        $target = $this->resolveTargetDate($targetDate);
+
+        $result = [
+            'selected_payments' => $ids->count(),
+            'scanned_payments' => 0,
+            'updated_payments' => 0,
+            'skipped_payments' => 0,
+            'created_monthly_records' => 0,
+            'updated_monthly_records' => 0,
+            'removed_monthly_records' => 0,
+            'target_date' => $target?->format('Y-m-d'),
+        ];
+
+        if ($ids->isEmpty() || ! $target) {
+            return $result;
+        }
+
+        $dateRange = $this->resolveScopeDateRange($scopeDate);
+
+        LanguageTuitionPayment::query()
+            ->whereIn('id', $ids->all())
+            ->when(
+                $dateRange,
+                fn (Builder $query) => $query->whereBetween('updated_at', [$dateRange->start, $dateRange->end])
+            )
+            ->with(['charge.lead'])
+            ->orderBy('id')
+            ->chunkById(200, function ($payments) use (&$result, $target): void {
+                $paymentIds = $payments->pluck('id')->all();
+                $records = LanguageMonthlyTargetRecord::query()
+                    ->whereIn('language_tuition_payment_id', $paymentIds)
+                    ->get()
+                    ->keyBy('language_tuition_payment_id');
+
+                foreach ($payments as $payment) {
+                    $result['scanned_payments']++;
+                    $record = $records->get($payment->id);
+
+                    if ($payment->receipt_status === 'cancelled' || ! $payment->paid_at instanceof CarbonInterface) {
+                        $result['skipped_payments']++;
+                        continue;
+                    }
+
+                    $rawPaidAt = (string) $payment->getRawOriginal('paid_at');
+                    $timePart = strlen($rawPaidAt) >= 19 ? substr($rawPaidAt, 11, 8) : $payment->paid_at->format('H:i:s');
+                    $targetPaidAt = $target->format('Y-m-d').' '.$timePart;
+
+                    if ($rawPaidAt !== $targetPaidAt) {
+                        $payment->newQuery()
+                            ->whereKey($payment->id)
+                            ->update([
+                                'paid_at' => $targetPaidAt,
+                                'updated_at' => now(),
+                            ]);
                         $payment->refresh();
                         $result['updated_payments']++;
                     }

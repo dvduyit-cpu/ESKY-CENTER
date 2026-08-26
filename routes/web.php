@@ -167,6 +167,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-tuition',[LanguageTuitionController::class,'index'])->middleware('permission:language_tuition,view')->name('language-tuition.index');
         Route::get('/language-tuition-monthly',[LanguageTuitionController::class,'monthly'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly');
         Route::get('/language-tuition-monthly/pdf',[LanguageTuitionController::class,'monthlyPdf'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly.pdf');
+        Route::post('/language-tuition-monthly/shift-paid-date',[LanguageTuitionController::class,'bulkShiftMonthlyPaidAtDate'])->middleware('permission:language_tuition,update')->name('language-tuition.monthly.shift-paid-date');
         Route::get('/language-tuition/template',[LanguageTuitionController::class,'template'])->middleware('permission:language_tuition,update')->name('language-tuition.template');
         Route::get('/language-tuition/outstanding-sheet',[LanguageTuitionController::class,'outstandingSheet'])->middleware('permission:language_tuition,update')->name('language-tuition.outstanding-sheet');
         Route::post('/language-tuition/import',[LanguageTuitionController::class,'import'])->middleware('permission:language_tuition,update')->name('language-tuition.import');

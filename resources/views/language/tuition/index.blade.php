@@ -21,7 +21,8 @@
 @php($monthlySyncReport = session('tuition_monthly_sync_report'))
 @php($syncDate = $monthlySyncReport['scope_date'] ?? now()->format('Y-m-d'))
 @php($targetPaidDate = session('tuition_target_paid_date', now()->format('Y-m-d')))
-@if(auth()->user()->allowed('language_tuition', 'update'))
+@php($isAdmin = auth()->user()?->isAdmin())
+@if($isAdmin)
 <div class="card card-soft mb-4">
     <div class="card-body p-4">
         <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">

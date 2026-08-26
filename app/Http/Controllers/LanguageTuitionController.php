@@ -295,6 +295,8 @@ class LanguageTuitionController extends Controller
 
     public function checkMonthlySync(LanguageTuitionMonthlySync $sync): RedirectResponse
     {
+        abort_unless(request()->user()?->isAdmin(), 403, 'Chỉ admin mới được kiểm tra đồng bộ thu học phí theo tháng.');
+
         $scopeDate = request('sync_date');
         $report = $sync->inspect($scopeDate);
 
@@ -311,6 +313,8 @@ class LanguageTuitionController extends Controller
 
     public function applyMonthlySync(LanguageTuitionMonthlySync $sync): RedirectResponse
     {
+        abort_unless(request()->user()?->isAdmin(), 403, 'Chỉ admin mới được cập nhật đồng bộ thu học phí theo tháng.');
+
         $scopeDate = request('sync_date');
         $result = $sync->sync($scopeDate);
         $report = $sync->inspect($scopeDate);
@@ -330,6 +334,8 @@ class LanguageTuitionController extends Controller
 
     public function shiftPaidAtDate(Request $request, LanguageTuitionMonthlySync $sync): RedirectResponse
     {
+        abort_unless($request->user()?->isAdmin(), 403, 'Chỉ admin mới được sửa ngày thu hàng loạt.');
+
         $data = $request->validate([
             'sync_date' => ['nullable', 'date_format:Y-m-d'],
             'target_paid_date' => ['required', 'date_format:Y-m-d'],
@@ -351,6 +357,33 @@ class LanguageTuitionController extends Controller
             ->with('success', $message)
             ->with('tuition_monthly_sync_report', $report)
             ->with('tuition_target_paid_date', $result['target_date']);
+    }
+
+    public function bulkShiftMonthlyPaidAtDate(Request $request, LanguageTuitionMonthlySync $sync): RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Chỉ admin mới được sửa ngày thu ở màn thu học phí theo tháng.');
+
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:language_tuition_payments,id'],
+            'updated_scope_date' => ['nullable', 'date_format:Y-m-d'],
+            'target_paid_date' => ['required', 'date_format:Y-m-d'],
+        ], [
+            'ids.required' => 'Vui lòng chọn ít nhất một phiếu thu để cập nhật.',
+            'target_paid_date.required' => 'Vui lòng chọn ngày cần sửa.',
+        ]);
+
+        $result = $sync->movePaidAtDateForPayments(
+            $data['ids'],
+            $data['updated_scope_date'] ?? null,
+            $data['target_paid_date']
+        );
+
+        return back()->with(
+            'success',
+            'Đã cập nhật ngày thu cho '.$result['updated_payments'].' / '.$result['scanned_payments']
+            .' phiếu đã quét, bỏ qua '.$result['skipped_payments'].' phiếu không hợp lệ hoặc đã hủy.'
+        );
     }
 
     public function outstandingSheet(Request $request, LanguageTuitionSpreadsheet $spreadsheet): StreamedResponse
