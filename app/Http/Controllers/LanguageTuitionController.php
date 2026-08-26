@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\{LanguageClass, LanguageCourse, LanguageDiscountPolicy, LanguageEnrollment, LanguageLead, LanguageMonthlyTargetRecord, LanguageStudent, LanguageTuitionCharge, LanguageTuitionPayment};
-use App\Support\{CenterCode, ExcelExporter, LanguageDiscountResolver, LanguageTuitionSpreadsheet, SpreadsheetSupport};
+use App\Support\{CenterCode, ExcelExporter, LanguageDiscountResolver, LanguageTuitionMonthlySync, LanguageTuitionSpreadsheet, SpreadsheetSupport};
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
@@ -291,6 +291,39 @@ class LanguageTuitionController extends Controller
     public function template(LanguageTuitionSpreadsheet $spreadsheet): StreamedResponse
     {
         return $spreadsheet->template();
+    }
+
+    public function checkMonthlySync(LanguageTuitionMonthlySync $sync): RedirectResponse
+    {
+        $report = $sync->inspect();
+
+        return redirect()
+            ->route('language-tuition.index')
+            ->with(
+                $report['has_issues'] ? 'warning' : 'success',
+                $report['has_issues']
+                    ? 'Đã kiểm tra xong. Có dữ liệu thu học phí theo tháng cần đồng bộ lại.'
+                    : 'Đã kiểm tra xong. Dữ liệu thu học phí và thu học phí theo tháng đã khớp.'
+            )
+            ->with('tuition_monthly_sync_report', $report);
+    }
+
+    public function applyMonthlySync(LanguageTuitionMonthlySync $sync): RedirectResponse
+    {
+        $result = $sync->sync();
+        $report = $sync->inspect();
+
+        $message = 'Đã cập nhật đồng bộ sang thu học phí theo tháng: '
+            .'xác nhận '.$result['confirmed_pending_payments'].' phiếu chờ, '
+            .'tạo '.$result['created_monthly_records'].' bản ghi tháng, '
+            .'cập nhật '.$result['updated_monthly_records'].' bản ghi tháng, '
+            .'xóa '.$result['removed_monthly_records'].' bản ghi dư, '
+            .'tính lại '.$result['refreshed_charges'].' khoản thu.';
+
+        return redirect()
+            ->route('language-tuition.index')
+            ->with($report['has_issues'] ? 'warning' : 'success', $message)
+            ->with('tuition_monthly_sync_report', $report);
     }
 
     public function outstandingSheet(Request $request, LanguageTuitionSpreadsheet $spreadsheet): StreamedResponse

@@ -18,6 +18,83 @@
 </div>
 @endif
 
+@php($monthlySyncReport = session('tuition_monthly_sync_report'))
+@if(auth()->user()->allowed('language_tuition', 'update'))
+<div class="card card-soft mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
+            <div class="me-lg-auto">
+                <h5 class="mb-1">Đồng bộ thu học phí theo tháng</h5>
+                <div class="text-muted small">Dùng khi đã cập nhật phiếu thu qua file upload nhưng cần rà lại và lưu những học viên đã đóng tiền sang phần `Thu học phí theo tháng`.</div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <form method="POST" action="{{ route('language-tuition.monthly-sync.check') }}">
+                    @csrf
+                    <button class="btn btn-outline-primary">
+                        <i class="bi bi-search me-2"></i>Kiểm tra
+                    </button>
+                </form>
+                <form method="POST" action="{{ route('language-tuition.monthly-sync.apply') }}" data-confirm="Xác nhận cập nhật lại dữ liệu Thu học phí theo tháng từ các phiếu đã thu?">
+                    @csrf
+                    <button class="btn btn-primary" @disabled(!($monthlySyncReport['has_issues'] ?? false))>
+                        <i class="bi bi-arrow-repeat me-2"></i>Cập nhật
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        @if($monthlySyncReport)
+            <div class="row g-3 mt-1">
+                <div class="col-md-6 col-xl">
+                    <div class="border rounded-3 p-3 h-100 bg-light">
+                        <div class="small text-muted">Phiếu chờ đã có số phiếu</div>
+                        <div class="fs-4 fw-bold text-warning">{{ number_format($monthlySyncReport['pending_with_receipt_code']) }}</div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl">
+                    <div class="border rounded-3 p-3 h-100 bg-light">
+                        <div class="small text-muted">Thiếu ở dữ liệu tháng</div>
+                        <div class="fs-4 fw-bold text-danger">{{ number_format($monthlySyncReport['missing_monthly_records']) }}</div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl">
+                    <div class="border rounded-3 p-3 h-100 bg-light">
+                        <div class="small text-muted">Bản ghi tháng bị lệch</div>
+                        <div class="fs-4 fw-bold text-primary">{{ number_format($monthlySyncReport['stale_monthly_records']) }}</div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl">
+                    <div class="border rounded-3 p-3 h-100 bg-light">
+                        <div class="small text-muted">Bản ghi tháng dư</div>
+                        <div class="fs-4 fw-bold">{{ number_format($monthlySyncReport['orphan_monthly_records']) }}</div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl">
+                    <div class="border rounded-3 p-3 h-100 bg-light">
+                        <div class="small text-muted">Khoản thu cần tính lại</div>
+                        <div class="fs-4 fw-bold text-info">{{ number_format($monthlySyncReport['charge_mismatches']) }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert {{ $monthlySyncReport['has_issues'] ? 'alert-warning' : 'alert-success' }} border-0 mt-3 mb-0">
+                <div class="d-flex flex-wrap justify-content-between gap-2">
+                    <strong>{{ $monthlySyncReport['has_issues'] ? 'Đã phát hiện dữ liệu cần đồng bộ.' : 'Dữ liệu thu học phí theo tháng đã khớp.' }}</strong>
+                    <span class="small">Đã rà {{ number_format($monthlySyncReport['scanned_payments']) }} phiếu thu và {{ number_format($monthlySyncReport['scanned_charges']) }} khoản thu.</span>
+                </div>
+                @if(!empty($monthlySyncReport['sample_issues']))
+                    <div class="mt-2 small">
+                        @foreach($monthlySyncReport['sample_issues'] as $issue)
+                            <div><strong>{{ $issue['type'] }}:</strong> {{ $issue['label'] }}</div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        @endif
+    </div>
+</div>
+@endif
+
 <div class="d-flex flex-column flex-lg-row align-items-start gap-3 mb-4">
     <div class="me-lg-auto">
         <h1 class="page-title">Thu học phí</h1>
