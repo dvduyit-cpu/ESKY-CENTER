@@ -19,25 +19,38 @@
 @endif
 
 @php($monthlySyncReport = session('tuition_monthly_sync_report'))
+@php($syncDate = $monthlySyncReport['scope_date'] ?? now()->format('Y-m-d'))
 @if(auth()->user()->allowed('language_tuition', 'update'))
 <div class="card card-soft mb-4">
     <div class="card-body p-4">
         <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
             <div class="me-lg-auto">
                 <h5 class="mb-1">Đồng bộ thu học phí theo tháng</h5>
-                <div class="text-muted small">Dùng khi đã cập nhật phiếu thu qua file upload nhưng cần rà lại và lưu những học viên đã đóng tiền sang phần `Thu học phí theo tháng`.</div>
+                <div class="text-muted small">Dùng khi đã cập nhật phiếu thu qua file upload nhưng cần rà lại và lưu những học viên đã đóng tiền sang phần `Thu học phí theo tháng`. Chọn `Ngày import / cập nhật` để quét riêng nhóm vừa nhập; để trống nếu muốn quét toàn bộ.</div>
             </div>
-            <div class="d-flex flex-wrap gap-2">
-                <form method="POST" action="{{ route('language-tuition.monthly-sync.check') }}">
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+                <form method="POST" action="{{ route('language-tuition.monthly-sync.check') }}" class="d-flex flex-wrap gap-2 align-items-end">
                     @csrf
+                    <div>
+                        <label class="form-label small mb-1">Ngày import / cập nhật</label>
+                        <input class="form-control" type="date" name="sync_date" value="{{ $syncDate }}">
+                    </div>
                     <button class="btn btn-outline-primary">
-                        <i class="bi bi-search me-2"></i>Kiểm tra
+                        <i class="bi bi-search me-2"></i>Kiểm tra theo ngày
                     </button>
                 </form>
-                <form method="POST" action="{{ route('language-tuition.monthly-sync.apply') }}" data-confirm="Xác nhận cập nhật lại dữ liệu Thu học phí theo tháng từ các phiếu đã thu?">
+                <form method="POST" action="{{ route('language-tuition.monthly-sync.apply') }}" class="d-flex flex-wrap gap-2 align-items-end" data-confirm="Xác nhận cập nhật lại dữ liệu Thu học phí theo tháng từ các phiếu đã thu?">
                     @csrf
+                    <input type="hidden" name="sync_date" value="{{ $syncDate }}">
                     <button class="btn btn-primary" @disabled(!($monthlySyncReport['has_issues'] ?? false))>
-                        <i class="bi bi-arrow-repeat me-2"></i>Cập nhật
+                        <i class="bi bi-arrow-repeat me-2"></i>Cập nhật theo ngày
+                    </button>
+                </form>
+                <form method="POST" action="{{ route('language-tuition.monthly-sync.check') }}" class="d-flex align-items-end">
+                    @csrf
+                    <input type="hidden" name="sync_date" value="">
+                    <button class="btn btn-light">
+                        <i class="bi bi-collection me-2"></i>Kiểm tra toàn bộ
                     </button>
                 </form>
             </div>
@@ -80,7 +93,10 @@
             <div class="alert {{ $monthlySyncReport['has_issues'] ? 'alert-warning' : 'alert-success' }} border-0 mt-3 mb-0">
                 <div class="d-flex flex-wrap justify-content-between gap-2">
                     <strong>{{ $monthlySyncReport['has_issues'] ? 'Đã phát hiện dữ liệu cần đồng bộ.' : 'Dữ liệu thu học phí theo tháng đã khớp.' }}</strong>
-                    <span class="small">Đã rà {{ number_format($monthlySyncReport['scanned_payments']) }} phiếu thu và {{ number_format($monthlySyncReport['scanned_charges']) }} khoản thu.</span>
+                    <span class="small">
+                        {{ !empty($monthlySyncReport['scope_date']) ? 'Phạm vi ngày '.$monthlySyncReport['scope_date'].' · ' : '' }}
+                        Đã rà {{ number_format($monthlySyncReport['scanned_payments']) }} phiếu thu và {{ number_format($monthlySyncReport['scanned_charges']) }} khoản thu.
+                    </span>
                 </div>
                 @if(!empty($monthlySyncReport['sample_issues']))
                     <div class="mt-2 small">

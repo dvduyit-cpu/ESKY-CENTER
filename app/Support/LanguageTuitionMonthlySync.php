@@ -5,7 +5,10 @@ namespace App\Support;
 use App\Models\LanguageMonthlyTargetRecord;
 use App\Models\LanguageTuitionCharge;
 use App\Models\LanguageTuitionPayment;
+use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 class LanguageTuitionMonthlySync
 {
@@ -20,11 +23,13 @@ class LanguageTuitionMonthlySync
      *     charge_mismatches:int,
      *     fixable_count:int,
      *     has_issues:bool,
+     *     scope_date:?string,
      *     sample_issues:array<int, array{type:string,label:string}>
      * }
      */
-    public function inspect(int $sampleLimit = 12): array
+    public function inspect(?string $scopeDate = null, int $sampleLimit = 12): array
     {
+        $dateRange = $this->resolveScopeDateRange($scopeDate);
         $report = [
             'scanned_payments' => 0,
             'scanned_charges' => 0,
@@ -35,14 +40,18 @@ class LanguageTuitionMonthlySync
             'charge_mismatches' => 0,
             'fixable_count' => 0,
             'has_issues' => false,
+            'scope_date' => $dateRange?->start->format('Y-m-d'),
             'sample_issues' => [],
         ];
 
-        LanguageTuitionPayment::query()
+        $paymentIdsForScope = collect();
+
+        $this->paymentsQuery($dateRange)
             ->with(['charge.lead'])
             ->orderBy('id')
-            ->chunkById(200, function ($payments) use (&$report, $sampleLimit): void {
+            ->chunkById(200, function ($payments) use (&$report, $sampleLimit, &$paymentIdsForScope): void {
                 $paymentIds = $payments->pluck('id')->all();
+                $paymentIdsForScope = $paymentIdsForScope->merge($paymentIds);
                 $records = LanguageMonthlyTargetRecord::query()
                     ->whereIn('language_tuition_payment_id', $paymentIds)
                     ->get()
@@ -101,7 +110,8 @@ class LanguageTuitionMonthlySync
                 }
             });
 
-        LanguageTuitionCharge::query()
+        $chargeIdsForScope = $this->chargeIdsForScope($paymentIdsForScope);
+        $this->chargesQuery($chargeIdsForScope)
             ->with(['payments:id,language_tuition_charge_id,receipt_status,amount', 'lead'])
             ->orderBy('id')
             ->chunkById(200, function ($charges) use (&$report, $sampleLimit): void {
@@ -154,8 +164,9 @@ class LanguageTuitionMonthlySync
      *     refreshed_charges:int
      * }
      */
-    public function sync(): array
+    public function sync(?string $scopeDate = null): array
     {
+        $dateRange = $this->resolveScopeDateRange($scopeDate);
         $result = [
             'confirmed_pending_payments' => 0,
             'created_monthly_records' => 0,
@@ -164,11 +175,14 @@ class LanguageTuitionMonthlySync
             'refreshed_charges' => 0,
         ];
 
-        LanguageTuitionPayment::query()
+        $paymentIdsForScope = collect();
+
+        $this->paymentsQuery($dateRange)
             ->with(['charge.lead'])
             ->orderBy('id')
-            ->chunkById(200, function ($payments) use (&$result): void {
+            ->chunkById(200, function ($payments) use (&$result, &$paymentIdsForScope): void {
                 $paymentIds = $payments->pluck('id')->all();
+                $paymentIdsForScope = $paymentIdsForScope->merge($paymentIds);
                 $records = LanguageMonthlyTargetRecord::query()
                     ->whereIn('language_tuition_payment_id', $paymentIds)
                     ->get()
@@ -211,7 +225,8 @@ class LanguageTuitionMonthlySync
                 }
             });
 
-        LanguageTuitionCharge::query()
+        $chargeIdsForScope = $this->chargeIdsForScope($paymentIdsForScope);
+        $this->chargesQuery($chargeIdsForScope)
             ->with('payments:id,language_tuition_charge_id,receipt_status,amount')
             ->orderBy('id')
             ->chunkById(200, function ($charges) use (&$result): void {
@@ -244,6 +259,59 @@ class LanguageTuitionMonthlySync
             });
 
         return $result;
+    }
+
+    private function paymentsQuery(?object $dateRange): Builder
+    {
+        return LanguageTuitionPayment::query()
+            ->when(
+                $dateRange,
+                fn (Builder $query) => $query->whereBetween('updated_at', [$dateRange->start, $dateRange->end])
+            );
+    }
+
+    private function chargesQuery(?Collection $chargeIds): Builder
+    {
+        return LanguageTuitionCharge::query()
+            ->when(
+                $chargeIds !== null,
+                fn (Builder $query) => $chargeIds->isEmpty()
+                    ? $query->whereRaw('1 = 0')
+                    : $query->whereIn('id', $chargeIds->all())
+            );
+    }
+
+    private function chargeIdsForScope(Collection $paymentIds): ?Collection
+    {
+        if ($paymentIds->isEmpty()) {
+            return $paymentIds;
+        }
+
+        return LanguageTuitionPayment::query()
+            ->whereIn('id', $paymentIds->unique()->values()->all())
+            ->pluck('language_tuition_charge_id')
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    private function resolveScopeDateRange(?string $scopeDate): ?object
+    {
+        $scopeDate = trim((string) $scopeDate);
+        if ($scopeDate === '') {
+            return null;
+        }
+
+        try {
+            $date = Carbon::createFromFormat('Y-m-d', $scopeDate)->startOfDay();
+
+            return (object) [
+                'start' => $date,
+                'end' => $date->copy()->endOfDay(),
+            ];
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

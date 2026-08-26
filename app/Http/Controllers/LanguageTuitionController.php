@@ -295,7 +295,8 @@ class LanguageTuitionController extends Controller
 
     public function checkMonthlySync(LanguageTuitionMonthlySync $sync): RedirectResponse
     {
-        $report = $sync->inspect();
+        $scopeDate = request('sync_date');
+        $report = $sync->inspect($scopeDate);
 
         return redirect()
             ->route('language-tuition.index')
@@ -310,8 +311,9 @@ class LanguageTuitionController extends Controller
 
     public function applyMonthlySync(LanguageTuitionMonthlySync $sync): RedirectResponse
     {
-        $result = $sync->sync();
-        $report = $sync->inspect();
+        $scopeDate = request('sync_date');
+        $result = $sync->sync($scopeDate);
+        $report = $sync->inspect($scopeDate);
 
         $message = 'Đã cập nhật đồng bộ sang thu học phí theo tháng: '
             .'xác nhận '.$result['confirmed_pending_payments'].' phiếu chờ, '
