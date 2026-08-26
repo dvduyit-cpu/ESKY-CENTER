@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private AI Chat - Trợ Lý AI Cá Nhân</title>
+    <meta name="description" content="Ứng dụng Chat AI Riêng Tư bảo mật 100% trên trình duyệt với giao diện ChatGPT hiện đại.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Highlight.js for Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/tokyo-night-dark.min.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="btn btn-primary new-chat-btn" id="new-chat-btn">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Cuộc trò chuyện mới</span>
+                </button>
+                <button class="btn btn-icon sidebar-toggle-btn" id="sidebar-close-btn" title="Đóng thanh bên">
+                    <i class="fa-solid fa-sidebar"></i>
+                </button>
+            </div>
+
+            <div class="search-box-container">
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="search-threads" placeholder="Tìm kiếm cuộc trò chuyện..." autocomplete="off">
+                </div>
+            </div>
+
+            <div class="threads-list-container">
+                <div class="threads-group-title">Lịch sử trò chuyện</div>
+                <div class="threads-list" id="threads-list">
+                    <!-- Dynamic chat threads will be injected here -->
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <button class="btn btn-menu-item" id="export-import-btn">
+                    <i class="fa-solid fa-file-export"></i>
+                    <span>Sao lưu / Khôi phục</span>
+                </button>
+                <button class="btn btn-menu-item" id="clear-all-btn">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span>Xóa toàn bộ lịch sử</span>
+                </button>
+                <button class="btn btn-menu-item" id="settings-btn">
+                    <i class="fa-solid fa-gear"></i>
+                    <span>Cài đặt API & Model</span>
+                </button>
+                
+                <div class="user-status-badge">
+                    <div class="status-indicator online"></div>
+                    <span id="api-status-text">Đã cấu hình API</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Overlay for mobile sidebar -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area">
+            <!-- Header Bar -->
+            <header class="chat-header">
+                <div class="header-left">
+                    <button class="btn btn-icon mobile-menu-btn" id="mobile-menu-btn" title="Mở menu">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    
+                    <!-- Model Selector -->
+                    <div class="model-selector-wrapper">
+                        <button class="model-selector-btn" id="model-selector-btn">
+                            <span class="model-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                            <span class="model-name" id="current-model-name">Gemini 2.5 Flash</span>
+                            <i class="fa-solid fa-chevron-down chevron"></i>
+                        </button>
+                        
+                        <div class="model-dropdown-menu" id="model-dropdown">
+                            <div class="dropdown-header">Chọn Mô Hình AI</div>
+                            <div class="dropdown-item active" data-provider="gemini" data-model="gemini-2.5-flash">
+                                <div class="item-title">Gemini 2.5 Flash <span class="badge badge-recommended">Khuyên dùng</span></div>
+                                <div class="item-desc">Tốc độ cực nhanh, phản hồi thông minh, hoàn toàn miễn phí từ Google</div>
+                            </div>
+                            <div class="dropdown-item" data-provider="gemini" data-model="gemini-2.5-pro">
+                                <div class="item-title">Gemini 2.5 Pro</div>
+                                <div class="item-desc">Mô hình lập luận chuyên sâu, giải quyết bài toán phức tạp tốt nhất</div>
+                            </div>
+                            <div class="dropdown-item" data-provider="openai" data-model="gpt-4o">
+                                <div class="item-title">OpenAI GPT-4o</div>
+                                <div class="item-desc">Mô hình cao cấp của OpenAI (Cần OpenAI API Key)</div>
+                            </div>
+                            <div class="dropdown-item" data-provider="ollama" data-model="llama3">
+                                <div class="item-title">Ollama Local AI (Llama3)</div>
+                                <div class="item-desc">Chạy AI riêng tư trực tiếp trên máy tính của bạn qua Ollama</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="header-right">
+                    <!-- System Prompt Preset Selector -->
+                    <div class="preset-selector-wrapper">
+                        <select id="system-preset-select" class="preset-select" title="Chọn vai trò cho AI">
+                            <option value="general">🤖 Trợ Lý Chung</option>
+                            <option value="coder">💻 Chuyên Gia Lập Trình</option>
+                            <option value="writer">✍️ Biến Tập & Sáng Tác</option>
+                            <option value="translator">🌐 Thông Dịch Viên Dịch Thuật</option>
+                            <option value="custom">⚙️ Tùy Chỉnh Vai Trò...</option>
+                        </select>
+                    </div>
+
+                    <button class="btn btn-icon" id="header-settings-btn" title="Cài đặt">
+                        <i class="fa-solid fa-sliders"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Chat Scroll Container -->
+            <div class="chat-scroll-container" id="chat-scroll-container">
+                <!-- Welcome Screen (shown when chat is empty) -->
+                <div class="welcome-screen" id="welcome-screen">
+                    <div class="welcome-icon">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <h1>Private AI Assistant</h1>
+                    <p class="welcome-subtitle">Trải nghiệm Chat AI riêng tư, bảo mật dữ liệu tuyệt đối 100% trên trình duyệt của bạn.</p>
+                    
+                    <div style="margin-bottom: 24px;">
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="btn btn-outline" style="text-decoration: none; padding: 10px 18px; border-radius: 12px; font-weight: 600;">
+                            <i class="fa-solid fa-key" style="margin-right: 8px;"></i> Bấm vào đây để lấy Gemini API Key Miễn Phí (Google)
+                        </a>
+                    </div>
+                    
+                    <div class="prompt-suggestions">
+                        <div class="suggestion-card" data-prompt="Bạn có thể giúp tôi thiết kế giao diện web đẹp chuẩn UI/UX như thế nào?">
+                            <div class="suggestion-icon"><i class="fa-solid fa-code"></i></div>
+                            <div class="suggestion-text">
+                                <div class="suggestion-title">Thiết kế UI/UX Web</div>
+                                <div class="suggestion-desc">Tạo mã HTML/CSS hiệu ứng đẹp mắt</div>
+                            </div>
+                        </div>
+                        <div class="suggestion-card" data-prompt="Hãy giải thích cho tôi nguyên lý hoạt động của kiến trúc RESTful API và GraphQL.">
+                            <div class="suggestion-icon"><i class="fa-solid fa-cubes"></i></div>
+                            <div class="suggestion-text">
+                                <div class="suggestion-title">Giải thích khái niệm</div>
+                                <div class="suggestion-desc">So sánh RESTful API & GraphQL</div>
+                            </div>
+                        </div>
+                        <div class="suggestion-card" data-prompt="Viết một đoạn script Python tự động hóa việc đọc và phân tích file Excel.">
+                            <div class="suggestion-icon"><i class="fa-solid fa-terminal"></i></div>
+                            <div class="suggestion-text">
+                                <div class="suggestion-title">Tự động hóa Script</div>
+                                <div class="suggestion-desc">Viết mã Python xử lý dữ liệu Excel</div>
+                            </div>
+                        </div>
+                        <div class="suggestion-card" data-prompt="Hãy đóng vai một chuyên gia tiếp thị và giúp tôi viết kế hoạch chạy chiến dịch sản phẩm mới.">
+                            <div class="suggestion-icon"><i class="fa-solid fa-lightbulb"></i></div>
+                            <div class="suggestion-text">
+                                <div class="suggestion-title">Ý tưởng & Kế hoạch</div>
+                                <div class="suggestion-desc">Lên chiến dịch tiếp thị nội dung</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messages Stream Container -->
+                <div class="messages-container" id="messages-container">
+                    <!-- Dynamic chat messages injected here -->
+                </div>
+            </div>
+
+            <!-- Input Container -->
+            <div class="chat-input-wrapper">
+                <div class="chat-input-container">
+                    <textarea 
+                        id="chat-textarea" 
+                        placeholder="Gửi tin nhắn cho AI (Nhấn Shift + Enter để xuống dòng)..." 
+                        rows="1"
+                    ></textarea>
+                    
+                    <div class="chat-input-controls">
+                        <div class="input-tools-left">
+                            <button class="btn btn-icon btn-subtle" id="clear-input-btn" title="Xóa nội dung đang nhập">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </button>
+                            <span class="char-counter" id="char-counter">0 ký tự</span>
+                        </div>
+                        
+                        <div class="input-tools-right">
+                            <button class="btn btn-send" id="send-btn" title="Gửi tin nhắn (Enter)">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                            <button class="btn btn-stop hidden" id="stop-btn" title="Dừng tạo phản hồi">
+                                <i class="fa-solid fa-square"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-footer-note">
+                    AI có thể đưa ra câu trả lời chưa chính xác hoàn toàn. Hãy kiểm tra thông tin quan trọng. Dữ liệu trò chuyện được bảo mật local 100%.
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- Settings Modal -->
+    <div class="modal-backdrop" id="settings-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-sliders"></i> Cài Đặt Cấu Hình AI & API</h3>
+                <button class="modal-close-btn" data-close="settings-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="gemini-api-key">
+                        Google Gemini API Key 
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="link-external"><i class="fa-solid fa-arrow-up-right-from-square"></i> Lấy khóa miễn phí</a>
+                    </label>
+                    <input type="password" id="gemini-api-key" placeholder="AIzaSy..." class="form-control">
+                    <small class="form-text">Khóa API của bạn được lưu an toàn tuyệt đối trong `localStorage` trình duyệt cá nhân.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="openai-api-key">OpenAI API Key (Tùy chọn)</label>
+                    <input type="password" id="openai-api-key" placeholder="sk-..." class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label for="ollama-url">Ollama Local AI URL (Tùy chọn)</label>
+                    <input type="text" id="ollama-url" value="http://localhost:11434" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label for="custom-system-prompt">System Prompt Tùy Chỉnh (Chỉ thị vai trò AI)</label>
+                    <textarea id="custom-system-prompt" rows="3" class="form-control" placeholder="Ví dụ: Bạn là một trợ lý ảo thông minh, luôn trả lời ngắn gọn, chính xác bằng tiếng Việt..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-6">
+                        <label for="temperature-input">Sáng tạo (Temperature): <span id="temp-val">0.7</span></label>
+                        <input type="range" id="temperature-input" min="0" max="1" step="0.1" value="0.7" class="form-range">
+                    </div>
+                    <div class="form-group col-6">
+                        <label for="max-tokens-input">Độ dài tối đa (Max Tokens)</label>
+                        <input type="number" id="max-tokens-input" value="4096" step="256" class="form-control">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="settings-modal">Hủy</button>
+                <button class="btn btn-primary" id="save-settings-btn"><i class="fa-solid fa-floppy-disk"></i> Lưu Cài Đặt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup & Restore Modal -->
+    <div class="modal-backdrop" id="backup-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-file-export"></i> Sao Lưu & Khôi Phục Dữ Liệu</h3>
+                <button class="modal-close-btn" data-close="backup-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="backup-section">
+                    <h4>Sao Lưu (Export)</h4>
+                    <p>Tải toàn bộ lịch sử các cuộc trò chuyện về máy dưới dạng tệp dữ liệu mã hóa chuẩn JSON hoặc tài liệu Markdown.</p>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="export-json-btn">
+                            <i class="fa-solid fa-download"></i> Xuất File JSON (Đầy đủ)
+                        </button>
+                        <button class="btn btn-secondary" id="export-md-btn">
+                            <i class="fa-solid fa-file-lines"></i> Xuất Chat Hiện Tại (.MD)
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="modal-divider">
+
+                <div class="backup-section">
+                    <h4>Khôi Phục (Import)</h4>
+                    <p>Tải tệp tin sao lưu `.json` lên để phục hồi danh sách cuộc trò chuyện trước đây.</p>
+                    <input type="file" id="import-file-input" accept=".json" class="hidden">
+                    <button class="btn btn-outline" id="trigger-import-btn">
+                        <i class="fa-solid fa-upload"></i> Chọn Tệp Backup JSON
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close="backup-modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    
+    <!-- Application Scripts -->
+    <script src="js/storage.js"></script>
+    <script src="js/markdown.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
