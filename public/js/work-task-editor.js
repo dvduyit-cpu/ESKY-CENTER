@@ -55,18 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }));
         editor.querySelector('.task-add-link').addEventListener('click', () => insertEditorLink(content));
 
-        const fileBox = document.createElement('div');
-        fileBox.className = 'task-file-box mt-3';
-        fileBox.innerHTML = `<label class="form-label mb-1"><i class="bi bi-paperclip me-1"></i>File đính kèm</label>
-            <input class="form-control" type="file" name="attachments[]" multiple>
-            <small class="text-muted">Tối đa 5 file, mỗi file không quá 10 MB.</small>`;
-        editor.insertAdjacentElement('afterend', fileBox);
-
+        const fileBox = form.querySelector('input[name="attachments[]"]')?.closest('.col-12, .task-file-box');
         const isEditForm = form.querySelector('input[name="_method"][value="PUT"]');
         const existingAttachmentLinks = isEditForm
             ? [...document.querySelectorAll('.content > section.card a[href*="/attachments/"]')]
             : [];
-        if (existingAttachmentLinks.length) {
+        if (fileBox && existingAttachmentLinks.length) {
             const existingFiles = document.createElement('div');
             existingFiles.className = 'task-existing-files';
             existingFiles.innerHTML = '<div class="task-existing-files-title"><i class="bi bi-folder-check me-1"></i>Tệp hiện có</div>';
