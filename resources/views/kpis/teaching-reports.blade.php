@@ -69,8 +69,8 @@
                             <div class="small text-muted">Tổng giờ tháng này</div>
                             <div class="fs-5 fw-bold text-primary" data-month-total-display data-month-key="{{ $row['month'] }}">{{ number_format($monthTotal, 2) }}</div>
                         </div>
-                        <a class="btn btn-outline-danger" href="{{ route('teacher-classes.teaching-load.pdf', ['year' => $year, 'report_month' => $row['month']]) }}" data-no-loading>
-                            <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                        <a class="btn btn-outline-primary" href="{{ route('teacher-classes.teaching-load.word', ['year' => $year, 'report_month' => $row['month']]) }}" data-no-loading>
+                            <i class="bi bi-file-earmark-word me-1"></i>Word
                         </a>
                         <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#{{ $modalId }}">
                             <i class="bi bi-eye me-1"></i>Mở
@@ -100,8 +100,8 @@
                                     <div class="fw-semibold">{{ $row['report']?->updated_at?->format('d/m/Y H:i') ?: 'Chưa báo cáo' }}</div>
                                     <div class="small text-muted mt-2">Tổng giờ tháng này</div>
                                     <div class="fs-5 fw-bold text-primary" data-month-total-display data-month-key="{{ $row['month'] }}">{{ number_format($monthTotal, 2) }}</div>
-                                    <a class="btn btn-sm btn-outline-danger mt-3" href="{{ route('teacher-classes.teaching-load.pdf', ['year' => $year, 'report_month' => $row['month']]) }}" data-no-loading>
-                                        <i class="bi bi-file-earmark-pdf me-1"></i>Tải PDF
+                                    <a class="btn btn-sm btn-outline-primary mt-3" href="{{ route('teacher-classes.teaching-load.word', ['year' => $year, 'report_month' => $row['month']]) }}" data-no-loading>
+                                        <i class="bi bi-file-earmark-word me-1"></i>Tải Word
                                     </a>
                                 </div>
                             </div>

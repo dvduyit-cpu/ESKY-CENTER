@@ -430,6 +430,63 @@ class TeacherTeachingLoadController extends Controller
         ]);
     }
 
+    public function word(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user->canTeach() || $user->isAdmin(), 403);
+
+        $personnel = $user->personnel;
+        if (! $personnel) {
+            throw ValidationException::withMessages([
+                'personnel' => 'Tài khoản này chưa liên kết nhân sự nên chưa thể tải báo cáo tiết dạy.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'report_month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $plan = KpiPlan::query()->where('year', $data['year'])->first();
+        if (! $plan) {
+            throw ValidationException::withMessages([
+                'year' => 'Năm này chưa có kế hoạch chỉ tiêu để gắn báo cáo tiết dạy.',
+            ]);
+        }
+
+        $target = KpiTarget::query()
+            ->where('plan_id', $plan->id)
+            ->where('personnel_id', $personnel->id)
+            ->where('period_type', 'year')
+            ->first();
+
+        $report = KpiTeachingReport::query()
+            ->where('plan_id', $plan->id)
+            ->where('personnel_id', $personnel->id)
+            ->where('report_year', (int) $data['year'])
+            ->where('report_month', (int) $data['report_month'])
+            ->first();
+
+        $detailRows = collect($this->detailRowsForMonth($report));
+        $reportedTeachingLoad = round((float) $detailRows->sum(fn (array $row) => (float) ($row['lesson_count'] ?? 0)), 2);
+        if ($reportedTeachingLoad <= 0 && $report) {
+            $reportedTeachingLoad = round((float) $report->reported_teaching_load, 2);
+        }
+
+        $monthLabel = str_pad((string) $data['report_month'], 2, '0', STR_PAD_LEFT);
+
+        return response(view('kpis.teaching-report-word', [
+            'personnel' => $personnel,
+            'detailRows' => $detailRows,
+            'reportedTeachingLoad' => $reportedTeachingLoad,
+            'year' => (int) $data['year'],
+            'reportMonth' => (int) $data['report_month'],
+        ])->render(), 200, [
+            'Content-Type' => 'application/msword; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="lich-day-trung-tam-'.$data['year'].'-'.$monthLabel.'.doc"',
+        ]);
+    }
+
     private function detailRowsForMonth(?KpiTeachingReport $report): array
     {
         $rows = collect($report?->report_rows ?? [])

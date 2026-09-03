@@ -129,6 +129,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/teacher-classes',[LanguageClassController::class,'teacherIndex'])->middleware('permission:teacher_classes,view')->name('teacher-classes.index');
         Route::get('/teacher-classes/teaching-load',[TeacherTeachingLoadController::class,'index'])->middleware('permission:teacher_classes,view')->name('teacher-classes.teaching-load.index');
         Route::get('/teacher-classes/teaching-load/pdf',[TeacherTeachingLoadController::class,'pdf'])->middleware('permission:teacher_classes,view')->name('teacher-classes.teaching-load.pdf');
+        Route::get('/teacher-classes/teaching-load/word',[TeacherTeachingLoadController::class,'word'])->middleware('permission:teacher_classes,view')->name('teacher-classes.teaching-load.word');
         Route::post('/teacher-classes/teaching-load',[TeacherTeachingLoadController::class,'store'])->middleware('permission:teacher_classes,update')->name('teacher-classes.teaching-load.store');
         Route::get('/teaching-load-management',[TeacherTeachingLoadController::class,'managementIndex'])->middleware('permission:teaching_load_management,view')->name('teaching-load-management.index');
         Route::get('/teacher-classes/{languageClass}/gradebook',[LanguageClassController::class,'gradebook'])->middleware('permission:teacher_classes,view')->name('teacher-classes.gradebook');
