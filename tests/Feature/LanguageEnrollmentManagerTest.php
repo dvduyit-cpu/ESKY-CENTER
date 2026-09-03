@@ -12,7 +12,6 @@ use App\Models\LanguageStudent;
 use App\Models\LanguageTuitionCharge;
 use App\Support\LanguageEnrollmentManager;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class LanguageEnrollmentManagerTest extends TestCase
@@ -130,7 +129,7 @@ class LanguageEnrollmentManagerTest extends TestCase
         ]);
     }
 
-    public function test_enroll_rejects_reusing_a_class_with_dropped_history(): void
+    public function test_enroll_restores_existing_dropped_enrollment_without_overwriting_its_history(): void
     {
         [$student, $course] = $this->createStudentAndCourse('003');
         $class = $this->createClass($course, '003A');
@@ -146,17 +145,18 @@ class LanguageEnrollmentManagerTest extends TestCase
             'exit_reason' => 'Gi lich su cu',
         ]);
 
-        try {
-            app(LanguageEnrollmentManager::class)->enroll($class, $student, '2026-08-20');
-            $this->fail('Expected ValidationException was not thrown.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('class', $exception->errors());
-        }
+        app(LanguageEnrollmentManager::class)->enroll($class, $student, '2026-08-20');
 
         $this->assertDatabaseHas('language_enrollments', [
             'id' => $enrollment->id,
-            'status' => 'dropped',
-            'ended_at' => '2026-08-10',
+            'enrolled_at' => '2026-08-01',
+            'status' => 'studying',
+            'ended_at' => null,
+            'exit_reason' => null,
+        ]);
+        $this->assertDatabaseHas('language_students', [
+            'id' => $student->id,
+            'status' => 'studying',
         ]);
     }
 

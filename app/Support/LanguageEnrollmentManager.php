@@ -38,9 +38,9 @@ class LanguageEnrollmentManager
                 ->where('language_class_id', $lockedClass->id)
                 ->where('language_student_id', $student->id)
                 ->first();
-            if ($existing && in_array($existing->status, ['completed', 'dropped'], true)) {
+            if ($existing?->status === 'completed') {
                 throw ValidationException::withMessages([
-                    'class' => 'Hoc vien da tung co ho so trong lop nay. Vui long chon lop khac de khong ghi de lich su cu.',
+                    'class' => 'Hoc vien da hoan thanh lop nay, khong the khoi phuc ghi danh.',
                 ]);
             }
             if ($enrollmentStatus === 'studying' && (! $existing || $existing->status !== 'studying')
@@ -53,7 +53,7 @@ class LanguageEnrollmentManager
             $enrollment = LanguageEnrollment::updateOrCreate(
                 ['language_class_id' => $lockedClass->id, 'language_student_id' => $student->id],
                 [
-                    'enrolled_at' => $date->toDateString(),
+                    'enrolled_at' => $existing?->enrolled_at?->toDateString() ?? $date->toDateString(),
                     'tuition' => $tuition,
                     'discount' => 0,
                     'status' => $enrollmentStatus,
