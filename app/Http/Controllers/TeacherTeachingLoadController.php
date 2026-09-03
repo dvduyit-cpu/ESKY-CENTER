@@ -324,6 +324,10 @@ class TeacherTeachingLoadController extends Controller
             throw ValidationException::withMessages($rowErrors);
         }
 
+        $normalizedRows = $normalizedRows
+            ->sortBy('date')
+            ->values();
+
         $reportedTeachingLoad = round((float) $normalizedRows->sum('lesson_count'), 2);
         $summaryNote = $normalizedRows->pluck('note')->filter()->implode(' | ');
 
@@ -415,7 +419,7 @@ class TeacherTeachingLoadController extends Controller
             'year' => (int) $data['year'],
             'reportMonth' => (int) $data['report_month'],
         ])->render(), 'UTF-8');
-        $dompdf->setPaper('A4', 'landscape');
+        $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
 
         $monthLabel = str_pad((string) $data['report_month'], 2, '0', STR_PAD_LEFT);
@@ -444,6 +448,7 @@ class TeacherTeachingLoadController extends Controller
                 || $row['note'] !== ''
                 || $row['lesson_count'] !== ''
             )
+            ->sortBy('date')
             ->values();
 
         if ($rows->isEmpty() && $report && (float) $report->reported_teaching_load > 0) {
