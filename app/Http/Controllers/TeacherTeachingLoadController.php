@@ -131,9 +131,13 @@ class TeacherTeachingLoadController extends Controller
             'teacher_count' => 0,
             'assigned_teaching_load' => 0.0,
             'reported_teaching_load' => 0.0,
+            'center_teaching_load' => 0.0,
+            'training_teaching_load' => 0.0,
             'remaining_teaching_load' => 0.0,
             'exceeded_teaching_load' => 0.0,
             'period_teaching_load' => 0.0,
+            'period_center_teaching_load' => 0.0,
+            'period_training_teaching_load' => 0.0,
         ];
 
         if ($plan) {
@@ -169,6 +173,16 @@ class TeacherTeachingLoadController extends Controller
                 $target = $targets->get($personnelId);
                 $reports = $reportsByPersonnel->get($personnelId, collect())->sortBy('report_month')->values();
                 $periodReport = $selectedMonth ? $reports->firstWhere('report_month', $selectedMonth) : null;
+                $sourceTotals = $reports->reduce(function (array $totals, KpiTeachingReport $report): array {
+                    $reportTotals = $this->reportSourceTotals($report);
+                    $totals['center'] += $reportTotals['center'];
+                    $totals['training'] += $reportTotals['training'];
+
+                    return $totals;
+                }, ['center' => 0.0, 'training' => 0.0]);
+                $periodSourceTotals = $selectedMonth
+                    ? $this->reportSourceTotals($periodReport)
+                    : $sourceTotals;
                 $periodTotal = $selectedMonth
                     ? round((float) ($periodReport?->reported_teaching_load ?? 0), 2)
                     : round((float) $reports->sum('reported_teaching_load'), 2);
@@ -180,9 +194,13 @@ class TeacherTeachingLoadController extends Controller
                     'target' => $target,
                     'assigned_teaching_load' => $assigned,
                     'reported_teaching_load' => $reported,
+                    'center_teaching_load' => round($sourceTotals['center'], 2),
+                    'training_teaching_load' => round($sourceTotals['training'], 2),
                     'remaining_teaching_load' => round(max($assigned - $reported, 0), 2),
                     'exceeded_teaching_load' => round(max($reported - $assigned, 0), 2),
                     'period_teaching_load' => $periodTotal,
+                    'period_center_teaching_load' => round($periodSourceTotals['center'], 2),
+                    'period_training_teaching_load' => round($periodSourceTotals['training'], 2),
                     'report_count' => $reports->count(),
                     'months_reported' => $reports->pluck('report_month')->values(),
                     'latest_report' => $selectedMonth ? $periodReport : $reports->sortByDesc('updated_at')->first(),
@@ -190,10 +208,13 @@ class TeacherTeachingLoadController extends Controller
                     'period_detail_rows' => $selectedMonth ? $this->detailRowsForMonth($periodReport) : [],
                     'monthly_breakdown' => collect(range(1, 12))->map(function (int $month) use ($reports) {
                         $report = $reports->firstWhere('report_month', $month);
+                        $reportTotals = $this->reportSourceTotals($report);
 
                         return [
                             'month' => $month,
                             'total' => round((float) ($report?->reported_teaching_load ?? 0), 2),
+                            'center_teaching_load' => round($reportTotals['center'], 2),
+                            'training_teaching_load' => round($reportTotals['training'], 2),
                             'updated_at' => $report?->updated_at,
                             'reporter_name' => $report?->reporter?->name,
                             'detail_rows' => $this->detailRowsForMonth($report),
@@ -208,9 +229,13 @@ class TeacherTeachingLoadController extends Controller
                 'teacher_count' => $summaryRows->count(),
                 'assigned_teaching_load' => round((float) $summaryRows->sum('assigned_teaching_load'), 2),
                 'reported_teaching_load' => round((float) $summaryRows->sum('reported_teaching_load'), 2),
+                'center_teaching_load' => round((float) $summaryRows->sum('center_teaching_load'), 2),
+                'training_teaching_load' => round((float) $summaryRows->sum('training_teaching_load'), 2),
                 'remaining_teaching_load' => round((float) $summaryRows->sum('remaining_teaching_load'), 2),
                 'exceeded_teaching_load' => round((float) $summaryRows->sum('exceeded_teaching_load'), 2),
                 'period_teaching_load' => round((float) $summaryRows->sum('period_teaching_load'), 2),
+                'period_center_teaching_load' => round((float) $summaryRows->sum('period_center_teaching_load'), 2),
+                'period_training_teaching_load' => round((float) $summaryRows->sum('period_training_teaching_load'), 2),
             ];
         }
 
@@ -245,6 +270,11 @@ class TeacherTeachingLoadController extends Controller
             'rows.*.date' => ['nullable', 'date'],
             'rows.*.class_name' => ['nullable', 'string', 'max:255'],
             'rows.*.time_slot' => ['nullable', 'string', 'max:100'],
+            'rows.*.type' => ['nullable', 'in:center,training'],
+            'rows.*.subject_name' => ['nullable', 'string', 'max:255'],
+            'rows.*.course_code' => ['nullable', 'string', 'max:100'],
+            'rows.*.from_date' => ['nullable', 'date'],
+            'rows.*.to_date' => ['nullable', 'date'],
             'rows.*.lesson_count' => ['nullable', 'numeric', 'min:0'],
             'rows.*.note' => ['nullable', 'string', 'max:1000'],
         ]);
@@ -269,24 +299,89 @@ class TeacherTeachingLoadController extends Controller
         }
 
         $detailRows = collect($data['rows'] ?? [])
-            ->map(fn (array $row): array => [
-                'date' => trim((string) ($row['date'] ?? '')),
-                'class_name' => trim((string) ($row['class_name'] ?? '')),
-                'time_slot' => trim((string) ($row['time_slot'] ?? '')),
-                'lesson_count' => $row['lesson_count'] ?? null,
-                'note' => trim((string) ($row['note'] ?? '')),
-            ])
-            ->filter(fn (array $row): bool => $row['date'] !== ''
-                || $row['class_name'] !== ''
-                || $row['time_slot'] !== ''
-                || $row['note'] !== ''
-                || $row['lesson_count'] !== null
-            )
+            ->map(function (array $row): array {
+                $type = ($row['type'] ?? 'center') === 'training' ? 'training' : 'center';
+
+                return [
+                    'type' => $type,
+                    'date' => trim((string) ($row['date'] ?? '')),
+                    'class_name' => trim((string) ($row['class_name'] ?? '')),
+                    'time_slot' => trim((string) ($row['time_slot'] ?? '')),
+                    'subject_name' => trim((string) ($row['subject_name'] ?? '')),
+                    'course_code' => trim((string) ($row['course_code'] ?? '')),
+                    'from_date' => trim((string) ($row['from_date'] ?? '')),
+                    'to_date' => trim((string) ($row['to_date'] ?? '')),
+                    'lesson_count' => $row['lesson_count'] ?? null,
+                    'note' => trim((string) ($row['note'] ?? '')),
+                ];
+            })
+            ->filter(function (array $row): bool {
+                if ($row['type'] === 'training') {
+                    return $row['subject_name'] !== ''
+                        || $row['course_code'] !== ''
+                        || $row['from_date'] !== ''
+                        || $row['to_date'] !== ''
+                        || $row['note'] !== ''
+                        || $row['lesson_count'] !== null;
+                }
+
+                return $row['date'] !== ''
+                    || $row['class_name'] !== ''
+                    || $row['time_slot'] !== ''
+                    || $row['note'] !== ''
+                    || $row['lesson_count'] !== null;
+            })
             ->values();
 
         $rowErrors = [];
         $normalizedRows = $detailRows->map(function (array $row, int $index) use ($data, &$rowErrors): array {
             $line = $index + 1;
+
+            if ($row['type'] === 'training') {
+                if ($row['subject_name'] === '') {
+                    $rowErrors["rows.$index.subject_name"] = 'Dòng '.$line.' chưa nhập môn học.';
+                }
+                if ($row['course_code'] === '') {
+                    $rowErrors["rows.$index.course_code"] = 'Dòng '.$line.' chưa nhập mã học phần.';
+                }
+                if ($row['from_date'] === '') {
+                    $rowErrors["rows.$index.from_date"] = 'Dòng '.$line.' chưa nhập ngày bắt đầu.';
+                }
+                if ($row['to_date'] === '') {
+                    $rowErrors["rows.$index.to_date"] = 'Dòng '.$line.' chưa nhập ngày kết thúc.';
+                }
+                if ($row['lesson_count'] === null || $row['lesson_count'] === '') {
+                    $rowErrors["rows.$index.lesson_count"] = 'Dòng '.$line.' cần nhập số tiết từ 0 trở lên.';
+                }
+
+                $fromDate = null;
+                $toDate = null;
+                if ($row['from_date'] !== '') {
+                    try {
+                        $fromDate = Carbon::parse($row['from_date'])->startOfDay();
+                        $row['from_date'] = $fromDate->format('Y-m-d');
+                    } catch (\Throwable) {
+                        $rowErrors["rows.$index.from_date"] = 'Dòng '.$line.' có ngày bắt đầu không hợp lệ.';
+                    }
+                }
+                if ($row['to_date'] !== '') {
+                    try {
+                        $toDate = Carbon::parse($row['to_date'])->startOfDay();
+                        $row['to_date'] = $toDate->format('Y-m-d');
+                    } catch (\Throwable) {
+                        $rowErrors["rows.$index.to_date"] = 'Dòng '.$line.' có ngày kết thúc không hợp lệ.';
+                    }
+                }
+                if ($fromDate && $toDate && $toDate->lt($fromDate)) {
+                    $rowErrors["rows.$index.to_date"] = 'Dòng '.$line.' có ngày kết thúc phải từ ngày bắt đầu trở đi.';
+                }
+
+                $row['lesson_count'] = $row['lesson_count'] === null || $row['lesson_count'] === ''
+                    ? null
+                    : round((float) $row['lesson_count'], 2);
+
+                return $row;
+            }
 
             if ($row['date'] === '') {
                 $rowErrors["rows.$index.date"] = 'Dòng '.$line.' chưa nhập ngày.';
@@ -325,7 +420,7 @@ class TeacherTeachingLoadController extends Controller
         }
 
         $normalizedRows = $normalizedRows
-            ->sortBy('date')
+            ->sortBy(fn (array $row) => $row['type'] === 'training' ? $row['from_date'] : $row['date'])
             ->values();
 
         $reportedTeachingLoad = round((float) $normalizedRows->sum('lesson_count'), 2);
@@ -374,6 +469,7 @@ class TeacherTeachingLoadController extends Controller
         $data = $request->validate([
             'year' => ['required', 'integer', 'min:2020', 'max:2100'],
             'report_month' => ['required', 'integer', 'min:1', 'max:12'],
+            'scope' => ['nullable', 'in:center,training'],
         ]);
 
         $plan = KpiPlan::query()->where('year', $data['year'])->first();
@@ -396,9 +492,14 @@ class TeacherTeachingLoadController extends Controller
             ->where('report_month', (int) $data['report_month'])
             ->first();
 
-        $detailRows = collect($this->detailRowsForMonth($report));
+        $scope = $data['scope'] ?? 'center';
+        $detailRows = collect($this->detailRowsForMonth($report))
+            ->filter(fn (array $row): bool => $scope === 'training'
+                ? $row['type'] === 'training'
+                : $row['type'] !== 'training')
+            ->values();
         $reportedTeachingLoad = round((float) $detailRows->sum(fn (array $row) => (float) ($row['lesson_count'] ?? 0)), 2);
-        if ($reportedTeachingLoad <= 0 && $report) {
+        if ($reportedTeachingLoad <= 0 && $report && $scope === 'center') {
             $reportedTeachingLoad = round((float) $report->reported_teaching_load, 2);
         }
 
@@ -445,7 +546,10 @@ class TeacherTeachingLoadController extends Controller
         $data = $request->validate([
             'year' => ['required', 'integer', 'min:2020', 'max:2100'],
             'report_month' => ['required', 'integer', 'min:1', 'max:12'],
+            'scope' => ['nullable', 'in:center,training'],
         ]);
+
+        $scope = $data['scope'] ?? 'center';
 
         $plan = KpiPlan::query()->where('year', $data['year'])->first();
         if (! $plan) {
@@ -467,9 +571,13 @@ class TeacherTeachingLoadController extends Controller
             ->where('report_month', (int) $data['report_month'])
             ->first();
 
-        $detailRows = collect($this->detailRowsForMonth($report));
+        $detailRows = collect($this->detailRowsForMonth($report))
+            ->filter(fn (array $row): bool => $scope === 'training'
+                ? $row['type'] === 'training'
+                : $row['type'] !== 'training')
+            ->values();
         $reportedTeachingLoad = round((float) $detailRows->sum(fn (array $row) => (float) ($row['lesson_count'] ?? 0)), 2);
-        if ($reportedTeachingLoad <= 0 && $report) {
+        if ($reportedTeachingLoad <= 0 && $report && $scope === 'center') {
             $reportedTeachingLoad = round((float) $report->reported_teaching_load, 2);
         }
 
@@ -481,38 +589,73 @@ class TeacherTeachingLoadController extends Controller
             'reportedTeachingLoad' => $reportedTeachingLoad,
             'year' => (int) $data['year'],
             'reportMonth' => (int) $data['report_month'],
+            'scope' => $scope,
         ])->render(), 200, [
             'Content-Type' => 'application/msword; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="lich-day-trung-tam-'.$data['year'].'-'.$monthLabel.'.doc"',
+            'Content-Disposition' => 'attachment; filename="lich-day-'.($scope === 'training' ? 'dao-tao' : 'trung-tam').'-'.$data['year'].'-'.$monthLabel.'.doc"',
         ]);
+    }
+
+    private function reportSourceTotals(?KpiTeachingReport $report): array
+    {
+        $rows = collect($this->detailRowsForMonth($report));
+
+        return [
+            'center' => round((float) $rows
+                ->where('type', '!=', 'training')
+                ->sum(fn (array $row) => (float) ($row['lesson_count'] ?? 0)), 2),
+            'training' => round((float) $rows
+                ->where('type', 'training')
+                ->sum(fn (array $row) => (float) ($row['lesson_count'] ?? 0)), 2),
+        ];
     }
 
     private function detailRowsForMonth(?KpiTeachingReport $report): array
     {
         $rows = collect($report?->report_rows ?? [])
             ->map(fn (array $row): array => [
+                'type' => ($row['type'] ?? 'center') === 'training' ? 'training' : 'center',
                 'date' => (string) ($row['date'] ?? ''),
                 'class_name' => (string) ($row['class_name'] ?? ''),
                 'time_slot' => (string) ($row['time_slot'] ?? ''),
+                'subject_name' => (string) ($row['subject_name'] ?? ''),
+                'course_code' => (string) ($row['course_code'] ?? ''),
+                'from_date' => (string) ($row['from_date'] ?? ''),
+                'to_date' => (string) ($row['to_date'] ?? ''),
                 'lesson_count' => isset($row['lesson_count']) && $row['lesson_count'] !== null
                     ? rtrim(rtrim(number_format((float) $row['lesson_count'], 2, '.', ''), '0'), '.')
                     : '',
                 'note' => (string) ($row['note'] ?? ''),
             ])
-            ->filter(fn (array $row): bool => $row['date'] !== ''
-                || $row['class_name'] !== ''
-                || $row['time_slot'] !== ''
-                || $row['note'] !== ''
-                || $row['lesson_count'] !== ''
-            )
-            ->sortBy('date')
+            ->filter(function (array $row): bool {
+                if ($row['type'] === 'training') {
+                    return $row['subject_name'] !== ''
+                        || $row['course_code'] !== ''
+                        || $row['from_date'] !== ''
+                        || $row['to_date'] !== ''
+                        || $row['note'] !== ''
+                        || $row['lesson_count'] !== '';
+                }
+
+                return $row['date'] !== ''
+                    || $row['class_name'] !== ''
+                    || $row['time_slot'] !== ''
+                    || $row['note'] !== ''
+                    || $row['lesson_count'] !== '';
+            })
+            ->sortBy(fn (array $row) => $row['type'] === 'training' ? $row['from_date'] : $row['date'])
             ->values();
 
         if ($rows->isEmpty() && $report && (float) $report->reported_teaching_load > 0) {
             $rows = collect([[
+                'type' => 'center',
                 'date' => '',
                 'class_name' => '',
                 'time_slot' => '',
+                'subject_name' => '',
+                'course_code' => '',
+                'from_date' => '',
+                'to_date' => '',
                 'lesson_count' => rtrim(rtrim(number_format((float) $report->reported_teaching_load, 2, '.', ''), '0'), '.'),
                 'note' => (string) ($report->note ?? ''),
             ]]);

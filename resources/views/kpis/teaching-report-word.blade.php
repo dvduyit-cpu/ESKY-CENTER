@@ -55,7 +55,7 @@
         </tr>
     </table>
 
-    <div class="document-title">LỊCH DẠY TRUNG TÂM<br>THÁNG {{ str_pad((string) $reportMonth, 2, '0', STR_PAD_LEFT) }} NĂM {{ $year }}</div>
+    <div class="document-title">{{ $scope === 'training' ? 'LỊCH GIẢNG DẠY ĐÀO TẠO' : 'LỊCH DẠY TRUNG TÂM' }}<br>THÁNG {{ str_pad((string) $reportMonth, 2, '0', STR_PAD_LEFT) }} NĂM {{ $year }}</div>
 
     <div class="teacher-info">
         <div><span class="label">Tên giáo viên:</span><strong>{{ $personnel->name }}</strong></div>
@@ -64,28 +64,50 @@
 
     <table class="schedule">
         <thead>
-            <tr>
-                <th style="width:15%">Ngày</th>
-                <th style="width:29%">Lớp/Mã lớp</th>
-                <th style="width:20%">Khung giờ</th>
-                <th style="width:14%">Số tiết</th>
-                <th style="width:22%">Ghi chú</th>
-            </tr>
+            @if($scope === 'training')
+                <tr>
+                    <th style="width:28%">Môn học</th>
+                    <th style="width:17%">Mã học phần</th>
+                    <th style="width:16%">Từ ngày</th>
+                    <th style="width:16%">Đến ngày</th>
+                    <th style="width:12%">Số tiết</th>
+                    <th style="width:11%">Ghi chú</th>
+                </tr>
+            @else
+                <tr>
+                    <th style="width:15%">Ngày</th>
+                    <th style="width:29%">Lớp/Mã lớp</th>
+                    <th style="width:20%">Khung giờ</th>
+                    <th style="width:14%">Số tiết</th>
+                    <th style="width:22%">Ghi chú</th>
+                </tr>
+            @endif
         </thead>
         <tbody>
             @forelse($detailRows as $row)
-                <tr>
-                    <td class="center">{{ $row['date'] !== '' ? \Illuminate\Support\Carbon::parse($row['date'])->format('d/m/Y') : '' }}</td>
-                    <td>{{ $row['class_name'] }}</td>
-                    <td class="center">{{ $row['time_slot'] }}</td>
-                    <td class="right">{{ $row['lesson_count'] !== '' ? number_format((float) $row['lesson_count'], 2, ',', '.') : '' }}</td>
-                    <td>{{ $row['note'] }}</td>
-                </tr>
+                @if($scope === 'training')
+                    <tr>
+                        <td>{{ $row['subject_name'] }}</td>
+                        <td class="center">{{ $row['course_code'] }}</td>
+                        <td class="center">{{ $row['from_date'] !== '' ? \Illuminate\Support\Carbon::parse($row['from_date'])->format('d/m/Y') : '' }}</td>
+                        <td class="center">{{ $row['to_date'] !== '' ? \Illuminate\Support\Carbon::parse($row['to_date'])->format('d/m/Y') : '' }}</td>
+                        <td class="right">{{ $row['lesson_count'] !== '' ? number_format((float) $row['lesson_count'], 2, ',', '.') : '' }}</td>
+                        <td>{{ $row['note'] }}</td>
+                    </tr>
+                @else
+                    <tr>
+                        <td class="center">{{ $row['date'] !== '' ? \Illuminate\Support\Carbon::parse($row['date'])->format('d/m/Y') : '' }}</td>
+                        <td>{{ $row['class_name'] }}</td>
+                        <td class="center">{{ $row['time_slot'] }}</td>
+                        <td class="right">{{ $row['lesson_count'] !== '' ? number_format((float) $row['lesson_count'], 2, ',', '.') : '' }}</td>
+                        <td>{{ $row['note'] }}</td>
+                    </tr>
+                @endif
             @empty
-                <tr><td colspan="5" class="empty"></td></tr>
+                <tr><td colspan="{{ $scope === 'training' ? 6 : 5 }}" class="empty"></td></tr>
             @endforelse
             <tr>
-                <td colspan="3" class="total-label">TỔNG CỘNG</td>
+                <td colspan="{{ $scope === 'training' ? 4 : 3 }}" class="total-label">TỔNG CỘNG</td>
                 <td class="total-value">{{ number_format($reportedTeachingLoad, 2, ',', '.') }}</td>
                 <td></td>
             </tr>

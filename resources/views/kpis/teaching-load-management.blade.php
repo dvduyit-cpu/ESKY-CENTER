@@ -53,6 +53,12 @@
             <div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Đã báo cáo</div><div class="stat-value text-success">{{ number_format($summaryTotals['reported_teaching_load'], 2) }}</div></div></div>
         </div>
         <div class="col-md-2">
+            <div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Trung tâm{{ $selectedMonth ? ' tháng xem' : '' }}</div><div class="stat-value text-primary">{{ number_format($summaryTotals[$selectedMonth ? 'period_center_teaching_load' : 'center_teaching_load'], 2) }}</div></div></div>
+        </div>
+        <div class="col-md-2">
+            <div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Đào tạo{{ $selectedMonth ? ' tháng xem' : '' }}</div><div class="stat-value text-success">{{ number_format($summaryTotals[$selectedMonth ? 'period_training_teaching_load' : 'training_teaching_load'], 2) }}</div></div></div>
+        </div>
+        <div class="col-md-2">
             <div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Còn lại</div><div class="stat-value text-warning">{{ number_format($summaryTotals['remaining_teaching_load'], 2) }}</div></div></div>
         </div>
         <div class="col-md-2">
@@ -81,6 +87,8 @@
                         <th>Giáo viên</th>
                         <th>Tiết giao năm</th>
                         <th>Đã báo cáo năm</th>
+                        <th>Trung tâm</th>
+                        <th>Đào tạo</th>
                         <th>Còn lại</th>
                         <th>Vượt</th>
                         <th>{{ $selectedMonth ? 'Tiết tháng' : 'Tổng kỳ xem' }}</th>
@@ -108,9 +116,11 @@
                             </td>
                             <td>{{ number_format($row['assigned_teaching_load'], 2) }}</td>
                             <td class="fw-bold text-success">{{ number_format($row['reported_teaching_load'], 2) }}</td>
+                            <td class="text-primary">{{ number_format($row['center_teaching_load'], 2) }}</td>
+                            <td class="text-success">{{ number_format($row['training_teaching_load'], 2) }}</td>
                             <td>{{ number_format($row['remaining_teaching_load'], 2) }}</td>
                             <td class="fw-bold text-danger">{{ number_format($row['exceeded_teaching_load'], 2) }}</td>
-                            <td class="fw-bold text-info">{{ number_format($row['period_teaching_load'], 2) }}</td>
+                            <td class="fw-bold text-info">{{ number_format($row['period_teaching_load'], 2) }}<div class="small text-muted fw-normal">TT {{ number_format($row['period_center_teaching_load'], 2) }} · ĐT {{ number_format($row['period_training_teaching_load'], 2) }}</div></td>
                             <td>
                                 @if(collect($row['months_reported'])->isNotEmpty())
                                     {{ collect($row['months_reported'])->map(fn ($month) => 'T'.$month)->implode(', ') }}
@@ -127,7 +137,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9"><div class="empty-state">Chưa có dữ liệu giờ dạy phù hợp với bộ lọc hiện tại.</div></td>
+                            <td colspan="11"><div class="empty-state">Chưa có dữ liệu giờ dạy phù hợp với bộ lọc hiện tại.</div></td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -163,6 +173,8 @@
                         <div class="row g-3 mb-4">
                             <div class="col-md-3"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Tiết giao năm</div><div class="stat-value text-primary">{{ number_format($row['assigned_teaching_load'], 2) }}</div></div></div></div>
                             <div class="col-md-3"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Đã báo cáo năm</div><div class="stat-value text-success">{{ number_format($row['reported_teaching_load'], 2) }}</div></div></div></div>
+                            <div class="col-md-3"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Trung tâm</div><div class="stat-value text-primary">{{ number_format($row['center_teaching_load'], 2) }}</div></div></div></div>
+                            <div class="col-md-3"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Đào tạo</div><div class="stat-value text-success">{{ number_format($row['training_teaching_load'], 2) }}</div></div></div></div>
                             <div class="col-md-3"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">{{ $selectedMonth ? 'Tiết tháng đang xem' : 'Tổng kỳ xem' }}</div><div class="stat-value text-info">{{ number_format($row['period_teaching_load'], 2) }}</div></div></div></div>
                             <div class="col-md-3"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Cập nhật cuối</div><div class="fw-semibold mt-2">{{ $row['latest_report']?->updated_at?->format('d/m/Y H:i') ?: 'Chưa cập nhật' }}</div></div></div></div>
                         </div>
@@ -183,6 +195,8 @@
                                                 {{ $monthRow['total'] > 0 ? 'Đã báo cáo' : 'Còn trống' }}
                                             </span>
                                             <span class="badge-soft badge-info">{{ number_format($monthRow['total'], 2) }} tiết</span>
+                                            <span class="badge-soft badge-primary">TT {{ number_format($monthRow['center_teaching_load'], 2) }}</span>
+                                            <span class="badge-soft badge-success">ĐT {{ number_format($monthRow['training_teaching_load'], 2) }}</span>
                                             <button class="btn btn-sm btn-outline-primary" type="button" data-modal-switch data-modal-target="#{{ $monthDetailModalId }}">
                                                 <i class="bi bi-eye me-1"></i>Xem chi tiết
                                             </button>
@@ -218,6 +232,8 @@
                         <div class="modal-body pt-3">
                             <div class="row g-3 mb-4">
                                 <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Tiết tháng {{ $monthRow['month'] }}</div><div class="stat-value text-info">{{ number_format($monthRow['total'], 2) }}</div></div></div></div>
+                                <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Trung tâm</div><div class="stat-value text-primary">{{ number_format($monthRow['center_teaching_load'], 2) }}</div></div></div></div>
+                                <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Đào tạo</div><div class="stat-value text-success">{{ number_format($monthRow['training_teaching_load'], 2) }}</div></div></div></div>
                                 <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Người lưu</div><div class="fw-semibold mt-2">{{ $monthRow['reporter_name'] ?: 'Chưa có người lưu' }}</div></div></div></div>
                                 <div class="col-md-4"><div class="card card-soft h-100"><div class="card-body"><div class="stat-label">Cập nhật cuối</div><div class="fw-semibold mt-2">{{ $monthRow['updated_at']?->format('d/m/Y H:i') ?: 'Chưa cập nhật' }}</div></div></div></div>
                             </div>
@@ -241,9 +257,22 @@
                                         <tbody>
                                             @forelse($monthRow['detail_rows'] as $detailRow)
                                                 <tr>
-                                                    <td>{{ $detailRow['date'] ?: '-' }}</td>
-                                                    <td>{{ $detailRow['class_name'] ?: '-' }}</td>
-                                                    <td>{{ $detailRow['time_slot'] ?: '-' }}</td>
+                                        @if(($detailRow['type'] ?? 'center') === 'training')
+                                            <td>
+                                                {{ $detailRow['from_date'] ? \Carbon\Carbon::parse($detailRow['from_date'])->format('d/m/Y') : '-' }}
+                                                →
+                                                {{ $detailRow['to_date'] ? \Carbon\Carbon::parse($detailRow['to_date'])->format('d/m/Y') : '-' }}
+                                            </td>
+                                            <td>
+                                                <span class="badge-soft badge-info me-1">Đào tạo</span>
+                                                {{ $detailRow['subject_name'] ?: '-' }}
+                                            </td>
+                                            <td>{{ $detailRow['course_code'] ?: '-' }}</td>
+                                        @else
+                                            <td>{{ $detailRow['date'] ?: '-' }}</td>
+                                            <td>{{ $detailRow['class_name'] ?: '-' }}</td>
+                                            <td>{{ $detailRow['time_slot'] ?: '-' }}</td>
+                                        @endif
                                                     <td>{{ $detailRow['lesson_count'] !== '' ? $detailRow['lesson_count'] : '-' }}</td>
                                                     <td>{{ $detailRow['note'] ?: '-' }}</td>
                                                 </tr>
