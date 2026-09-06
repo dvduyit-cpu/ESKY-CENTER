@@ -62,7 +62,7 @@
                         <div class="col-12">
                             <label class="form-label">File Excel</label>
                             <input class="form-control" type="file" name="file" accept=".xlsx,.xls,.csv" required>
-                            <div class="form-text">Cột bắt buộc: `HỌ TÊN`, `SỐ TIỀN`. Có thể thêm `MÃ LỚP`, `NỘI DUNG`, `GHI CHÚ`.</div>
+                            <div class="form-text">Cột bắt buộc: `HỌ TÊN`, `MÃ LỚP`, `SỐ TIỀN`. Lời nhắn ngân hàng chỉ gồm họ tên và mã lớp; có thể thêm `GHI CHÚ`.</div>
                         </div>
                         @if($bank['enabled'])
                             <div class="col-12">

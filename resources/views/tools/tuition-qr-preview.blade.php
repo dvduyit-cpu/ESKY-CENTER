@@ -64,7 +64,7 @@
         <section class="grid">
             @foreach($items as $item)
                 <article class="card">
-                    <img src="{{ $item['qr_url'] }}" alt="QR học phí {{ $item['name'] }}">
+                    <img src="{{ route('tools.tuition.image', ['index' => $loop->index]) }}" alt="QR học phí {{ $item['name'] }}">
                     <h2>{{ $item['name'] }}</h2>
                     <div class="meta"><strong>Mã lớp:</strong> {{ $item['class_code'] !== '' ? $item['class_code'] : 'Chưa có' }}</div>
                     <div class="meta"><strong>Số tiền:</strong> {{ number_format($item['amount']) }}đ</div>

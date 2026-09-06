@@ -61,13 +61,12 @@ class ToolController extends Controller
     {
         return ExcelExporter::download(
             'mau-danh-sach-qr-hoc-phi.xlsx',
-            ['HỌ TÊN', 'MÃ LỚP', 'SỐ TIỀN', 'NỘI DUNG', 'GHI CHÚ'],
+            ['HỌ TÊN', 'MÃ LỚP', 'SỐ TIỀN', 'GHI CHÚ'],
             [[
                 'Nguyễn Văn A',
                 'SKY-A1-01',
                 1500000,
-                '',
-                'Nếu để trống nội dung, hệ thống sẽ ghép Họ tên + Mã lớp.',
+                'Lời nhắn ngân hàng chỉ gồm họ tên và mã lớp. Ảnh QR cũng hiển thị hai thông tin này.',
             ]]
         );
     }
@@ -106,7 +105,7 @@ class ToolController extends Controller
             $headers[TextNormalizer::header((string) $header)] = $index;
         }
 
-        foreach (['HO TEN', 'SO TIEN'] as $required) {
+        foreach (['HO TEN', 'MA LOP', 'SO TIEN'] as $required) {
             if (! array_key_exists($required, $headers)) {
                 throw ValidationException::withMessages([
                     'file' => 'Thiếu cột bắt buộc '.$required.'.',
@@ -121,11 +120,10 @@ class ToolController extends Controller
             $rowNumber = $offset + 2;
             $name = trim((string) ($row[$headers['HO TEN']] ?? ''));
             $classCode = trim((string) ($row[$headers['MA LOP'] ?? -1] ?? ''));
-            $customContent = trim((string) ($row[$headers['NOI DUNG'] ?? -1] ?? ''));
             $note = trim((string) ($row[$headers['GHI CHU'] ?? -1] ?? ''));
             $amount = $this->number($row[$headers['SO TIEN']] ?? 0);
 
-            if ($name === '' && $classCode === '' && $customContent === '' && $amount <= 0) {
+            if ($name === '' && $classCode === '' && $amount <= 0) {
                 continue;
             }
 
@@ -134,14 +132,17 @@ class ToolController extends Controller
                 continue;
             }
 
+            if ($classCode === '') {
+                $errors[] = "Dòng {$rowNumber}: thiếu MÃ LỚP.";
+                continue;
+            }
+
             if ($amount <= 0) {
                 $errors[] = "Dòng {$rowNumber}: SỐ TIỀN phải lớn hơn 0.";
                 continue;
             }
 
-            $content = $customContent !== ''
-                ? $customContent
-                : trim($name.' '.($classCode !== '' ? $classCode : ''));
+            $content = $this->tuitionQrContent($name, $classCode);
 
             $items[] = [
                 'row_number' => $rowNumber,
@@ -187,6 +188,16 @@ class ToolController extends Controller
         );
     }
 
+    public function previewTuitionQrImage(Request $request, int $index)
+    {
+        $item = $this->previewTuitionQrItem($request, $index);
+
+        return response($this->downloadTuitionQrImage($item), 200, [
+            'Content-Type' => 'image/png',
+            'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
     public function downloadAllPreviewTuitionQrs(Request $request): BinaryFileResponse|RedirectResponse
     {
         if (! SpreadsheetSupport::hasZipArchive()) {
@@ -230,11 +241,21 @@ class ToolController extends Controller
 
     private function tuitionQrImageUrl(array $bank, float $amount, string $content): string
     {
-        return 'https://img.vietqr.io/image/'.$bank['bin'].'-'.$bank['account_number'].'-compact2.png?'.http_build_query([
-            'amount' => (int) round($amount),
-            'addInfo' => $content,
-            'accountName' => $bank['account_name'],
-        ]);
+        return 'https://img.vietqr.io/image/'.$bank['bin'].'-'.$bank['account_number'].'-compact2.png?'.http_build_query(
+            [
+                'amount' => (int) round($amount),
+                'addInfo' => $content,
+                'accountName' => $bank['account_name'],
+            ],
+            '',
+            '&',
+            PHP_QUERY_RFC3986
+        );
+    }
+
+    private function tuitionQrContent(string $name, string $classCode): string
+    {
+        return sprintf('%s | Mã lớp: %s', $name, $classCode);
     }
 
     private function previewTuitionQrPreview(Request $request): array
@@ -275,7 +296,101 @@ class ToolController extends Controller
             ]);
         }
 
-        return $response->body();
+        return $this->addTuitionQrDetails($response->body(), $item);
+    }
+
+    private function addTuitionQrDetails(string $qrImage, array $item): string
+    {
+        $fontPath = base_path('vendor/dompdf/dompdf/lib/fonts/DejaVuSans-Bold.ttf');
+
+        if (! function_exists('imagecreatefromstring') || ! function_exists('imagettftext') || ! is_file($fontPath)) {
+            throw ValidationException::withMessages([
+                'file' => 'Máy chủ chưa có đủ thư viện để thêm thông tin vào ảnh QR.',
+            ]);
+        }
+
+        $source = @imagecreatefromstring($qrImage);
+        if ($source === false) {
+            throw ValidationException::withMessages([
+                'file' => 'Ảnh QR nhận được không đúng định dạng PNG.',
+            ]);
+        }
+
+        $sourceWidth = imagesx($source);
+        $sourceHeight = imagesy($source);
+        $this->removeEmbeddedTuitionQrAmount($source, $sourceWidth, $sourceHeight);
+        $padding = 18;
+        $fontSize = max(14, min(20, (int) floor($sourceWidth / 26)));
+        $maxTextWidth = $sourceWidth - ($padding * 2);
+        $details = [
+            'Học viên: '.trim((string) ($item['name'] ?? '')),
+            'Mã lớp: '.trim((string) ($item['class_code'] ?? '')),
+            'Số tiền: '.number_format((float) ($item['amount'] ?? 0), 0, ',', '.').'đ',
+        ];
+        $lines = [];
+        foreach ($details as $detail) {
+            foreach ($this->wrapTuitionQrText($detail, $fontPath, $fontSize, $maxTextWidth) as $line) {
+                $lines[] = $line;
+            }
+        }
+
+        $lineHeight = $fontSize + 10;
+        $footerHeight = ($padding * 2) + (count($lines) * $lineHeight) + 1;
+        $canvas = imagecreatetruecolor($sourceWidth, $sourceHeight + $footerHeight);
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        $textColor = imagecolorallocate($canvas, 17, 24, 39);
+        $borderColor = imagecolorallocate($canvas, 203, 213, 225);
+        imagefill($canvas, 0, 0, $white);
+        imagecopy($canvas, $source, 0, 0, 0, 0, $sourceWidth, $sourceHeight);
+        imageline($canvas, $padding, $sourceHeight, $sourceWidth - $padding, $sourceHeight, $borderColor);
+
+        $baseline = $sourceHeight + $padding + $fontSize;
+        foreach ($lines as $line) {
+            imagettftext($canvas, $fontSize, 0, $padding, $baseline, $textColor, $fontPath, $line);
+            $baseline += $lineHeight;
+        }
+
+        ob_start();
+        imagepng($canvas);
+        $image = (string) ob_get_clean();
+        imagedestroy($canvas);
+        imagedestroy($source);
+
+        return $image;
+    }
+
+    private function removeEmbeddedTuitionQrAmount($source, int $width, int $height): void
+    {
+        $amountHeight = max(38, (int) ceil($height * 0.07));
+        $white = imagecolorallocate($source, 255, 255, 255);
+        imagefilledrectangle($source, 0, $height - $amountHeight, $width, $height, $white);
+    }
+
+    private function wrapTuitionQrText(string $text, string $fontPath, int $fontSize, int $maxWidth): array
+    {
+        $words = preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $lines = [];
+        $line = '';
+
+        foreach ($words as $word) {
+            $candidate = $line === '' ? $word : $line.' '.$word;
+            $bounds = imagettfbbox($fontSize, 0, $fontPath, $candidate);
+            $width = $bounds === false ? 0 : $bounds[2] - $bounds[0];
+
+            if ($line !== '' && $width > $maxWidth) {
+                $lines[] = $line;
+                $line = $word;
+                continue;
+            }
+
+            $line = $candidate;
+        }
+
+        if ($line !== '') {
+            $lines[] = $line;
+        }
+
+        return $lines;
     }
 
     private function tuitionQrFilename(array $item, int $index): string

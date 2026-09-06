@@ -277,6 +277,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/tools', [ToolController::class, 'index'])->middleware('permission:tools,view')->name('tools.index');
         Route::get('/tools/shipping-label', [ToolController::class, 'shippingIndex'])->middleware('permission:tools,view')->name('tools.shipping.index');
         Route::get('/tools/tuition-qr', [ToolController::class, 'tuitionIndex'])->middleware('permission:tools,view')->name('tools.tuition.index');
+        Route::get('/tools/tuition-qr/image/{index}', [ToolController::class, 'previewTuitionQrImage'])->whereNumber('index')->middleware('permission:tools,view')->name('tools.tuition.image');
         Route::post('/tools/shipping-label/print', [ToolController::class, 'printShippingLabel'])->middleware('permission:tools,create')->name('tools.shipping.print');
         Route::get('/tools/tuition-qr/download-all', [ToolController::class, 'downloadAllPreviewTuitionQrs'])->middleware('permission:tools,view')->name('tools.tuition.download-all');
         Route::get('/tools/tuition-qr/download/{index}', [ToolController::class, 'downloadPreviewTuitionQr'])->whereNumber('index')->middleware('permission:tools,view')->name('tools.tuition.download');
