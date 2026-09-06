@@ -35,9 +35,21 @@ class LanguageTuitionController extends Controller
         ]);
     }
 
-    public function overview(): View
+    public function overview(Request $request): View
     {
-        $summary = LanguageTuitionCharge::query()
+        $year = max(2020, min(2100, $request->integer('year', now()->year)));
+        $month = $request->filled('month') ? max(1, min(12, $request->integer('month'))) : null;
+        $quarter = $month === null && $request->filled('quarter') ? max(1, min(4, $request->integer('quarter'))) : null;
+        $periodStart = $month !== null
+            ? Carbon::create($year, $month)->startOfMonth()
+            : ($quarter !== null ? Carbon::create($year, (($quarter - 1) * 3) + 1)->startOfMonth() : Carbon::create($year)->startOfYear());
+        $periodEnd = $month !== null
+            ? $periodStart->copy()->endOfMonth()
+            : ($quarter !== null ? $periodStart->copy()->addMonths(2)->endOfMonth() : Carbon::create($year)->endOfYear());
+        $periodLabel = $month !== null ? 'Tháng '.$month.'/'.$year : ($quarter !== null ? 'Quý '.$quarter.'/'.$year : 'Năm '.$year);
+        $charges = LanguageTuitionCharge::query()->whereBetween('created_at', [$periodStart, $periodEnd]);
+
+        $summary = (clone $charges)
             ->selectRaw('COUNT(*) as charge_count')
             ->selectRaw('COALESCE(SUM(payable_amount), 0) as payable_amount')
             ->selectRaw('COALESCE(SUM(paid_amount), 0) as paid_amount')
@@ -45,22 +57,26 @@ class LanguageTuitionController extends Controller
             ->selectRaw('COALESCE(SUM(GREATEST(payable_amount - paid_amount - credit_amount, 0)), 0) as remaining_amount')
             ->first();
 
-        $statusCounts = LanguageTuitionCharge::query()
+        $statusCounts = (clone $charges)
             ->select('status')
             ->selectRaw('COUNT(*) as total')
             ->selectRaw('COALESCE(SUM(GREATEST(payable_amount - paid_amount - credit_amount, 0)), 0) as remaining_amount')
             ->groupBy('status')
             ->pluck('total', 'status');
 
-        $overdue = LanguageTuitionCharge::query()
+        $overdue = (clone $charges)
             ->whereDate('due_date', '<', today())
             ->whereRaw('payable_amount - paid_amount - credit_amount > 0')
             ->selectRaw('COUNT(*) as total')
             ->selectRaw('COALESCE(SUM(payable_amount - paid_amount - credit_amount), 0) as amount')
             ->first();
 
-        $monthlyCollections = collect(range(5, 0))->map(function (int $offset) {
-            $month = now()->startOfMonth()->subMonths($offset);
+        $collectionMonths = $month !== null
+            ? collect([$periodStart])
+            : ($quarter !== null
+                ? collect(range(0, 2))->map(fn (int $offset) => $periodStart->copy()->addMonths($offset))
+                : collect(range(1, 12))->map(fn (int $number) => Carbon::create($year, $number)->startOfMonth()));
+        $monthlyCollections = $collectionMonths->map(function (Carbon $month) {
             $query = LanguageTuitionPayment::query()
                 ->where('receipt_status', 'confirmed')
                 ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()]);
@@ -77,9 +93,14 @@ class LanguageTuitionController extends Controller
             'statusCounts' => $statusCounts,
             'overdue' => $overdue,
             'monthlyCollections' => $monthlyCollections,
+            'year' => $year,
+            'month' => $month,
+            'quarter' => $quarter,
+            'periodLabel' => $periodLabel,
             'recentPayments' => LanguageTuitionPayment::query()
                 ->with(['charge.student', 'charge.languageClass', 'collector'])
                 ->where('receipt_status', 'confirmed')
+                ->whereBetween('paid_at', [$periodStart, $periodEnd])
                 ->orderByDesc('paid_at')
                 ->limit(10)
                 ->get(),
