@@ -167,6 +167,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-discounts-export',[LanguageDiscountController::class,'export'])->middleware('permission:language_discounts,export')->name('language-discounts.export');
         Route::resource('language-discounts',LanguageDiscountController::class)->except('show')->middleware('permission:language_discounts,view')->middlewareFor(['create','store'],'permission:language_discounts,create')->middlewareFor(['edit','update'],'permission:language_discounts,update')->middlewareFor('destroy','permission:language_discounts,delete');
         Route::get('/language-tuition-export',[LanguageTuitionController::class,'export'])->middleware('permission:language_tuition,export')->name('language-tuition.export');
+        Route::get('/language-tuition-overview',[LanguageTuitionController::class,'overview'])->middleware('permission:language_tuition_overview,view')->name('language-tuition.overview');
+        Route::get('/language-tuition-by-class',[LanguageTuitionController::class,'byClass'])->middleware('permission:language_tuition_by_class,view')->name('language-tuition.by-class.index');
+        Route::get('/language-tuition-by-class/{languageClass}',[LanguageTuitionController::class,'showByClass'])->middleware('permission:language_tuition_by_class,view')->name('language-tuition.by-class.show');
         Route::get('/language-tuition',[LanguageTuitionController::class,'index'])->middleware('permission:language_tuition,view')->name('language-tuition.index');
         Route::get('/language-tuition-monthly',[LanguageTuitionController::class,'monthly'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly');
         Route::get('/language-tuition-monthly/pdf',[LanguageTuitionController::class,'monthlyPdf'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly.pdf');

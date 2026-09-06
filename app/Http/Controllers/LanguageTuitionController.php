@@ -35,6 +35,158 @@ class LanguageTuitionController extends Controller
         ]);
     }
 
+    public function overview(): View
+    {
+        $summary = LanguageTuitionCharge::query()
+            ->selectRaw('COUNT(*) as charge_count')
+            ->selectRaw('COALESCE(SUM(payable_amount), 0) as payable_amount')
+            ->selectRaw('COALESCE(SUM(paid_amount), 0) as paid_amount')
+            ->selectRaw('COALESCE(SUM(credit_amount), 0) as credit_amount')
+            ->selectRaw('COALESCE(SUM(GREATEST(payable_amount - paid_amount - credit_amount, 0)), 0) as remaining_amount')
+            ->first();
+
+        $statusCounts = LanguageTuitionCharge::query()
+            ->select('status')
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('COALESCE(SUM(GREATEST(payable_amount - paid_amount - credit_amount, 0)), 0) as remaining_amount')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        $overdue = LanguageTuitionCharge::query()
+            ->whereDate('due_date', '<', today())
+            ->whereRaw('payable_amount - paid_amount - credit_amount > 0')
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('COALESCE(SUM(payable_amount - paid_amount - credit_amount), 0) as amount')
+            ->first();
+
+        $monthlyCollections = collect(range(5, 0))->map(function (int $offset) {
+            $month = now()->startOfMonth()->subMonths($offset);
+            $query = LanguageTuitionPayment::query()
+                ->where('receipt_status', 'confirmed')
+                ->whereBetween('paid_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()]);
+
+            return [
+                'label' => 'Tháng '.$month->format('m/Y'),
+                'tuition' => (float) (clone $query)->sum('amount'),
+                'books' => (float) (clone $query)->sum('book_amount'),
+            ];
+        });
+
+        return view('language.tuition.overview', [
+            'summary' => $summary,
+            'statusCounts' => $statusCounts,
+            'overdue' => $overdue,
+            'monthlyCollections' => $monthlyCollections,
+            'recentPayments' => LanguageTuitionPayment::query()
+                ->with(['charge.student', 'charge.languageClass', 'collector'])
+                ->where('receipt_status', 'confirmed')
+                ->orderByDesc('paid_at')
+                ->limit(10)
+                ->get(),
+        ]);
+    }
+
+    public function byClass(Request $request): View
+    {
+        $status = $request->string('status')->toString();
+        $classes = LanguageClass::query()
+            ->with('course')
+            ->where(function ($query) {
+                $query->whereHas('enrollments')
+                    ->orWhereHas('tuitionCharges');
+            })
+            ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->withCount('enrollments')
+            ->withCount('tuitionCharges')
+            ->withCount([
+                'tuitionCharges as settled_tuition_charges_count' => fn ($query) => $query->whereIn('status', ['paid', 'transferred']),
+                'tuitionCharges as outstanding_tuition_charges_count' => fn ($query) => $query
+                    ->whereRaw('payable_amount - paid_amount - credit_amount > 0'),
+            ])
+            ->orderByDesc('start_date')
+            ->orderBy('code')
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('language.tuition.by-class', [
+            'classes' => $classes,
+            'status' => $status,
+            'statusLabels' => [
+                'recruiting' => 'Đang tuyển sinh',
+                'upcoming' => 'Sắp khai giảng',
+                'active' => 'Đang học',
+                'completed' => 'Đã hoàn thành',
+                'closed' => 'Đã đóng',
+            ],
+        ]);
+    }
+
+    public function showByClass(LanguageClass $languageClass): View
+    {
+        $languageClass->load('course');
+        $enrollments = LanguageEnrollment::query()
+            ->with('student')
+            ->where('language_class_id', $languageClass->id)
+            ->get()
+            ->keyBy('language_student_id');
+        $charges = LanguageTuitionCharge::query()
+            ->with('student')
+            ->where('language_class_id', $languageClass->id)
+            ->get()
+            ->keyBy('language_student_id');
+
+        $rows = $enrollments->map(function (LanguageEnrollment $enrollment) use ($charges): array {
+            $charge = $charges->get($enrollment->language_student_id);
+
+            return [
+                'student' => $enrollment->student,
+                'enrollment' => $enrollment,
+                'charge' => $charge,
+                'remaining' => $charge?->remainingAmount() ?? 0,
+            ];
+        });
+
+        foreach ($charges as $studentId => $charge) {
+            if ($rows->has($studentId)) {
+                continue;
+            }
+
+            $rows->put($studentId, [
+                'student' => $charge->student,
+                'enrollment' => null,
+                'charge' => $charge,
+                'remaining' => $charge->remainingAmount(),
+            ]);
+        }
+
+        $rows = $rows->sortBy(fn (array $row) => mb_strtolower((string) ($row['student']?->name ?? '')))->values();
+
+        return view('language.tuition.by-class-show', [
+            'languageClass' => $languageClass,
+            'rows' => $rows,
+            'summary' => [
+                'students' => $rows->count(),
+                'not_created' => $rows->whereNull('charge')->count(),
+                'settled' => $rows->filter(fn (array $row) => $row['charge'] && $row['remaining'] <= 0)->count(),
+                'outstanding' => $rows->filter(fn (array $row) => $row['charge'] && $row['remaining'] > 0)->count(),
+            ],
+            'chargeLabels' => [
+                'unpaid' => 'Chưa đóng',
+                'partial' => 'Đóng một phần',
+                'pending_receipt' => 'Chờ bổ sung phiếu thu',
+                'paid' => 'Đã đóng đủ',
+                'transferred' => 'Đã quyết toán chuyển lớp',
+            ],
+            'enrollmentLabels' => [
+                'studying' => 'Đang học',
+                'paused' => 'Tạm dừng',
+                'reserved' => 'Bảo lưu',
+                'completed' => 'Hoàn thành',
+                'dropped' => 'Đã thôi học',
+            ],
+        ]);
+    }
+
     public function monthly(Request $request): View
     {
         $month = $this->resolveMonthlyDate($request);

@@ -25,6 +25,8 @@ class ModulePermissionCatalog
         'language_collaborators' => ['view', 'create', 'update', 'delete', 'export'],
         'language_courses' => ['view', 'create', 'update', 'delete', 'export'],
         'language_discounts' => ['view', 'create', 'update', 'delete', 'export'],
+        'language_tuition_overview' => ['view'],
+        'language_tuition_by_class' => ['view'],
         'language_tuition' => ['view', 'create', 'update', 'export'],
         'language_targets' => ['view', 'export'],
         'roles' => ['view', 'create', 'update', 'delete'],
@@ -44,7 +46,7 @@ class ModulePermissionCatalog
         'Tổng quan' => ['system_dashboard', 'kpi_dashboard_all', 'language_dashboard_all'],
         'Công việc & hệ thống' => ['work_tasks', 'administration', 'personnel', 'users', 'roles', 'logs', 'software_settings', 'tools'],
         'Tuyển sinh' => ['language_consulting', 'language_target_submissions', 'language_leads', 'language_collaborators'],
-        'Học viên & điều hành trung tâm' => ['language_students', 'language_tuition', 'language_discounts', 'language_targets'],
+        'Học viên & điều hành trung tâm' => ['language_students', 'language_tuition_overview', 'language_tuition_by_class', 'language_tuition', 'language_discounts', 'language_targets'],
         'Đào tạo' => ['teacher_classes', 'language_classes', 'language_programs', 'language_courses'],
         'KPI & báo cáo' => ['kpis', 'courses', 'imports', 'reports', 'teaching_load_management', 'payments'],
     ];

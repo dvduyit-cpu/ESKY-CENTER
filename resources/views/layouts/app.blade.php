@@ -60,10 +60,12 @@
             @if($me->allowed('language_collaborators'))<a class="nav-link {{ request()->routeIs('language-collaborators.*') ? 'active' : '' }}" href="{{ route('language-collaborators.index') }}"><i class="bi bi-people-fill"></i> Cộng tác viên</a>@endif
         </nav>
         @endif
-        @if($me->allowed('language_students') || $me->allowed('language_tuition'))
+        @if($me->allowed('language_students') || $me->allowed('language_tuition_overview') || $me->allowed('language_tuition_by_class') || $me->allowed('language_tuition'))
         <div class="sidebar-label">Học viên</div>
         <nav class="sidebar-nav nav flex-column">
             @if($me->allowed('language_students'))<a class="nav-link {{ request()->routeIs('language-students.*') ? 'active' : '' }}" href="{{ route('language-students.index') }}"><i class="bi bi-mortarboard-fill"></i> Học viên</a>@endif
+            @if($me->allowed('language_tuition_overview'))<a class="nav-link {{ request()->routeIs('language-tuition.overview') ? 'active' : '' }}" href="{{ route('language-tuition.overview') }}"><i class="bi bi-pie-chart-fill"></i> Tổng quan học phí</a>@endif
+            @if($me->allowed('language_tuition_by_class'))<a class="nav-link {{ request()->routeIs('language-tuition.by-class.*') ? 'active' : '' }}" href="{{ route('language-tuition.by-class.index') }}"><i class="bi bi-people-fill"></i> Thu học phí theo lớp</a>@endif
             @if($me->allowed('language_tuition'))<a class="nav-link {{ request()->routeIs('language-tuition.index','language-tuition.create','language-tuition.show') ? 'active' : '' }}" href="{{ route('language-tuition.index') }}"><i class="bi bi-cash-coin"></i> Thu học phí</a><a class="nav-link {{ request()->routeIs('language-tuition.monthly') ? 'active' : '' }}" href="{{ route('language-tuition.monthly') }}"><i class="bi bi-calendar2-check-fill"></i> Thu học phí theo tháng</a>@endif
         </nav>
         @endif

@@ -64,6 +64,8 @@ class ProductionBootstrapSeeder extends Seeder
                 ['language_collaborators', 'Cộng tác viên trung tâm', 'bi-person-badge', 24],
                 ['language_courses', 'Khóa học trung tâm', 'bi-journal-bookmark', 25],
                 ['language_discounts', 'Chế độ miễn giảm', 'bi-percent', 26],
+                ['language_tuition_overview', 'Tổng quan học phí', 'bi-pie-chart-fill', 27],
+                ['language_tuition_by_class', 'Thu học phí theo lớp', 'bi-people-fill', 27],
                 ['language_tuition', 'Thu học phí', 'bi-cash-coin', 27],
                 ['language_targets', 'Chỉ tiêu trung tâm theo tháng', 'bi-bullseye', 28],
                 ['roles', 'Vai trò & quyền', 'bi-shield-lock', 30],
