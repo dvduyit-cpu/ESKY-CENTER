@@ -18,8 +18,12 @@ class LanguageLeadController extends Controller
             $query->where(fn ($builder) => $builder->where('name','like',"%{$search}%")->orWhere('phone','like',"%{$search}%")->orWhere('code','like',"%{$search}%"));
         }
         if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('course')) $query->where('language_course_id', $request->integer('course'));
         $this->applyReceivedFilter($query, $request);
-        return view('language.leads.index', ['items' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString()]);
+        return view('language.leads.index', [
+            'items' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'courses' => LanguageCourse::query()->orderBy('name')->get(['id', 'name']),
+        ]);
     }
 
     public function create(): View { return $this->form(new LanguageLead); }
@@ -37,11 +41,13 @@ class LanguageLeadController extends Controller
             ->with(['program','course','collaborator','consultant','targetSubmissions'])
             ->orderByDesc('created_at')->orderByDesc('id');
         if ($request->filled('status')) $query->where('status', $request->status);
+        if ($request->filled('course')) $query->where('language_course_id', $request->integer('course'));
         $this->applyReceivedFilter($query, $request);
         return view('language.leads.consulting', [
             'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'canViewAll'=>$canViewAll,
             'pendingCount'=>$pendingCount,
+            'courses'=>LanguageCourse::query()->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
