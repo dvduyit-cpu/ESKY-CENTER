@@ -89,13 +89,24 @@ class LanguageTuitionController extends Controller
     public function byClass(Request $request): View
     {
         $status = $request->string('status')->toString();
+        $search = trim($request->string('q')->toString());
+        $history = $request->boolean('history');
         $classes = LanguageClass::query()
             ->with('course')
             ->where(function ($query) {
                 $query->whereHas('enrollments')
                     ->orWhereHas('tuitionCharges');
             })
+            ->when($status === '' && $history, fn ($query) => $query->whereIn('status', ['completed', 'cancelled']))
+            ->when($status === '' && ! $history, fn ($query) => $query->whereNotIn('status', ['completed', 'cancelled']))
             ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('code', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhereHas('course', fn ($courseQuery) => $courseQuery->where('name', 'like', "%{$search}%"));
+                });
+            })
             ->withCount('enrollments')
             ->withCount('tuitionCharges')
             ->withCount([
@@ -105,18 +116,20 @@ class LanguageTuitionController extends Controller
             ])
             ->orderByDesc('start_date')
             ->orderBy('code')
-            ->paginate(20)
+            ->paginate(\App\Support\Pagination::perPage())
             ->withQueryString();
 
         return view('language.tuition.by-class', [
             'classes' => $classes,
             'status' => $status,
+            'search' => $search,
+            'history' => $history,
             'statusLabels' => [
                 'recruiting' => 'Đang tuyển sinh',
                 'upcoming' => 'Sắp khai giảng',
                 'active' => 'Đang học',
                 'completed' => 'Đã hoàn thành',
-                'closed' => 'Đã đóng',
+                'cancelled' => 'Đã hủy',
             ],
         ]);
     }
