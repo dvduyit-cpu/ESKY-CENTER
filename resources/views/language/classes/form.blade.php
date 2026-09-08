@@ -61,12 +61,18 @@
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Khóa học</label>
-                    <select class="form-select" name="language_course_id" required>
+                    <select class="form-select" name="language_course_id" id="language-course-id" required>
                         <option value="">Chọn khóa học</option>
                         @foreach($courses as $course)
-                            <option value="{{$course->id}}" @selected(old('language_course_id',$item->language_course_id)==$course->id)>{{$course->name}} · {{$course->program?->name}} · {{$course->level?->name}}</option>
+                            <option value="{{$course->id}}" data-sessions="{{$course->sessions}}" @selected(old('language_course_id',$item->language_course_id)==$course->id)>{{$course->name}} · {{$course->program?->name}} · {{$course->level?->name}}</option>
                         @endforeach
                     </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Số buổi</label>
+                    <input class="form-control @error('expected_sessions') is-invalid @enderror" type="number" name="expected_sessions" id="expected-sessions" min="1" max="65535" value="{{old('expected_sessions',$item->expected_sessions?:'')}}" required>
+                    @error('expected_sessions')<div class="invalid-feedback">{{$message}}</div>@enderror
+                    <div class="form-text">Sổ đầu bài và bản in sẽ có đúng số buổi này.</div>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Học phí của lớp</label>
@@ -235,3 +241,20 @@
     @endif
 @endif
 @endsection
+
+@push('scripts')
+<script>
+    (() => {
+        const course = document.getElementById('language-course-id');
+        const sessions = document.getElementById('expected-sessions');
+        if (!course || !sessions) return;
+
+        let edited = sessions.value !== '';
+        sessions.addEventListener('input', () => { edited = true; });
+        course.addEventListener('change', () => {
+            if (!edited) sessions.value = course.selectedOptions[0]?.dataset.sessions || '';
+        });
+        if (!sessions.value && course.value) sessions.value = course.selectedOptions[0]?.dataset.sessions || '';
+    })();
+</script>
+@endpush
