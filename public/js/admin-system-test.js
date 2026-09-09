@@ -82,6 +82,12 @@
         return { ok: response.ok && !loginRedirect && !serverError, status: response.status, loginRedirect, serverError };
     }
 
+    async function diagnose(url) {
+        const response = await fetch(url, { headers: {'Accept':'application/json', 'X-System-Smoke-Test':'1'} });
+        if (!response.ok) throw new Error(`Không thể lấy chẩn đoán (HTTP ${response.status})`);
+        return response.json();
+    }
+
     async function run(module) {
         const card = app.querySelector(`[data-module="${CSS.escape(module.id)}"]`);
         const button = card.querySelector('[data-run]');
@@ -101,7 +107,18 @@
                 }
                 try {
                     const page = await probe(item.url);
-                    ok = showResult(card, page.ok, item.name, page.ok ? `HTTP ${page.status}` : `HTTP ${page.status}${page.loginRedirect ? ', bị chuyển về đăng nhập' : ''}`) && ok;
+                    let detail = page.ok ? `HTTP ${page.status}` : `HTTP ${page.status}${page.loginRedirect ? ', bị chuyển về đăng nhập' : ''}`;
+                    if (!page.ok && item.diagnostic_url) {
+                        try {
+                            const diagnosis = await diagnose(item.diagnostic_url);
+                            detail += diagnosis.ok
+                                ? ` · ${diagnosis.message}`
+                                : ` · ${diagnosis.error}: ${diagnosis.message}`;
+                        } catch (error) {
+                            detail += ` · ${error.message}`;
+                        }
+                    }
+                    ok = showResult(card, page.ok, item.name, detail) && ok;
                 } catch (error) {
                     ok = showResult(card, false, item.name, error.message) && ok;
                 }

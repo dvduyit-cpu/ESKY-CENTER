@@ -95,6 +95,7 @@ class SystemHealthMonitor
             'director.dashboard',
             'admin.system-test',
             'admin.system-test.catalog',
+            'admin.system-test.collaborators.diagnose',
             'admin.trash.index',
             'admin.trash.restore',
         ];

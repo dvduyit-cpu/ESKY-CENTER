@@ -10,6 +10,7 @@ use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Throwable;
 
@@ -112,6 +113,39 @@ class AdminSystemTestController extends Controller
         ]);
     }
 
+    /**
+     * Chỉ dùng nội bộ cho Admin để hiển thị nguyên nhân khi smoke test trang
+     * chi tiết CTV thất bại. Không đưa stack trace hay cấu hình server ra client.
+     */
+    public function diagnoseCollaboratorDetail(Request $request, LanguageCollaborator $languageCollaborator): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403, 'Trang kiểm thử chỉ dành cho Admin.');
+
+        try {
+            $probeRequest = Request::create(
+                route('language-collaborators.show', ['languageCollaborator' => $languageCollaborator]),
+                'GET'
+            );
+            $probeRequest->setUserResolver(fn () => $request->user());
+
+            $view = app(LanguageCollaboratorController::class)->show($probeRequest, $languageCollaborator);
+            $view->render();
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Không tái tạo được lỗi trong controller; hãy kiểm tra middleware hoặc web server của host.',
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'ok' => false,
+                'error' => class_basename($exception),
+                'message' => Str::of($exception->getMessage())->squish()->limit(600, '…')->toString(),
+            ]);
+        }
+    }
+
     private function moduleProbes(array $module, ?LaravelRoute $route): array
     {
         if (! $route) return [];
@@ -135,6 +169,7 @@ class AdminSystemTestController extends Controller
                 $probes[] = [
                     'name' => 'Mở chi tiết cộng tác viên',
                     'url' => route('language-collaborators.show', ['languageCollaborator' => $collaboratorId]),
+                    'diagnostic_url' => route('admin.system-test.collaborators.diagnose', ['languageCollaborator' => $collaboratorId]),
                 ];
             }
         } catch (Throwable $exception) {
@@ -155,8 +190,8 @@ class AdminSystemTestController extends Controller
         $adminRoutes = $namedRoutes->filter(fn (LaravelRoute $route, string $name) => str_starts_with($name, 'admin.system-test'));
         $add(
             'Trang kiểm thử chỉ dành cho Admin',
-            $adminRoutes->count() === 2,
-            'Hai endpoint đều xác minh user có vai trò admin trong controller.'
+            $adminRoutes->count() === 3,
+            'Ba endpoint đều xác minh user có vai trò admin trong controller.'
         );
 
         $applicationRoutes = $namedRoutes->reject(fn (LaravelRoute $route, string $name) => $this->isFrameworkUtilityRoute($route, $name));
