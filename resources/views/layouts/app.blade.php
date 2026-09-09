@@ -25,6 +25,7 @@
     <link href="{{ asset('css/administration.css') }}?v={{ filemtime(public_path('css/administration.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/list-selection.css') }}?v={{ filemtime(public_path('css/list-selection.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
+    <link href="{{ asset('css/ui-consistency.css') }}?v={{ filemtime(public_path('css/ui-consistency.css')) }}" rel="stylesheet">
     @stack('styles')
 </head>
 <body data-theme="{{ $systemTheme ?? 'blue' }}" data-loading-style="{{ $systemLoadingStyle ?? 'center' }}" data-sidebar-mode="{{ $personalSidebarMode ?? 'remember' }}" data-visual-effect="{{ $personalVisualEffect ?? $systemVisualEffect ?? 'standard' }}">
