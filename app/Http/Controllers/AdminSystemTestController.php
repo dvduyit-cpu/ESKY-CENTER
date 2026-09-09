@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\LanguageCollaborator;
 use App\Support\SystemHealthMonitor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Throwable;
 
@@ -86,6 +88,7 @@ class AdminSystemTestController extends Controller
             return [
                 ...$module,
                 'url' => $route ? route($module['index'], $module['parameters'] ?? []) : null,
+                'probes' => $this->moduleProbes($module, $route),
                 'route_ok' => (bool) $route,
                 'operations' => $operations,
                 'capabilities' => $this->capabilities($operations),
@@ -107,6 +110,39 @@ class AdminSystemTestController extends Controller
             'system_checks' => $this->healthMonitor->checks(),
             'modules' => $modules,
         ]);
+    }
+
+    private function moduleProbes(array $module, ?LaravelRoute $route): array
+    {
+        if (! $route) return [];
+
+        $url = route($module['index'], $module['parameters'] ?? []);
+        $probes = [
+            ['name' => 'Mở trang danh sách', 'url' => $url],
+            ['name' => 'Tìm kiếm / bộ lọc', 'url' => $url.(str_contains($url, '?') ? '&' : '?').'q=__admin_system_test__&search=__admin_system_test__'],
+        ];
+
+        if (($module['prefix'] ?? '') !== 'language-collaborators' || ! Route::has('language-collaborators.show')) {
+            return $probes;
+        }
+
+        try {
+            if (! Schema::hasTable('language_collaborators')) {
+                return $probes;
+            }
+            $collaboratorId = LanguageCollaborator::query()->value('id');
+            if ($collaboratorId) {
+                $probes[] = [
+                    'name' => 'Mở chi tiết cộng tác viên',
+                    'url' => route('language-collaborators.show', ['languageCollaborator' => $collaboratorId]),
+                ];
+            }
+        } catch (Throwable $exception) {
+            report($exception);
+            $probes[] = ['name' => 'Đọc dữ liệu cộng tác viên', 'url' => null, 'error' => 'Không thể đọc bảng cộng tác viên.'];
+        }
+
+        return $probes;
     }
 
     private function securityChecks($namedRoutes): array

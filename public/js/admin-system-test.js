@@ -94,14 +94,17 @@
         if (!module.route_ok || !module.url) {
             ok = showResult(card, false, 'Trang danh sách', `Thiếu route ${module.index}`) && ok;
         } else {
-            try {
-                const page = await probe(module.url);
-                ok = showResult(card, page.ok, 'Mở trang giao diện', page.ok ? `HTTP ${page.status}` : `HTTP ${page.status}${page.loginRedirect ? ', bị chuyển về đăng nhập' : ''}`) && ok;
-                const separator = module.url.includes('?') ? '&' : '?';
-                const search = await probe(`${module.url}${separator}q=__admin_system_test__&search=__admin_system_test__`);
-                ok = showResult(card, search.ok, 'Tìm kiếm / bộ lọc', search.ok ? `HTTP ${search.status}, trang xử lý tham số an toàn` : `HTTP ${search.status}`) && ok;
-            } catch (error) {
-                ok = showResult(card, false, 'Kết nối trang', error.message) && ok;
+            for (const item of (module.probes || [])) {
+                if (item.error || !item.url) {
+                    ok = showResult(card, false, item.name, item.error || 'Không có URL kiểm thử.') && ok;
+                    continue;
+                }
+                try {
+                    const page = await probe(item.url);
+                    ok = showResult(card, page.ok, item.name, page.ok ? `HTTP ${page.status}` : `HTTP ${page.status}${page.loginRedirect ? ', bị chuyển về đăng nhập' : ''}`) && ok;
+                } catch (error) {
+                    ok = showResult(card, false, item.name, error.message) && ok;
+                }
             }
         }
 

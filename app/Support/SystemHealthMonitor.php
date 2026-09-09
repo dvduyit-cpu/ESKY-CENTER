@@ -30,6 +30,7 @@ class SystemHealthMonitor
                 'language_students', 'language_classes', 'language_enrollments',
                 'language_tuition_charges', 'language_tuition_payments',
                 'language_class_lessons', 'language_class_attendances', 'language_student_monthly_progress',
+                'language_collaborators', 'language_leads', 'language_courses',
             ];
             $missingTables = collect($requiredTables)->reject(fn (string $table) => Schema::hasTable($table))->values();
             $add(
@@ -40,11 +41,13 @@ class SystemHealthMonitor
             );
 
             $requiredColumns = [
-                'users' => ['is_registrar', 'is_instructor', 'theme_color'],
+                'users' => ['is_registrar', 'is_instructor', 'theme_color', 'language_collaborator_id'],
                 'language_classes' => ['teacher_user_id', 'expected_sessions', 'completed_sessions', 'completion_requested_at'],
                 'language_tuition_charges' => ['paid_amount', 'credit_amount', 'status'],
                 'language_class_lessons' => ['lesson_date', 'content', 'teacher_signature', 'attendance_marked_at'],
                 'language_student_monthly_progress' => ['month', 'planned_sessions', 'attended_sessions'],
+                'language_collaborators' => ['personnel_id', 'code', 'active'],
+                'language_leads' => ['language_collaborator_id', 'language_course_id', 'converted_student_id', 'received_at'],
             ];
             $missingColumns = collect($requiredColumns)->flatMap(function (array $columns, string $table) {
                 if (! Schema::hasTable($table)) {
@@ -59,7 +62,7 @@ class SystemHealthMonitor
                 'Cơ sở dữ liệu',
                 'Migration chức năng mới',
                 $missingColumns->isEmpty(),
-                $missingColumns->isEmpty() ? 'Đủ cột cho giáo vụ, kiêm giảng dạy, học phí, điểm danh và sổ đầu bài.' : 'Thiếu cột: '.$missingColumns->implode(', ')
+                $missingColumns->isEmpty() ? 'Đủ cột cho giáo vụ, giảng dạy, học phí, điểm danh, sổ đầu bài và cộng tác viên.' : 'Thiếu cột: '.$missingColumns->implode(', ')
             );
         } catch (Throwable) {
             $add('Cơ sở dữ liệu', 'Cấu trúc bảng nghiệp vụ', false, 'Không thể đọc cấu trúc bảng do kết nối cơ sở dữ liệu đang lỗi.');
@@ -68,6 +71,10 @@ class SystemHealthMonitor
 
         $requiredRoutes = [
             'language-students.index',
+            'language-collaborators.index',
+            'language-collaborators.show',
+            'language-collaborators.export',
+            'language-collaborators.referrals.export',
             'language-classes.index',
             'language-classes.show',
             'language-tuition.index',
@@ -123,6 +130,19 @@ class SystemHealthMonitor
             $managementRoutesWithoutPermission->isEmpty()
                 ? $managementRoutes->count().' route tổng hợp giờ dạy đã có middleware quyền.'
                 : 'Thiếu quyền: '.$managementRoutesWithoutPermission->map(fn (LaravelRoute $route) => $route->getName())->filter()->implode(', ')
+        );
+
+        $collaboratorRoutes = collect(Route::getRoutes()->getRoutes())
+            ->filter(fn (LaravelRoute $route) => str_starts_with((string) $route->getName(), 'language-collaborators.'));
+        $collaboratorRoutesWithoutPermission = $collaboratorRoutes->filter(fn (LaravelRoute $route) => ! collect($route->gatherMiddleware())
+            ->contains(fn ($middleware) => str_starts_with((string) $middleware, 'permission:language_collaborators,')));
+        $add(
+            'Phân quyền',
+            'Bảo vệ cộng tác viên',
+            $collaboratorRoutes->isNotEmpty() && $collaboratorRoutesWithoutPermission->isEmpty(),
+            $collaboratorRoutesWithoutPermission->isEmpty()
+                ? $collaboratorRoutes->count().' route cộng tác viên đều có quyền tương ứng.'
+                : 'Thiếu quyền: '.$collaboratorRoutesWithoutPermission->map(fn (LaravelRoute $route) => $route->getName())->filter()->implode(', ')
         );
 
         $zipReady = extension_loaded('zip') && class_exists('ZipArchive');
@@ -181,6 +201,9 @@ class SystemHealthMonitor
             resource_path('views/language/classes/gradebook.blade.php'),
             resource_path('views/language/classes/print-lesson-book.blade.php'),
             resource_path('views/language/classes/show.blade.php'),
+            resource_path('views/language/collaborators/index.blade.php'),
+            resource_path('views/language/collaborators/form.blade.php'),
+            resource_path('views/language/collaborators/show.blade.php'),
             resource_path('views/admin/system-test.blade.php'),
             resource_path('views/admin/trash.blade.php'),
             resource_path('views/director/dashboard.blade.php'),
