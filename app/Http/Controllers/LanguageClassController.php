@@ -69,14 +69,51 @@ class LanguageClassController extends Controller
     public function teacherIndex(Request $request): View
     {
         $user=$request->user();
+        $history=$request->boolean('history');
+        $classStatuses=[
+            'planned'=>'Dự kiến mở',
+            'recruiting'=>'Đang tuyển sinh',
+            'upcoming'=>'Sắp khai giảng',
+            'active'=>'Đang hoạt động',
+            'paused'=>'Tạm dừng',
+            'completed'=>'Đã kết thúc',
+            'cancelled'=>'Đã hủy',
+        ];
+        $filterStatuses=$history
+            ? array_intersect_key($classStatuses,array_flip(['completed','cancelled']))
+            : array_diff_key($classStatuses,array_flip(['completed','cancelled']));
+        $status=$request->string('status')->toString();
+        if(!array_key_exists($status,$filterStatuses))$status='';
+        $completion=$request->string('completion')->toString();
+        if(!in_array($completion,['requested','not_requested'],true))$completion='';
         $query=LanguageClass::with(['program','level','teacher'])->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')]);
         if($user->canTeach()&&!$this->hasExplicitLanguageClassUpdate($user))$query->where('teacher_user_id',$user->id);
         if($request->filled('q')){
             $search=$request->string('q');
             $query->where(fn($builder)=>$builder->where('name','like',"%{$search}%")->orWhere('code','like',"%{$search}%"));
         }
-        $request->boolean('history')?$query->whereIn('status',['completed','cancelled']):$query->whereNotIn('status',['completed','cancelled']);
-        return view('language.classes.teacher-index',['items'=>$query->orderByDesc('start_date')->get()]);
+        $history?$query->whereIn('status',['completed','cancelled']):$query->whereNotIn('status',['completed','cancelled']);
+        if($user->isRegistrar()&&$status!=='')$query->where('status',$status);
+        if($user->isRegistrar()&&$completion==='requested')$query->whereNotNull('completion_requested_at');
+        if($user->isRegistrar()&&$completion==='not_requested')$this->whereCompletionDueWithoutRequest($query);
+
+        $overview=null;
+        if($user->isRegistrar()&&!$history){
+            $overviewQuery=LanguageClass::query()->whereNotIn('status',['completed','cancelled']);
+            $overview=[
+                'total'=>(clone $overviewQuery)->count(),
+                'requested'=>(clone $overviewQuery)->whereNotNull('completion_requested_at')->count(),
+                'not_requested'=>$this->whereCompletionDueWithoutRequest(clone $overviewQuery)->count(),
+            ];
+        }
+
+        return view('language.classes.teacher-index',[
+            'items'=>$query->orderByDesc('start_date')->get(),
+            'classStatuses'=>$filterStatuses,
+            'canFilterByStatus'=>$user->isRegistrar(),
+            'canCloseClasses'=>$user->isRegistrar(),
+            'overview'=>$overview,
+        ]);
     }
 
     public function template(LanguageClassSpreadsheet $spreadsheet): StreamedResponse
@@ -312,6 +349,21 @@ class LanguageClassController extends Controller
             $languageClass->enrollments()->whereIn('status',['studying','paused','reserved'])->update(['status'=>'completed','ended_at'=>now()->toDateString(),'exit_reason'=>'Lớp đã được giáo vụ xác nhận hoàn thành']);
         });
         return redirect()->route('teacher-classes.index',['history'=>1])->with('success','Đã kiểm tra học phí và đóng lớp. Toàn bộ điểm, đánh giá và lịch sử học viên được giữ lại.');
+    }
+
+    private function whereCompletionDueWithoutRequest($query)
+    {
+        return $query
+            ->whereNull('completion_requested_at')
+            ->where(function ($completionDue) {
+                $completionDue
+                    ->whereDate('expected_end_date', '<=', today())
+                    ->orWhere(function ($completedSessions) {
+                        $completedSessions
+                            ->where('expected_sessions', '>', 0)
+                            ->whereColumn('completed_sessions', '>=', 'expected_sessions');
+                    });
+            });
     }
 
     private function tuitionCompletionCheck(LanguageClass $languageClass): array

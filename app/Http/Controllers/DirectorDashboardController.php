@@ -122,6 +122,8 @@ class DirectorDashboardController extends Controller
             'studying_students' => LanguageStudent::query()->where('status', 'studying')->count(),
             'active_classes' => LanguageClass::query()->where('status', 'active')->count(),
             'upcoming_classes' => LanguageClass::query()->whereIn('status', ['planned', 'recruiting', 'upcoming'])->count(),
+            'awaiting_registrar_completion' => LanguageClass::query()->whereNotNull('completion_requested_at')->whereNotIn('status', ['completed', 'cancelled'])->count(),
+            'awaiting_teacher_completion' => $this->completionDueWithoutRequest(LanguageClass::query()->whereNotIn('status', ['completed', 'cancelled']))->count(),
             'programs' => LanguageProgram::query()->where('active', true)->count(),
         ];
 
@@ -152,8 +154,13 @@ class DirectorDashboardController extends Controller
             ],
             [
                 'label' => 'Lớp chờ giáo vụ đóng',
-                'count' => LanguageClass::query()->whereNotNull('completion_requested_at')->whereNotIn('status', ['completed', 'cancelled'])->count(),
+                'count' => $trainingStats['awaiting_registrar_completion'],
                 'icon' => 'bi-hourglass-split', 'tone' => 'warning', 'route' => 'language-classes.index',
+            ],
+            [
+                'label' => 'Lớp đủ điều kiện chưa đề nghị',
+                'count' => $trainingStats['awaiting_teacher_completion'],
+                'icon' => 'bi-send-exclamation', 'tone' => 'warning', 'route' => 'language-classes.index',
             ],
             [
                 'label' => 'Phiếu thu chờ xác nhận',
@@ -218,6 +225,21 @@ class DirectorDashboardController extends Controller
                 ->orderBy('name')
                 ->get(),
         ]);
+    }
+
+    private function completionDueWithoutRequest($query)
+    {
+        return $query
+            ->whereNull('completion_requested_at')
+            ->where(function ($completionDue) {
+                $completionDue
+                    ->whereDate('expected_end_date', '<=', today())
+                    ->orWhere(function ($completedSessions) {
+                        $completedSessions
+                            ->where('expected_sessions', '>', 0)
+                            ->whereColumn('completed_sessions', '>=', 'expected_sessions');
+                    });
+            });
     }
 
     private function period(Request $request): array

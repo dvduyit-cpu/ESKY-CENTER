@@ -145,6 +145,8 @@
                     ['Học viên đang học',$trainingStats['studying_students']],
                     ['Lớp đang hoạt động',$trainingStats['active_classes']],
                     ['Lớp đang/sắp tuyển',$trainingStats['upcoming_classes']],
+                    ['Lớp chờ giáo vụ đóng',$trainingStats['awaiting_registrar_completion']],
+                    ['Lớp đủ điều kiện chưa đề nghị',$trainingStats['awaiting_teacher_completion']],
                     ['Chương trình hoạt động',$trainingStats['programs']]
                 ] as [$label,$value])
                     <div class="d-flex justify-content-between align-items-center py-2 border-bottom"><span>{{$label}}</span><strong>{{number_format($value)}}</strong></div>

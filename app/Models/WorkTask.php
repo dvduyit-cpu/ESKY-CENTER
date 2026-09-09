@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WorkTask extends Model
@@ -17,4 +18,5 @@ class WorkTask extends Model
     public function comments(): HasMany { return $this->hasMany(WorkTaskComment::class); }
     public function activities(): HasMany { return $this->hasMany(WorkTaskActivity::class); }
     public function attachments(): HasMany { return $this->hasMany(WorkTaskAttachment::class)->whereNull('work_task_comment_id'); }
+    public function pinnedByUsers(): BelongsToMany { return $this->belongsToMany(User::class, 'work_task_pins')->withTimestamps(); }
 }

@@ -26,6 +26,9 @@
         <div class="col-6 col-xl"><div class="metric-card"><span>Gửi đúng hạn</span><strong>{{ $onTimeCount }}</strong><small>{{ $lateCount }} gửi trễ</small></div></div>
         <div class="col-6 col-xl"><div class="metric-card"><span>Độ rõ ràng TB</span><strong>{{ $averageQuality }}</strong><small>/100 điểm</small></div></div>
     </div>
+    @if($uncompiledItemCount)
+    <div class="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4"><span><i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Có {{ $uncompiledItemCount }} ý báo cáo chưa nằm trong bản tổng hợp gần nhất.</strong> Hãy tổng hợp lại để lấy đủ nội dung người khác vừa gửi.</span><a class="btn btn-sm btn-outline-warning" href="#summary-compilation">Đi đến tổng hợp</a></div>
+    @endif
 
     <div class="card card-soft mb-4 director-work-area-summary"><div class="card-header bg-white d-flex flex-wrap justify-content-between gap-2"><strong><i class="bi bi-bar-chart-fill me-1"></i>Số liệu công việc dành cho giám đốc</strong><span class="small text-muted">{{ $items->count() }} ý đang hiển thị · {{ count($duplicateGroups) }} nhóm có thể trùng</span></div><div class="card-body"><div class="row g-3">
         @foreach($workAreaStats as $areaStat)
@@ -74,11 +77,12 @@
     @endif
     </section>
 
+    @if($workArea)<div class="alert alert-info mb-4"><i class="bi bi-info-circle me-1"></i>Bạn đang lọc theo nhóm công tác. Để tránh thiếu dữ liệu, hãy <a href="{{ route('administration.weekly.summary', ['period'=>$period->id]) }}" class="alert-link">bỏ lọc</a> trước khi tạo hoặc lưu bản tổng hợp.</div>@endif
     <form id="weeklyCompilationForm" method="POST" action="{{ route('administration.weekly.compile') }}">
         @csrf
         <input type="hidden" name="period_id" value="{{ $period->id }}">
         <input type="hidden" name="week_start" value="{{ $weekStart->toDateString() }}">
-        <div id="summary-people" class="card card-soft mb-4 summary-anchor"><div class="card-header bg-white d-flex flex-wrap justify-content-between gap-2"><strong><span class="summary-section-index">03</span>Báo cáo theo từng nhân sự</strong><small class="text-muted">Bấm vào tên hoặc nút xem để đọc nội dung và chọn ý tổng hợp</small></div><div class="card-body">
+        <div id="summary-people" class="card card-soft mb-4 summary-anchor"><div class="card-header bg-white d-flex flex-wrap justify-content-between gap-2"><strong><span class="summary-section-index">03</span>Báo cáo theo từng nhân sự</strong><small class="text-muted">Bấm vào tên hoặc nút xem để đọc nội dung. Khi gộp, hệ thống luôn lấy toàn bộ báo cáo đã gửi.</small></div><div class="card-body">
             @if($items->isEmpty())
                 <div class="empty-state">Không có nội dung thuộc nhóm công tác đang chọn.</div>
             @else
@@ -105,7 +109,7 @@
                             <section class="employee-report-section"><h6>{{ $loop->iteration }}. {{ $typeLabel }}</h6>
                                 @forelse($filteredReportItems->where('type', $type) as $item)
                                 <label class="summary-item {{ $duplicateItemIds->contains($item->id) ? 'is-duplicate' : '' }}">
-                                    <input class="form-check-input mt-1" type="checkbox" name="selected_item_ids[]" value="{{ $item->id }}" form="weeklyCompilationForm" {{ in_array($item->id, old('selected_item_ids', $compilation?->source_item_ids ?? $items->pluck('id')->all())) ? 'checked' : '' }}>
+                                    <input class="form-check-input mt-1" type="checkbox" checked disabled aria-label="Luôn được gộp">
                                     <span><select class="form-select form-select-sm summary-work-area" data-work-area-select data-url="{{ route('administration.weekly.items.work-area', $item) }}" aria-label="Phân loại công tác">@foreach($workAreas as $areaKey => $areaLabel)<option value="{{ $areaKey }}" @selected($item->work_area === $areaKey)>{{ $areaLabel }}</option>@endforeach</select><span class="report-rich-output">{!! $item->content !!}</span><small class="d-block {{ $item->quality_score >= 60 ? 'text-success' : 'text-danger' }}">Độ rõ ràng {{ $item->quality_score }}/100{{ $duplicateItemIds->contains($item->id) ? ' · Có thể trùng ý' : '' }}</small></span>
                                 </label>
                                 @empty<p class="text-muted small mb-0">Không có nội dung.</p>@endforelse
@@ -119,16 +123,16 @@
         </div></div>
 
         <div id="summary-compilation" class="card card-soft summary-anchor"><div class="card-header bg-white"><strong><span class="summary-section-index">04</span>Nội dung báo cáo tổng hợp</strong></div><div class="card-body">
-            <p class="small text-muted">AI sẽ đọc các ý đã chọn, tách đầu việc, sửa lỗi nhẹ và phân vào đúng 4 mục mà không ghi tên người báo cáo. <strong class="text-dark">Nội dung giống hoặc gần trùng chỉ được giữ lại một ý rõ ràng, đầy đủ nhất trong toàn bộ bản tổng hợp.</strong> Admin vẫn có thể chỉnh sửa tự do trước khi lưu.</p>
+            <p class="small text-muted">Nút gộp luôn lấy đủ mọi ý từ tất cả báo cáo đã gửi trong kỳ, không tự xóa hoặc bỏ qua nội dung của người báo cáo. AI là tùy chọn riêng để biên tập và phân loại sau khi đã gộp.</p>
             <textarea class="form-control" name="content" rows="14" maxlength="50000" placeholder="Nội dung tổng hợp sẽ được tạo từ các ý đã chọn…">{{ old('content', $compilation?->content) }}</textarea>
             @error('selected_item_ids')<div class="text-danger small mt-2">{{ $message }}</div>@enderror
-            <div class="d-flex flex-wrap justify-content-end gap-2 mt-3"><button class="btn btn-outline-primary" type="submit" name="regenerate" value="1" onclick="return confirm('Cho AI phân tích lại các ý đang chọn? Nội dung đang chỉnh sửa trong ô sẽ được thay thế.')"><i class="bi bi-stars me-1"></i>AI phân tích và tạo 4 mục</button><button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i>Lưu bản tổng hợp</button></div>
+            <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">@if($workArea)<a class="btn btn-outline-primary" href="{{ route('administration.weekly.summary', ['period'=>$period->id]) }}"><i class="bi bi-funnel me-1"></i>Bỏ lọc để tổng hợp đủ</a>@else<button class="btn btn-outline-primary" type="submit" name="regenerate" value="1" onclick="return confirm('Cho AI biên tập lại toàn bộ báo cáo đã gửi? Nội dung đang chỉnh sửa trong ô sẽ được thay thế.')"><i class="bi bi-stars me-1"></i>AI phân tích và tạo 4 mục</button><button class="btn btn-primary" type="submit" name="merge_all" value="1"><i class="bi bi-collection me-1"></i>Gộp tất cả báo cáo đã gửi</button>@endif</div>
         </div></div>
 
         <div id="summary-official" class="card card-soft summary-anchor mt-4"><div class="card-header bg-white"><strong><span class="summary-section-index">05</span>Nội dung báo cáo chính thức</strong></div><div class="card-body">
-            <p class="small text-muted">AI kiểm tra lại bản chất từng đầu việc, loại nội dung trùng và phân vào 4 nhóm: <strong>tư vấn – chăm sóc, giáo vụ, giảng dạy và công tác khác</strong>. Mỗi ý trùng chỉ xuất hiện một lần và Admin được chỉnh sửa tự do trước khi lưu.</p>
+            <p class="small text-muted">AI kiểm tra toàn bộ báo cáo đã gửi và phân vào 4 nhóm: <strong>tư vấn – chăm sóc, giáo vụ, giảng dạy và công tác khác</strong>. Mọi chi tiết khác nhau từ người báo cáo được giữ lại; các ý gần trùng chỉ là cảnh báo để đối chiếu.</p>
             <textarea class="form-control official-report-content" name="official_content" rows="16" maxlength="50000" placeholder="1. Công tác tư vấn – chăm sóc&#10;&#10;2. Công tác giáo vụ&#10;&#10;3. Công tác giảng dạy&#10;&#10;4. Công tác khác">{{ old('official_content', $compilation?->official_content) }}</textarea>
-            <div class="d-flex flex-wrap justify-content-end gap-2 mt-3"><button class="btn btn-outline-primary" type="submit" name="regenerate_official" value="1" onclick="return confirm('Cho AI kiểm tra và phân loại lại báo cáo chính thức? Nội dung hiện tại trong ô này sẽ được thay thế.')"><i class="bi bi-stars me-1"></i>AI kiểm tra và phân 4 nhóm</button><button class="btn btn-primary" type="submit"><i class="bi bi-save me-1"></i>Lưu báo cáo chính thức</button></div>
+            <div class="d-flex flex-wrap justify-content-end gap-2 mt-3">@if($workArea)<a class="btn btn-outline-primary" href="{{ route('administration.weekly.summary', ['period'=>$period->id]) }}"><i class="bi bi-funnel me-1"></i>Bỏ lọc để tổng hợp đủ</a>@else<button class="btn btn-outline-primary" type="submit" name="regenerate_official" value="1" onclick="return confirm('Cho AI kiểm tra và phân loại lại toàn bộ báo cáo chính thức? Nội dung hiện tại trong ô này sẽ được thay thế.')"><i class="bi bi-stars me-1"></i>AI kiểm tra và phân 4 nhóm</button><button class="btn btn-primary" type="submit" @disabled($uncompiledItemCount) title="{{ $uncompiledItemCount ? 'Hãy gộp lại các ý mới trước khi lưu.' : '' }}"><i class="bi bi-save me-1"></i>Lưu báo cáo chính thức</button>@endif</div>
         </div></div>
     </form>
 </div>

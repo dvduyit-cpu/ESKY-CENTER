@@ -17,6 +17,7 @@ $monthAverage=$monthScores->count()?$monthScores->avg(fn($score)=>(float)$score-
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
     document.querySelectorAll('.content form[method="POST"]').forEach(form=>{
+        if(form.matches('[data-registrar-close-form]')) return;
         form.querySelectorAll('input,select,textarea,button').forEach(control=>control.disabled=true);
         form.querySelectorAll('button').forEach(button=>button.classList.add('d-none'));
     });
@@ -44,7 +45,7 @@ document.addEventListener('DOMContentLoaded',()=>{
                         <button class="btn btn-primary" {{$languageClass->isCompletionDue()?'':'disabled'}}><i class="bi bi-send-check me-2"></i>Đề nghị hoàn thành</button>
                     </form>
                 @elseif($languageClass->status!=='completed'&&auth()->user()->isRegistrar())
-                    <form method="POST" action="{{route('teacher-classes.close',$languageClass)}}">
+                    <form method="POST" action="{{route('teacher-classes.close',$languageClass)}}" data-registrar-close-form>
                         @csrf
                         @method('PATCH')
                         <button class="btn btn-success" {{$tuitionCheck['ready']?'':'disabled'}} data-confirm="Xác nhận đã kiểm tra học phí và đóng lớp?"><i class="bi bi-lock-fill me-2"></i>Giáo vụ đóng lớp</button>

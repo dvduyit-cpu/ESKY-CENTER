@@ -62,7 +62,7 @@ class AdministrativeWeeklyReportController extends Controller
         $canSubmitReport = ! $request->user()->isAdmin();
         $periods = AdministrativeWeeklyPeriod::query()
             ->with('assignedUsers:id,name,email')
-            ->when(! $canManage, fn ($query) => $query->activeNow()
+            ->when(! $canManage, fn ($query) => $query
                 ->whereHas('assignedUsers', fn ($users) => $users->whereKey($request->user()->id)))
             ->when($canManage, fn ($query) => $this->applyPeriodFilter($query, $request))
             ->latest('week_start')
@@ -74,7 +74,7 @@ class AdministrativeWeeklyReportController extends Controller
             ? $periods->firstWhere('id', $requestedPeriodId)
             : ($requestedWeek ? $periods->first(fn ($period) => $period->week_start->isSameDay($requestedWeek)) : $periods->first());
         $weekStart = $selectedPeriod?->week_start?->copy() ?? now()->startOfWeek(Carbon::MONDAY)->startOfDay();
-        $submissionWindowOpen = $canManage ? (bool) $selectedPeriod : (bool) $selectedPeriod?->isCurrentlyActive();
+        $submissionWindowOpen = (bool) $selectedPeriod?->isSubmissionOpen();
         $report = AdministrativeWeeklyReport::query()
             ->with('items')
             ->where('user_id', $request->user()->id)
@@ -101,7 +101,8 @@ class AdministrativeWeeklyReportController extends Controller
             $period->setAttribute('draft_count', $periodReports->where('status', 'draft')->count());
             $period->setAttribute('assigned_count', $period->assignedUsers->count());
             $period->setAttribute('assigned_to_current_user', $period->assignedUsers->contains('id', $request->user()->id));
-            $period->setAttribute('effective_active', $period->isCurrentlyActive());
+            $period->setAttribute('submission_window_open', $period->isSubmissionOpen());
+            $period->setAttribute('submission_window_status', now()->lt($period->submissionStartsAt()) ? 'upcoming' : ($period->isSubmissionOpen() ? 'open' : 'closed'));
             if ($canManage) {
                 $period->setRelation('compilation', $compilations->get($period->id));
                 $period->setRelation('missingUsers', $period->assignedUsers->whereNotIn('id', $submittedUserIds)->sortBy('name')->values());
@@ -142,49 +143,31 @@ class AdministrativeWeeklyReportController extends Controller
             'period_id' => ['nullable', 'integer', 'exists:administrative_weekly_periods,id'],
             'week_start' => ['required', 'date'],
             'title' => ['nullable', 'string', 'max:180'],
-            'is_active' => ['nullable', 'boolean'],
-            'starts_at' => ['nullable', 'date'],
-            'ends_at' => ['nullable', 'date', 'after:starts_at'],
+            'starts_at' => ['required', 'date'],
+            'ends_at' => ['required', 'date', 'after:starts_at'],
             'assigned_user_ids' => ['required', 'array', 'min:1'],
             'assigned_user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
         ]);
         $assigneeIds = $this->validAssigneeIds($data['assigned_user_ids']);
         if ($assigneeIds === []) throw ValidationException::withMessages(['assigned_user_ids' => 'Hãy chọn ít nhất một tài khoản đang hoạt động, không bao gồm admin.']);
         $weekStart = Carbon::parse($data['week_start'])->startOfWeek(Carbon::MONDAY)->startOfDay();
-        $isActive = $request->boolean('is_active');
-        $startsAt = filled($data['starts_at'] ?? null) ? Carbon::parse($data['starts_at']) : null;
-        $endsAt = filled($data['ends_at'] ?? null) ? Carbon::parse($data['ends_at']) : null;
+        $startsAt = Carbon::parse($data['starts_at']);
+        $endsAt = Carbon::parse($data['ends_at']);
         $period = AdministrativeWeeklyPeriod::query()->create([
                 'week_end' => $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->toDateString(),
                 'week_start' => $weekStart->toDateString(),
                 'due_date' => $weekStart->copy()->addDays(2)->toDateString(),
                 'title' => trim((string) ($data['title'] ?? '')) ?: null,
-                'is_active' => $isActive,
+                'is_active' => true,
                 'starts_at' => $startsAt,
                 'ends_at' => $endsAt,
                 'created_by' => $request->user()->id,
-                'activated_by' => $isActive ? $request->user()->id : null,
-                'activated_at' => $isActive ? now() : null,
+                'activated_by' => $request->user()->id,
+                'activated_at' => now(),
             ]);
         $period->assignedUsers()->sync($assigneeIds);
 
         return redirect()->route('administration.weekly.index')->with('success', 'Đã tạo kỳ báo cáo tuần.');
-    }
-
-    public function togglePeriod(Request $request, AdministrativeWeeklyPeriod $period): RedirectResponse
-    {
-        abort_unless($request->user()->isLeader(), 403);
-        $data = $request->validate(['is_active' => ['required', 'boolean']]);
-        $isActive = (bool) $data['is_active'];
-        $period->update([
-            'is_active' => $isActive,
-            'starts_at' => null,
-            'ends_at' => null,
-            'activated_by' => $isActive ? $request->user()->id : null,
-            'activated_at' => $isActive ? now() : null,
-        ]);
-
-        return back()->with('success', $isActive ? 'Đã bật kỳ báo cáo. Các account đã nhìn thấy thẻ.' : 'Đã tắt kỳ báo cáo. Thẻ đã ẩn khỏi các account.');
     }
 
     public function updatePeriod(Request $request, AdministrativeWeeklyPeriod $period): RedirectResponse
@@ -192,8 +175,8 @@ class AdministrativeWeeklyReportController extends Controller
         abort_unless($request->user()->isLeader(), 403);
         $data = $request->validate([
             'title' => ['nullable', 'string', 'max:180'],
-            'starts_at' => ['nullable', 'date'],
-            'ends_at' => ['nullable', 'date', 'after:starts_at'],
+            'starts_at' => ['required', 'date'],
+            'ends_at' => ['required', 'date', 'after:starts_at'],
             'assigned_user_ids' => ['required', 'array', 'min:1'],
             'assigned_user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
         ]);
@@ -201,9 +184,8 @@ class AdministrativeWeeklyReportController extends Controller
         if ($assigneeIds === []) throw ValidationException::withMessages(['assigned_user_ids' => 'Hãy chọn ít nhất một tài khoản đang hoạt động, không bao gồm admin.']);
         $period->update([
             'title' => trim((string) ($data['title'] ?? '')) ?: null,
-            'starts_at' => filled($data['starts_at'] ?? null) ? Carbon::parse($data['starts_at']) : null,
-            'ends_at' => filled($data['ends_at'] ?? null) ? Carbon::parse($data['ends_at']) : null,
-            'is_active' => filled($data['starts_at'] ?? null) || filled($data['ends_at'] ?? null) ? false : $period->is_active,
+            'starts_at' => Carbon::parse($data['starts_at']),
+            'ends_at' => Carbon::parse($data['ends_at']),
         ]);
         $period->assignedUsers()->sync($assigneeIds);
 
@@ -281,9 +263,9 @@ class AdministrativeWeeklyReportController extends Controller
         ]);
         $weekStart = Carbon::parse($data['week_start'])->startOfWeek(Carbon::MONDAY)->startOfDay();
         $period = $this->resolvePeriod($request, $weekStart);
-        if (! $period || (! $request->user()->isLeader() && ! $period->isCurrentlyActive())) {
+        if (! $period || ! $period->isSubmissionOpen()) {
             throw ValidationException::withMessages([
-                'items' => 'Kỳ báo cáo này chưa được admin bật hoạt động hoặc đã được tắt.',
+                'items' => 'Đã ngoài thời gian nhận báo cáo của kỳ này. Bạn vẫn có thể xem nội dung đã lưu.',
             ]);
         }
         if (! $request->user()->isAdmin() && ! $period->assignedUsers()->whereKey($request->user()->id)->exists()) {
@@ -369,6 +351,10 @@ class AdministrativeWeeklyReportController extends Controller
     public function destroyReport(Request $request, AdministrativeWeeklyReport $report): RedirectResponse
     {
         abort_unless($request->user()->isLeader() || $report->user_id === $request->user()->id, 403);
+        $period = AdministrativeWeeklyPeriod::query()->findOrFail($report->period_id);
+        if ((int) $report->user_id === (int) $request->user()->id && ! $period->isSubmissionOpen()) {
+            return back()->with('warning', 'Đã ngoài thời gian nhận báo cáo. Nội dung chỉ còn để xem, không thể xóa hoặc chỉnh sửa.');
+        }
         $periodId = $report->period_id;
         $report->delete();
 
@@ -383,11 +369,9 @@ class AdministrativeWeeklyReportController extends Controller
         $period = $this->resolvePeriod($request, $weekStart)?->load('assignedUsers:id,name,email');
         abort_unless($period, 404, 'Không tìm thấy kỳ báo cáo tuần.');
         $weekStart = $period->week_start->copy();
-        $assignedUserIds = $period?->assignedUsers->pluck('id') ?? collect();
         $reports = AdministrativeWeeklyReport::query()
             ->with(['user:id,name,email', 'items'])
             ->where('period_id', $period->id)
-            ->whereIn('user_id', $assignedUserIds)
             ->where('status', 'submitted')
             ->orderBy('submitted_at')
             ->get();
@@ -401,6 +385,14 @@ class AdministrativeWeeklyReportController extends Controller
             ->whereNotIn('id', $submittedUserIds)
             ->sortBy('name')->values();
         $compilation = AdministrativeWeeklyCompilation::query()->where('period_id', $period->id)->first();
+        $compiledSourceIds = collect($compilation?->source_item_ids ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique();
+        $uncompiledItemCount = $allItems->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->diff($compiledSourceIds)
+            ->count();
         $assignedCount = $period?->assignedUsers->count() ?? 0;
         $submittedCount = $reports->count();
         $onTimeCount = $reports->filter(fn ($report) => $report->submitted_at?->lessThanOrEqualTo($report->due_date->copy()->endOfDay()))->count();
@@ -420,6 +412,7 @@ class AdministrativeWeeklyReportController extends Controller
             'duplicateItemIds' => collect($duplicateGroups)->flatMap(fn (array $group) => $group['item_ids'])->unique(),
             'missingUsers' => $missingUsers,
             'compilation' => $compilation,
+            'uncompiledItemCount' => $uncompiledItemCount,
             'types' => self::TYPES,
             'workAreas' => self::WORK_AREAS,
             'workArea' => $workArea,
@@ -442,6 +435,7 @@ class AdministrativeWeeklyReportController extends Controller
             'selected_item_ids.*' => ['integer'],
             'content' => ['nullable', 'string', 'max:50000'],
             'official_content' => ['nullable', 'string', 'max:50000'],
+            'merge_all' => ['nullable', 'boolean'],
             'regenerate' => ['nullable', 'boolean'],
             'regenerate_official' => ['nullable', 'boolean'],
         ]);
@@ -449,37 +443,50 @@ class AdministrativeWeeklyReportController extends Controller
         $period = $this->resolvePeriod($request, $weekStart)?->load('assignedUsers:id');
         abort_unless($period, 404, 'Không tìm thấy kỳ báo cáo tuần.');
         $weekStart = $period->week_start->copy();
-        $assignedUserIds = $period->assignedUsers->pluck('id');
         $availableItems = AdministrativeWeeklyReportItem::query()
             ->with('report.user:id,name')
-            ->whereHas('report', fn ($query) => $query->where('period_id', $period->id)->where('status', 'submitted')->whereIn('user_id', $assignedUserIds))
+            ->whereHas('report', fn ($query) => $query->where('period_id', $period->id)->where('status', 'submitted'))
             ->get();
-        $selectedIds = collect($data['selected_item_ids'] ?? [])->map(fn ($id) => (int) $id)->unique();
-        $selected = $availableItems->whereIn('id', $selectedIds)->values();
+        // Bản tổng hợp luôn lấy toàn bộ nội dung của mọi báo cáo đã gửi trong kỳ.
+        // Người quản lý chỉ xem từng ý ở giao diện, không được vô tình bỏ sót ý khi gộp.
+        $selected = $availableItems->values();
 
         if ($selected->isEmpty() && trim((string) ($data['content'] ?? '')) === '') {
-            throw ValidationException::withMessages(['selected_item_ids' => 'Hãy chọn ít nhất một ý hoặc nhập nội dung tổng hợp.']);
-        }
-        if ($selectedIds->diff($availableItems->pluck('id'))->isNotEmpty()) {
-            abort(422, 'Có nội dung không thuộc báo cáo tuần đã gửi.');
+            throw ValidationException::withMessages(['content' => 'Chưa có báo cáo nào được gửi trong kỳ này để gộp.']);
         }
 
-        $uniqueSelected = $this->reviewer->deduplicate($selected);
+        $existingCompilation = AdministrativeWeeklyCompilation::query()
+            ->where('period_id', $period->id)
+            ->first();
+        $hasNewSelectedItems = $existingCompilation
+            && $selected->pluck('id')->map(fn ($id) => (int) $id)
+                ->diff(collect($existingCompilation->source_item_ids ?? [])->map(fn ($id) => (int) $id))
+                ->isNotEmpty();
+        if ($hasNewSelectedItems && ! $request->boolean('merge_all') && ! $request->boolean('regenerate') && ! $request->boolean('regenerate_official')) {
+            throw ValidationException::withMessages([
+                'selected_item_ids' => 'Có nội dung mới chưa được tổng hợp. Hãy dùng nút “Gộp tất cả báo cáo đã gửi” để lấy đủ dữ liệu trước khi lưu.',
+            ]);
+        }
+
+        // Giữ nguyên mọi ý mà người quản lý đã chọn. Nội dung gần giống chỉ là
+        // cảnh báo để đối chiếu, không được tự động xóa vì có thể khác số liệu,
+        // người thực hiện hoặc kết quả.
+        $selectedForCompilation = $selected;
         $regenerateOfficial = $request->boolean('regenerate_official');
-        $content = $request->boolean('regenerate') ? '' : trim((string) ($data['content'] ?? ''));
+        $content = ($request->boolean('merge_all') || $request->boolean('regenerate') || $request->boolean('regenerate_official')) ? '' : trim((string) ($data['content'] ?? ''));
         $usedAi = false;
-        if ($content === '' && ! $regenerateOfficial) {
-            $content = $this->aiCompiler->compile($uniqueSelected);
+        if ($content === '' && $request->boolean('regenerate') && ! $regenerateOfficial) {
+            $content = $this->aiCompiler->compile($selectedForCompilation);
             $usedAi = $content !== null;
         }
         if ($content === null || $content === '') {
-            $content = collect(self::TYPES)->map(function (string $heading, string $type) use ($uniqueSelected): string {
+            $content = collect(self::TYPES)->map(function (string $heading, string $type) use ($selectedForCompilation): string {
                 $number = array_search($type, array_keys(self::TYPES), true) + 1;
                 if ($type === 'results') {
                     $heading .= ' (căn cứ theo nhiệm vụ được giao trong phân công công việc)';
                 }
 
-                $lines = $uniqueSelected->where('type', $type)
+                $lines = $selectedForCompilation->where('type', $type)
                     ->flatMap(fn ($item) => $this->plainTextLines($item->content))
                     ->map(fn (string $line) => '- '.$line)
                     ->implode("\n");
@@ -491,7 +498,7 @@ class AdministrativeWeeklyReportController extends Controller
         $officialContent = $regenerateOfficial ? '' : trim((string) ($data['official_content'] ?? ''));
         $usedOfficialAi = false;
         if ($officialContent === '' && $regenerateOfficial) {
-            $officialContent = $this->aiCompiler->compileOfficial($uniqueSelected);
+            $officialContent = $this->aiCompiler->compileOfficial($selectedForCompilation);
             $usedOfficialAi = $officialContent !== null;
         }
         if ($officialContent === null || $officialContent === '') {
@@ -501,9 +508,9 @@ class AdministrativeWeeklyReportController extends Controller
                 'teaching' => 'Công tác giảng dạy',
                 'other' => 'Công tác khác',
             ];
-            $officialContent = collect($officialHeadings)->map(function (string $heading, string $workArea) use ($uniqueSelected, $officialHeadings): string {
+            $officialContent = collect($officialHeadings)->map(function (string $heading, string $workArea) use ($selectedForCompilation, $officialHeadings): string {
                 $number = array_search($workArea, array_keys($officialHeadings), true) + 1;
-                $lines = $uniqueSelected->where('work_area', $workArea)
+                $lines = $selectedForCompilation->where('work_area', $workArea)
                     ->flatMap(fn ($item) => $this->plainTextLines($item->content))
                     ->map(fn (string $line) => '- '.$line)
                     ->implode("\n");
@@ -519,7 +526,7 @@ class AdministrativeWeeklyReportController extends Controller
                 'week_end' => $weekStart->copy()->endOfWeek(Carbon::SUNDAY)->toDateString(),
                 'content' => $content,
                 'official_content' => $officialContent,
-                'source_item_ids' => $uniqueSelected->pluck('id')->values()->all(),
+                'source_item_ids' => $selectedForCompilation->pluck('id')->values()->all(),
                 'duplicate_groups' => $this->reviewer->duplicateGroups($availableItems),
                 'compiled_by' => $request->user()->id,
                 'compiled_at' => now(),
@@ -529,7 +536,7 @@ class AdministrativeWeeklyReportController extends Controller
         return redirect()->route('administration.weekly.summary', ['period' => $period->id])
             ->with('success', ($usedAi || $usedOfficialAi)
                 ? 'AI đã lọc trùng, phân loại và lưu nội dung tổng hợp cùng báo cáo chính thức.'
-                : 'Đã lưu bản tổng hợp và mỗi nội dung trùng chỉ giữ một ý. Muốn AI tự phân tích, hãy cấu hình OPENAI_API_KEY.');
+                : 'Đã gộp đầy đủ mọi báo cáo đã gửi trong kỳ. Nội dung được giữ nguyên; các ý gần trùng chỉ được cảnh báo để quản lý tự đối chiếu.');
     }
 
     private function weekStart(mixed $value): Carbon

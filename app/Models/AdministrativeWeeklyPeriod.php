@@ -24,27 +24,27 @@ class AdministrativeWeeklyPeriod extends Model
         ];
     }
 
-    public function isCurrentlyActive(): bool
+    public function submissionStartsAt()
     {
-        if ($this->starts_at || $this->ends_at) {
-            return (! $this->starts_at || now()->greaterThanOrEqualTo($this->starts_at))
-                && (! $this->ends_at || now()->lessThan($this->ends_at));
-        }
+        return $this->starts_at?->copy() ?? $this->week_start->copy()->startOfDay();
+    }
 
-        return $this->is_active;
+    public function submissionEndsAt()
+    {
+        return $this->ends_at?->copy() ?? $this->due_date->copy()->endOfDay();
+    }
+
+    public function isSubmissionOpen(): bool
+    {
+        return now()->greaterThanOrEqualTo($this->submissionStartsAt())
+            && now()->lessThanOrEqualTo($this->submissionEndsAt());
     }
 
     public function scopeActiveNow(Builder $query): Builder
     {
-        return $query->where(function (Builder $active): void {
-            $active->where(function (Builder $manual): void {
-                $manual->whereNull('starts_at')->whereNull('ends_at')->where('is_active', true);
-            })->orWhere(function (Builder $scheduled): void {
-                $scheduled->where(fn (Builder $start) => $start->whereNull('starts_at')->orWhere('starts_at', '<=', now()))
-                    ->where(fn (Builder $end) => $end->whereNull('ends_at')->orWhere('ends_at', '>', now()))
-                    ->where(fn (Builder $hasSchedule) => $hasSchedule->whereNotNull('starts_at')->orWhereNotNull('ends_at'));
-            });
-        });
+        return $query
+            ->where(fn (Builder $start) => $start->whereNotNull('starts_at')->where('starts_at', '<=', now()))
+            ->where(fn (Builder $end) => $end->whereNotNull('ends_at')->where('ends_at', '>=', now()));
     }
 
     public function creator(): BelongsTo

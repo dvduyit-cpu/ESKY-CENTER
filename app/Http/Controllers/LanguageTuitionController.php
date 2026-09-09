@@ -1190,6 +1190,16 @@ class LanguageTuitionController extends Controller
         }
 
         $charge->loadMissing('lead');
+        $paymentIds=$charge->payments()->pluck('id');
+        if ($charge->status!=='paid'||$charge->lead?->status!=='registered') {
+            LanguageMonthlyTargetRecord::whereIn('language_tuition_payment_id',$paymentIds)->delete();
+            return;
+        }
+        $finalPayment=$charge->payments()->where('receipt_status','confirmed')->orderByDesc('paid_at')->orderByDesc('id')->first();
+        if (! $finalPayment || (int)$finalPayment->id!==(int)$payment->id) return;
+        LanguageMonthlyTargetRecord::whereIn('language_tuition_payment_id',$paymentIds)
+            ->where('language_tuition_payment_id','!=',$finalPayment->id)
+            ->delete();
         LanguageMonthlyTargetRecord::updateOrCreate(
             ['language_tuition_payment_id' => $payment->id],
             [
@@ -1200,7 +1210,7 @@ class LanguageTuitionController extends Controller
                 'language_collaborator_id' => $charge->lead?->language_collaborator_id,
                 'language_course_id' => $charge->language_course_id,
                 'quantity' => 1,
-                'revenue' => (float) $payment->amount + (float) $payment->book_amount,
+                'revenue' => (float) $charge->payable_amount,
                 'note' => 'Thu học phí '.$charge->code,
             ]
         );

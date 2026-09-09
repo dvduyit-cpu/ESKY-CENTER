@@ -78,10 +78,12 @@ class WorkTaskController extends Controller
         }
         $taskStats['assigned'] = (clone $assignedTaskBase)->count();
         $status = $request->string('status')->toString();
-        $query = ($status === 'closed' ? (clone $base)->whereNotNull('closed_at') : clone $activeBase)
-            ->with(['creator', 'assignees.user']);
+        $query = ($status === 'closed' ? (clone $base)->whereNotNull('closed_at') : ($status === 'pinned' ? clone $base : clone $activeBase))
+            ->with(['creator', 'assignees.user'])
+            ->withExists(['pinnedByUsers as is_pinned' => fn ($pins) => $pins->whereKey($me->id)]);
         if ($request->filled('q')) $query->where(fn ($q) => $q->where('title','like','%'.$request->string('q').'%')->orWhere('description','like','%'.$request->string('q').'%'));
         match ($status) {
+            'pinned' => $query->whereHas('pinnedByUsers', fn ($pins) => $pins->whereKey($me->id)),
             'completed' => $query->whereDoesntHave('assignees', fn ($q) => $q->whereNull('completed_at')),
             'personal_completed' => $query->whereHas('assignees', fn ($q) => $q->where('user_id',$me->id)->whereNotNull('completed_at')),
             'overdue' => $query->where('due_at','<',now())->whereHas('assignees', fn ($q) => $q->whereNull('completed_at')),
@@ -90,7 +92,8 @@ class WorkTaskController extends Controller
             'acknowledged' => $query->whereHas('assignees', fn ($q) => $q->where('user_id',$me->id)->whereNotNull('acknowledged_at')->whereNull('completed_at')),
             default => null,
         };
-        $tasks = $query->latest('due_at')->paginate(\App\Support\Pagination::perPage())->withQueryString();
+        $tasks = $query->orderByDesc('is_pinned')->latest('due_at')->paginate(\App\Support\Pagination::perPage())->withQueryString();
+        $pinnedTaskCount=(clone $base)->whereHas('pinnedByUsers',fn($pins)=>$pins->whereKey($me->id))->count();
         $canCreateTasks = $me->allowed('work_tasks', 'create');
         $canDeleteTasks = $me->allowed('work_tasks', 'delete');
         $showPersonalAssignmentStats = ! $me->isAdmin() && ! $me->isDirector();
@@ -115,7 +118,7 @@ class WorkTaskController extends Controller
             'overdue' => (clone $personalBase)->whereNull('completed_at')->where('scheduled_for', '<', now())->count(),
         ];
         $personalPlans = (clone $personalBase)->whereNull('completed_at')->orderBy('scheduled_for')->limit(8)->get();
-        return view('work-tasks.index', compact('tasks','users','taskStats','memberTaskStats','personalPlans','personalStats','filterYears','filterYear','filterMonth','filterQuarter','canCreateTasks','canDeleteTasks','showPersonalAssignmentStats'));
+        return view('work-tasks.index', compact('tasks','users','taskStats','memberTaskStats','personalPlans','personalStats','filterYears','filterYear','filterMonth','filterQuarter','canCreateTasks','canDeleteTasks','showPersonalAssignmentStats','pinnedTaskCount'));
     }
 
     public function store(Request $request): RedirectResponse
@@ -213,7 +216,7 @@ class WorkTaskController extends Controller
     public function show(Request $request, WorkTask $task): View
     {
         $this->ensureCanViewTask($request, $task);
-        $task->load(['creator', 'assignees.user', 'attachments']);
+        $task->load(['creator', 'assignees.user', 'attachments', 'pinnedByUsers'=>fn($pins)=>$pins->whereKey($request->user()->id)]);
         $comments = $task->comments()
             ->with(['user', 'parent.user', 'attachments'])
             ->latest()
@@ -231,10 +234,36 @@ class WorkTaskController extends Controller
         $canEdit = $isCreator && $request->user()->allowed('work_tasks', 'update');
         $canClose = $canEdit;
         $canDelete = $isCreator && $request->user()->allowed('work_tasks', 'delete');
+        $canPin = $isCreator || $task->assignees->contains('user_id', $request->user()->id);
+        $isPinned = $task->pinnedByUsers->isNotEmpty();
         $users = $canEdit
             ? User::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'email'])
             : collect();
-        return view('work-tasks.show', compact('task', 'comments', 'activities', 'users', 'canParticipate', 'canEdit', 'canClose', 'canDelete'));
+        return view('work-tasks.show', compact('task', 'comments', 'activities', 'users', 'canParticipate', 'canEdit', 'canClose', 'canDelete', 'canPin', 'isPinned'));
+    }
+
+    public function togglePin(Request $request, WorkTask $task): RedirectResponse
+    {
+        $user=$request->user();
+        $canPin=(int)$task->created_by_id===(int)$user->id
+            || $task->assignees()->where('user_id',$user->id)->exists();
+        abort_unless($canPin,403,'Bạn chỉ có thể ghim công việc do mình giao hoặc được giao cho mình.');
+
+        $pin=DB::table('work_task_pins')
+            ->where('work_task_id',$task->id)
+            ->where('user_id',$user->id);
+        if($pin->exists()){
+            $pin->delete();
+            return back()->with('success','Đã bỏ ghim công việc.');
+        }
+
+        DB::table('work_task_pins')->insertOrIgnore([
+            'work_task_id'=>$task->id,
+            'user_id'=>$user->id,
+            'created_at'=>now(),
+            'updated_at'=>now(),
+        ]);
+        return back()->with('success','Đã ghim công việc vào danh sách cá nhân.');
     }
 
     public function update(Request $request, WorkTask $task): RedirectResponse

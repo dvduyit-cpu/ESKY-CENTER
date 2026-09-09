@@ -35,11 +35,14 @@ class ThemeController extends Controller
             'bankAccountNumber' => SystemSetting::valueOf('bank_account_number', ''),
             'bankAccountName' => SystemSetting::valueOf('bank_account_name', ''),
             'bankBranch' => SystemSetting::valueOf('bank_branch', ''),
-            'openAiEnabled' => $openAi->enabled(),
-            'openAiKeyConfigured' => $openAi->hasApiKey(),
-            'openAiKeyStored' => $openAi->hasStoredApiKey(),
-            'openAiModel' => $openAi->model(),
-            'openAiTimeout' => $openAi->timeout(),
+            'aiEnabled' => $openAi->enabled(),
+            'aiProvider' => $openAi->provider(),
+            'aiProviders' => OpenAiSettings::PROVIDERS,
+            'aiModels' => OpenAiSettings::MODELS,
+            'aiKeyConfigured' => $openAi->hasApiKey(),
+            'aiKeyStored' => $openAi->hasStoredApiKey(),
+            'aiModel' => $openAi->model(),
+            'aiTimeout' => $openAi->timeout(),
         ]);
     }
 
@@ -66,22 +69,29 @@ class ThemeController extends Controller
             $this->saveSettings($data);
         } elseif ($section === 'ai') {
             $data = $request->validate([
-                'openai_enabled' => 'nullable|boolean',
-                'openai_api_key' => 'nullable|string|max:500',
-                'remove_openai_api_key' => 'nullable|boolean',
-                'openai_report_model' => ['required', Rule::in(OpenAiSettings::MODELS)],
-                'openai_timeout' => 'required|integer|in:15,30,45,60,90',
+                'ai_enabled' => 'nullable|boolean',
+                'ai_provider' => ['required', Rule::in(array_keys(OpenAiSettings::PROVIDERS))],
+                'ai_api_key' => 'nullable|string|max:500',
+                'remove_ai_api_key' => 'nullable|boolean',
+                'ai_report_model' => ['required', 'string', function (string $attribute, mixed $value, \Closure $fail) use ($request): void {
+                    if (! app(OpenAiSettings::class)->validModel((string) $request->input('ai_provider'), (string) $value)) {
+                        $fail('Model không phù hợp với nhà cung cấp AI đã chọn.');
+                    }
+                }],
+                'ai_timeout' => 'required|integer|in:15,30,45,60,90',
             ]);
 
             $settings = [
-                'openai_enabled' => $request->boolean('openai_enabled') ? '1' : '0',
-                'openai_report_model' => $data['openai_report_model'],
-                'openai_timeout' => (string) $data['openai_timeout'],
+                'ai_enabled' => $request->boolean('ai_enabled') ? '1' : '0',
+                'ai_report_provider' => $data['ai_provider'],
+                'ai_report_model' => $data['ai_report_model'],
+                'ai_timeout' => (string) $data['ai_timeout'],
             ];
-            if ($request->boolean('remove_openai_api_key')) {
-                $settings['openai_api_key_encrypted'] = '';
-            } elseif (trim((string) ($data['openai_api_key'] ?? '')) !== '') {
-                $settings['openai_api_key_encrypted'] = Crypt::encryptString(trim($data['openai_api_key']));
+            $apiKeySetting = 'ai_'.$data['ai_provider'].'_api_key_encrypted';
+            if ($request->boolean('remove_ai_api_key')) {
+                $settings[$apiKeySetting] = '';
+            } elseif (trim((string) ($data['ai_api_key'] ?? '')) !== '') {
+                $settings[$apiKeySetting] = Crypt::encryptString(trim($data['ai_api_key']));
             }
             $this->saveSettings($settings);
         } elseif ($section === 'payment') {

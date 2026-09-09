@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{LanguageCollaborator,LanguageLead,User};
+use App\Models\{LanguageCollaborator,LanguageCourse,LanguageLead,User};
 use App\Support\{CenterCode,ExcelExporter};
 use Illuminate\Http\{JsonResponse,RedirectResponse,Request};
 use Illuminate\Support\Facades\DB;
@@ -83,6 +83,103 @@ class LanguageCollaboratorController extends Controller
     public function export()
     {
         return ExcelExporter::download('cong-tac-vien-'.date('Ymd').'.xlsx',['Mã','Họ tên','Điện thoại','Email','Hoa hồng %','Trạng thái'],LanguageCollaborator::withTrashed()->get()->map(fn($item)=>[$item->code,$item->name,$item->phone,$item->email,$item->commission_rate,$item->active?'Hoạt động':'Ngừng']));
+    }
+
+    public function show(Request $request, LanguageCollaborator $languageCollaborator): View
+    {
+        $filters=$this->referralFilters($request);
+        $query=$this->referralQuery($languageCollaborator,$filters);
+        $summary=(clone $query)->selectRaw("COUNT(*) as referral_count, SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END) as registered_count, SUM(CASE WHEN converted_student_id IS NOT NULL THEN 1 ELSE 0 END) as converted_count")->first();
+        $monthlySummary=$languageCollaborator->leads()
+            ->whereYear('received_at',$filters['year'])
+            ->when($filters['status'],fn($query,$status)=>$query->where('status',$status))
+            ->when($filters['course'],fn($query,$course)=>$query->where('language_course_id',$course))
+            ->when($filters['q'],fn($query,$search)=>$query->where(fn($builder)=>$builder
+                ->where('name','like',"%{$search}%")
+                ->orWhere('code','like',"%{$search}%")
+                ->orWhere('phone','like',"%{$search}%")))
+            ->selectRaw("MONTH(received_at) as month, COUNT(*) as referral_count, SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END) as registered_count, SUM(CASE WHEN converted_student_id IS NOT NULL THEN 1 ELSE 0 END) as converted_count")
+            ->groupByRaw('MONTH(received_at)')
+            ->orderBy('month')
+            ->get()
+            ->keyBy('month');
+
+        return view('language.collaborators.show',[
+            'item'=>$languageCollaborator->load('user'),
+            'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
+            'filters'=>$filters,
+            'summary'=>$summary,
+            'monthlySummary'=>$monthlySummary,
+            'years'=>$this->referralYears($languageCollaborator),
+            'courses'=>LanguageCourse::withTrashed()->whereIn('id',$languageCollaborator->leads()->whereNotNull('language_course_id')->select('language_course_id'))->orderBy('name')->get(['id','name']),
+        ]);
+    }
+
+    public function exportReferrals(Request $request, LanguageCollaborator $languageCollaborator)
+    {
+        $filters=$this->referralFilters($request);
+        $statusLabels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'];
+        $rows=$this->referralQuery($languageCollaborator,$filters)->get()->map(fn($lead)=>[
+            $lead->code,
+            $lead->name,
+            $lead->phone,
+            $lead->email,
+            $lead->received_at?->format('d/m/Y'),
+            $lead->course?->name,
+            $lead->consultant?->name,
+            $statusLabels[$lead->status]??$lead->status,
+            $lead->convertedStudent?->code,
+            $lead->convertedStudent?->name,
+        ]);
+        $period=$filters['year'].($filters['month']?'-'.str_pad((string)$filters['month'],2,'0',STR_PAD_LEFT):'');
+
+        return ExcelExporter::download(
+            'hoc-vien-gioi-thieu-'.$languageCollaborator->code.'-'.$period.'.xlsx',
+            ['Mã khách','Họ tên','Điện thoại','Email','Ngày tiếp nhận','Khóa học','Tư vấn viên','Trạng thái','Mã học viên','Học viên chính thức'],
+            $rows
+        );
+    }
+
+    private function referralFilters(Request $request): array
+    {
+        $validated=$request->validate([
+            'q'=>['nullable','string','max:255'],
+            'month'=>['nullable','integer','between:1,12'],
+            'year'=>['nullable','integer','between:2020,2100'],
+            'status'=>['nullable','in:new,contacted,consulting,placement_test,waiting,registered,not_interested,follow_up'],
+            'course'=>['nullable','integer'],
+        ]);
+
+        return [
+            'q'=>trim((string)($validated['q']??'')),
+            'month'=>isset($validated['month'])?(int)$validated['month']:null,
+            'year'=>isset($validated['year'])?(int)$validated['year']:(int)now()->year,
+            'status'=>$validated['status']??null,
+            'course'=>isset($validated['course'])?(int)$validated['course']:null,
+        ];
+    }
+
+    private function referralQuery(LanguageCollaborator $languageCollaborator, array $filters)
+    {
+        return $languageCollaborator->leads()
+            ->with(['course','consultant','convertedStudent'])
+            ->whereYear('received_at',$filters['year'])
+            ->when($filters['month'],fn($query,$month)=>$query->whereMonth('received_at',$month))
+            ->when($filters['status'],fn($query,$status)=>$query->where('status',$status))
+            ->when($filters['course'],fn($query,$course)=>$query->where('language_course_id',$course))
+            ->when($filters['q'],fn($query,$search)=>$query->where(fn($builder)=>$builder
+                ->where('name','like',"%{$search}%")
+                ->orWhere('code','like',"%{$search}%")
+                ->orWhere('phone','like',"%{$search}%")))
+            ->orderByDesc('received_at')
+            ->orderByDesc('id');
+    }
+
+    private function referralYears(LanguageCollaborator $languageCollaborator)
+    {
+        return $languageCollaborator->leads()->whereNotNull('received_at')
+            ->selectRaw('YEAR(received_at) as year')->distinct()->pluck('year')
+            ->map(fn($year)=>(int)$year)->push((int)now()->year)->unique()->sortDesc()->values();
     }
 
     private function form(LanguageCollaborator $item): View

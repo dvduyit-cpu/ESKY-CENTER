@@ -42,7 +42,9 @@
         </nav>
         @php
             $me = auth()->user();
-            $showWeeklyReportMenu = $me->isLeader() || \App\Models\AdministrativeWeeklyPeriod::query()->activeNow()->exists();
+            $showWeeklyReportMenu = $me->isLeader() || \App\Models\AdministrativeWeeklyPeriod::query()
+                ->whereHas('assignedUsers', fn ($users) => $users->whereKey($me->id))
+                ->exists();
         @endphp
         <div class="sidebar-label">Công việc</div>
         <nav class="sidebar-nav nav flex-column">

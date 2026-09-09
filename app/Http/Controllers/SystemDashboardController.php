@@ -39,6 +39,10 @@ class SystemDashboardController extends Controller
         $periodLeads=(clone $leads)->whereBetween('created_at',[$start,$end]);
         $periodStudents=(clone $students)->whereBetween('registered_at',[$start,$end]);
         $registeredLeads=(clone $periodLeads)->where('status','registered')->count();
+        $classCompletionStats=[
+            'awaiting_registrar'=>(clone $classes)->whereNotNull('completion_requested_at')->whereNotIn('status',['completed','cancelled'])->count(),
+            'awaiting_teacher'=>$this->completionDueWithoutRequest(clone $classes)->whereNotIn('status',['completed','cancelled'])->count(),
+        ];
         $financial=['receivable'=>(float)(clone $charges)->sum('payable_amount'),'collected'=>(float)(clone $receipts)->sum('amount'),'outstanding'=>(float)(clone $charges)->selectRaw('COALESCE(SUM(GREATEST(payable_amount-paid_amount-credit_amount,0)),0) total')->value('total'),'expense'=>(float)(clone $expenses)->sum('payment_amount')];
         $financial['net']=$financial['collected']-$financial['expense'];
         $workTasks=WorkTask::query()->whereBetween('created_at',[$start,$end]);
@@ -118,8 +122,8 @@ class SystemDashboardController extends Controller
         if($user->allowed('administration')){
             $weeklyPeriod=AdministrativeWeeklyPeriod::query()
                 ->with('assignedUsers:id,name,email')
-                ->when(!$user->isLeader(),fn($query)=>$query->activeNow()->whereHas('assignedUsers',fn($users)=>$users->whereKey($user->id)))
-                ->orderByDesc('is_active')->latest('week_start')->latest('id')->first();
+                ->when(!$user->isLeader(),fn($query)=>$query->whereHas('assignedUsers',fn($users)=>$users->whereKey($user->id)))
+                ->latest('week_start')->latest('id')->first();
             $weeklyStart=$weeklyPeriod?->week_start;
             if($user->isLeader()){
                 if($weeklyPeriod){
@@ -127,7 +131,7 @@ class SystemDashboardController extends Controller
                     $submittedCount=AdministrativeWeeklyReport::query()->where('period_id',$weeklyPeriod->id)->where('status','submitted')->whereIn('user_id',$eligibleUserIds)->count();
                     $weeklyReport=$user->isAdmin()||!$eligibleUserIds->contains($user->id)?null:AdministrativeWeeklyReport::query()->where('user_id',$user->id)->where('period_id',$weeklyPeriod->id)->first();
                     $weeklyReportCard=[
-                        'mode'=>'management','period_id'=>$weeklyPeriod->id,'title'=>$weeklyPeriod->title,'week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,'is_active'=>$weeklyPeriod->isCurrentlyActive(),
+                        'mode'=>'management','period_id'=>$weeklyPeriod->id,'title'=>$weeklyPeriod->title,'week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,'is_active'=>$weeklyPeriod->isSubmissionOpen(),
                         'submitted_count'=>$submittedCount,'missing_count'=>max(0,$eligibleUserIds->count()-$submittedCount),'report'=>$weeklyReport,'is_assigned'=>$eligibleUserIds->contains($user->id),
                     ];
                 }
@@ -135,7 +139,7 @@ class SystemDashboardController extends Controller
                 $weeklyReport=AdministrativeWeeklyReport::query()->where('user_id',$user->id)->where('period_id',$weeklyPeriod->id)->first();
                 $weeklyReportCard=[
                     'mode'=>'personal','period_id'=>$weeklyPeriod->id,'title'=>$weeklyPeriod->title,'week_start'=>$weeklyStart,'week_end'=>$weeklyPeriod->week_end,
-                    'report'=>$weeklyReport,
+                    'report'=>$weeklyReport,'is_active'=>$weeklyPeriod->isSubmissionOpen(),
                 ];
             }
         }
@@ -146,6 +150,7 @@ class SystemDashboardController extends Controller
             'students'=>(clone $periodStudents)->count(),'leads'=>(clone $periodLeads)->count(),'consulted'=>(clone $periodLeads)->where(fn($q)=>$q->whereNotNull('consultation')->orWhere('status','!=','new'))->count(),'registeredLeads'=>$registeredLeads,
             'conversionRate'=>$periodLeads->count()?round($registeredLeads/$periodLeads->count()*100,1):0,
             'activeClasses'=>(clone $classes)->where('status','active')->count(),'upcomingClasses'=>(clone $classes)->whereIn('status',['recruiting','upcoming'])->count(),
+            'classCompletionStats'=>$classCompletionStats,
             'leadStatuses'=>(clone $periodLeads)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'studentStatuses'=>(clone $periodStudents)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
             'classStatuses'=>(clone $classes)->selectRaw('status,COUNT(*) total')->groupBy('status')->pluck('total','status'),
@@ -159,7 +164,7 @@ class SystemDashboardController extends Controller
     public function export(Request $request)
     {
         $data=$this->index($request)->getData(); $period=$data['period'];
-        $rows=[['Hệ thống','Tài khoản hoạt động',$data['activeUsers'],'tài khoản',$period],['Hệ thống','Nhân sự hoạt động',$data['activePersonnel'],'nhân sự',$period],['KPI','Chỉ tiêu năm',$data['kpiTotals']['target_quantity'],'KPI','Năm '.$data['year']],['KPI','Đã thực hiện',$data['kpiTotals']['actual_quantity'],'KPI','Năm '.$data['year']],['Tuyển sinh','Khách hàng mới',$data['leads'],'lượt',$period],['Tuyển sinh','Đã tư vấn',$data['consulted'],'lượt',$period],['Tuyển sinh','Đã đăng ký',$data['registeredLeads'],'lượt',$period],['Tuyển sinh','Tỷ lệ chuyển đổi',$data['conversionRate'],'%',$period],['Học viên','Học viên mới',$data['students'],'học viên',$period],['Lớp học','Đang hoạt động',$data['activeClasses'],'lớp',$period],['Lớp học','Đang/sắp tuyển',$data['upcomingClasses'],'lớp',$period],['Tài chính','Phải thu',$data['financial']['receivable'],'đ',$period],['Tài chính','Đã thu',$data['financial']['collected'],'đ',$period],['Tài chính','Còn nợ',$data['financial']['outstanding'],'đ',$period],['Tài chính','Đã chi',$data['financial']['expense'],'đ',$period],['Tài chính','Thu ròng',$data['financial']['net'],'đ',$period]];
+        $rows=[['Hệ thống','Tài khoản hoạt động',$data['activeUsers'],'tài khoản',$period],['Hệ thống','Nhân sự hoạt động',$data['activePersonnel'],'nhân sự',$period],['KPI','Chỉ tiêu năm',$data['kpiTotals']['target_quantity'],'KPI','Năm '.$data['year']],['KPI','Đã thực hiện',$data['kpiTotals']['actual_quantity'],'KPI','Năm '.$data['year']],['Tuyển sinh','Khách hàng mới',$data['leads'],'lượt',$period],['Tuyển sinh','Đã tư vấn',$data['consulted'],'lượt',$period],['Tuyển sinh','Đã đăng ký',$data['registeredLeads'],'lượt',$period],['Tuyển sinh','Tỷ lệ chuyển đổi',$data['conversionRate'],'%',$period],['Học viên','Học viên mới',$data['students'],'học viên',$period],['Lớp học','Đang hoạt động',$data['activeClasses'],'lớp',$period],['Lớp học','Đang/sắp tuyển',$data['upcomingClasses'],'lớp',$period],['Lớp học','Chờ giáo vụ đóng',$data['classCompletionStats']['awaiting_registrar'],'lớp','Hiện tại'],['Lớp học','Đủ điều kiện, chưa đề nghị',$data['classCompletionStats']['awaiting_teacher'],'lớp','Hiện tại'],['Tài chính','Phải thu',$data['financial']['receivable'],'đ',$period],['Tài chính','Đã thu',$data['financial']['collected'],'đ',$period],['Tài chính','Còn nợ',$data['financial']['outstanding'],'đ',$period],['Tài chính','Đã chi',$data['financial']['expense'],'đ',$period],['Tài chính','Thu ròng',$data['financial']['net'],'đ',$period]];
         array_splice($rows,2,0,[
             ['Công việc','Tổng công việc đã giao',$data['workTaskStats']['total'],'công việc',$period],
             ['Công việc','Lượt phân công',$data['workTaskStats']['assignments'],'lượt',$period],
@@ -180,6 +185,21 @@ class SystemDashboardController extends Controller
         foreach($data['classStatuses'] as $status=>$total)$rows[]=['Trạng thái lớp học',$status,$total,'lớp',$period];
         foreach($data['tuitionStatuses'] as $status=>$total)$rows[]=['Trạng thái học phí',$status,$total,'khoản thu',$period];
         return ExcelExporter::download('tong-quan-toan-he-thong-'.date('Ymd-His').'.xlsx',['Nhóm','Chỉ số','Giá trị','Đơn vị','Kỳ lọc'],$rows);
+    }
+
+    private function completionDueWithoutRequest($query)
+    {
+        return $query
+            ->whereNull('completion_requested_at')
+            ->where(function ($completionDue) {
+                $completionDue
+                    ->whereDate('expected_end_date', '<=', today())
+                    ->orWhere(function ($completedSessions) {
+                        $completedSessions
+                            ->where('expected_sessions', '>', 0)
+                            ->whereColumn('completed_sessions', '>=', 'expected_sessions');
+                    });
+            });
     }
 
     private function period(Request $request): array

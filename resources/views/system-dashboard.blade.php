@@ -55,6 +55,8 @@
             ['Tài khoản hoạt động', number_format($activeUsers), 'primary', 'bi-person-check-fill', route('users.index'), auth()->user()->allowed('users')],
             ['Học viên mới', number_format($students), 'success', 'bi-mortarboard-fill', route('language-students.index'), auth()->user()->allowed('language_students')],
             ['Lớp đang học', number_format($activeClasses), 'warning', 'bi-easel2-fill', route('language-classes.index'), auth()->user()->allowed('language_classes')],
+            ['Chờ giáo vụ đóng', number_format($classCompletionStats['awaiting_registrar']), 'warning', 'bi-hourglass-split', route('teacher-classes.index', ['completion'=>'requested']), auth()->user()->allowed('teacher_classes')],
+            ['Chờ giáo viên đề nghị', number_format($classCompletionStats['awaiting_teacher']), 'danger', 'bi-send-exclamation', route('teacher-classes.index', ['completion'=>'not_requested']), auth()->user()->allowed('teacher_classes')],
             ['Khách hàng mới', number_format($leads), 'info', 'bi-person-plus-fill', route('language-leads.index'), auth()->user()->allowed('language_leads')],
             ['Thu ròng', number_format($financial['net']) . 'đ', $financial['net'] >= 0 ? 'success' : 'danger', 'bi-graph-up-arrow', route('language-tuition.index'), auth()->user()->allowed('language_tuition')],
         ]
@@ -149,6 +151,8 @@
                     ['Học viên mới', number_format($students), 'text-success'],
                     ['Lớp đang học', number_format($activeClasses), 'text-primary'],
                     ['Đang/sắp tuyển', number_format($upcomingClasses), 'text-warning'],
+                    ['Chờ giáo vụ đóng', number_format($classCompletionStats['awaiting_registrar']), 'text-warning'],
+                    ['Đủ điều kiện, chưa đề nghị', number_format($classCompletionStats['awaiting_teacher']), 'text-danger'],
                     ['Nhân sự hoạt động', number_format($activePersonnel), 'text-info'],
                 ]
                 : [
@@ -201,17 +205,17 @@
             <div class="small text-uppercase fw-semibold opacity-75">{{ $weeklyReportCard['title'] }} · {{ $weeklyReportCard['week_start']->format('d/m') }} - {{ $weeklyReportCard['week_end']->format('d/m/Y') }}</div>
             @if($weeklyReportCard['mode'] === 'management')
                 <h5 class="mb-1">Theo dõi báo cáo tuần của toàn bộ nhân sự</h5>
-                <div class="small">Trạng thái: <strong>{{ $weeklyReportCard['is_active'] ? 'Đang hoạt động' : 'Đã tắt' }}</strong> · Đã gửi: <strong>{{ $weeklyReportCard['submitted_count'] }}</strong> · Chưa gửi: <strong>{{ $weeklyReportCard['missing_count'] }}</strong></div>
+                <div class="small">Trạng thái: <strong>{{ $weeklyReportCard['is_active'] ? 'Đang nhận báo cáo' : 'Đã ngoài thời gian báo cáo' }}</strong> · Đã gửi: <strong>{{ $weeklyReportCard['submitted_count'] }}</strong> · Chưa gửi: <strong>{{ $weeklyReportCard['missing_count'] }}</strong></div>
             @else
-                <h5 class="mb-1">{{ $weeklyReportCard['report']?->status === 'submitted' ? 'Báo cáo tuần đã được gửi' : 'Admin đã mở kỳ báo cáo tuần' }}</h5>
-                <div class="small">Dữ liệu đã lưu vẫn được giữ lại, bạn có thể mở lại để cập nhật khi cần.</div>
+                <h5 class="mb-1">{{ $weeklyReportCard['report']?->status === 'submitted' ? 'Báo cáo tuần đã được gửi' : ($weeklyReportCard['is_active'] ? 'Đang trong thời gian báo cáo' : 'Kỳ báo cáo đã khóa') }}</h5>
+                <div class="small">{{ $weeklyReportCard['is_active'] ? 'Bạn có thể mở kỳ để nhập hoặc cập nhật báo cáo.' : 'Dữ liệu vẫn hiển thị để tra cứu nhưng không thể nhập hoặc chỉnh sửa sau khi hết hạn.' }}</div>
             @endif
         </div>
         @if($weeklyReportCard['mode'] === 'management')
             <div class="d-flex flex-wrap gap-2">
                 @if(!auth()->user()->isAdmin() && $weeklyReportCard['is_assigned'])
-                    <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['period' => $weeklyReportCard['period_id'], 'open' => 1]) }}">
-                        {{ $weeklyReportCard['report']?->status === 'submitted' ? 'Xem báo cáo của tôi' : 'Báo cáo của tôi' }}
+                    <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['period' => $weeklyReportCard['period_id'], 'open' => $weeklyReportCard['is_active'] ? 1 : null]) }}">
+                        {{ $weeklyReportCard['is_active'] ? ($weeklyReportCard['report']?->status === 'submitted' ? 'Xem báo cáo của tôi' : 'Báo cáo của tôi') : 'Xem báo cáo của tôi' }}
                     </a>
                 @endif
                 <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index') }}">
@@ -219,8 +223,8 @@
                 </a>
             </div>
         @else
-            <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['period' => $weeklyReportCard['period_id'], 'open' => 1]) }}">
-                {{ $weeklyReportCard['report'] ? 'Xem báo cáo' : 'Báo cáo ngay' }} <i class="bi bi-arrow-right ms-1"></i>
+            <a class="btn btn-light text-primary" href="{{ route('administration.weekly.index', ['period' => $weeklyReportCard['period_id'], 'open' => $weeklyReportCard['is_active'] ? 1 : null]) }}">
+                {{ $weeklyReportCard['is_active'] ? ($weeklyReportCard['report'] ? 'Xem báo cáo' : 'Báo cáo ngay') : 'Xem kỳ báo cáo' }} <i class="bi bi-arrow-right ms-1"></i>
             </a>
         @endif
     </div>

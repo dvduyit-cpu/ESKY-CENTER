@@ -64,6 +64,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/tasks', [WorkTaskController::class, 'index'])->middleware('permission:work_tasks,view')->name('tasks.index');
         Route::post('/tasks', [WorkTaskController::class, 'store'])->middleware('permission:work_tasks,create')->name('tasks.store');
         Route::get('/tasks/{task}', [WorkTaskController::class, 'show'])->middleware('permission:work_tasks,view')->name('tasks.show');
+        Route::patch('/tasks/{task}/pin', [WorkTaskController::class, 'togglePin'])->middleware('permission:work_tasks,view')->name('tasks.pin');
         Route::put('/tasks/{task}', [WorkTaskController::class, 'update'])->middleware('permission:work_tasks,update')->name('tasks.update');
         Route::patch('/tasks/{task}/acknowledge', [WorkTaskController::class, 'acknowledge'])->middleware('permission:work_tasks,view')->name('tasks.acknowledge');
         Route::patch('/tasks/{task}/complete', [WorkTaskController::class, 'complete'])->middleware('permission:work_tasks,view')->name('tasks.complete');
@@ -77,7 +78,6 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/administration/weekly-periods', [AdministrativeWeeklyReportController::class, 'storePeriod'])->middleware('permission:administration,update')->name('administration.weekly.periods.store');
         Route::put('/administration/weekly-periods/{period}', [AdministrativeWeeklyReportController::class, 'updatePeriod'])->middleware('permission:administration,update')->name('administration.weekly.periods.update');
         Route::delete('/administration/weekly-periods/{period}', [AdministrativeWeeklyReportController::class, 'destroyPeriod'])->middleware('permission:administration,delete')->name('administration.weekly.periods.destroy');
-        Route::patch('/administration/weekly-periods/{period}/activity', [AdministrativeWeeklyReportController::class, 'togglePeriod'])->middleware('permission:administration,update')->name('administration.weekly.periods.toggle');
         Route::patch('/administration/weekly-report-items/{item}/work-area', [AdministrativeWeeklyReportController::class, 'updateWorkArea'])->middleware('permission:administration,update')->name('administration.weekly.items.work-area');
         Route::post('/administration/weekly-reports', [AdministrativeWeeklyReportController::class, 'save'])->middleware('permission:administration,create')->name('administration.weekly.save');
         Route::delete('/administration/weekly-reports/{report}', [AdministrativeWeeklyReportController::class, 'destroyReport'])->middleware('permission:administration,view')->name('administration.weekly.destroy');
@@ -161,6 +161,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-classes/{languageClass}', [LanguageClassController::class, 'show'])->middleware('permission:language_classes,view')->name('language-classes.show');
 
         Route::get('/language-collaborators-export',[LanguageCollaboratorController::class,'export'])->middleware('permission:language_collaborators,export')->name('language-collaborators.export');
+        Route::get('/language-collaborators/{languageCollaborator}/referrals-export',[LanguageCollaboratorController::class,'exportReferrals'])->middleware('permission:language_collaborators,export')->name('language-collaborators.referrals.export');
+        Route::get('/language-collaborators/{languageCollaborator}',[LanguageCollaboratorController::class,'show'])->middleware('permission:language_collaborators,view')->name('language-collaborators.show');
         Route::resource('language-collaborators',LanguageCollaboratorController::class)->except('show')->middleware('permission:language_collaborators,view')->middlewareFor(['create','store'],'permission:language_collaborators,create')->middlewareFor(['edit','update'],'permission:language_collaborators,update')->middlewareFor('destroy','permission:language_collaborators,delete');
         Route::get('/language-center-courses-export',[LanguageCourseController::class,'export'])->middleware('permission:language_courses,export')->name('language-center-courses.export');
         Route::resource('language-center-courses',LanguageCourseController::class)->except('show')->middleware('permission:language_courses,view')->middlewareFor(['create','store'],'permission:language_courses,create')->middlewareFor(['edit','update'],'permission:language_courses,update')->middlewareFor('destroy','permission:language_courses,delete');
