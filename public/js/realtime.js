@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
         port: widget.dataset.reverbPort,
         scheme: widget.dataset.reverbScheme || (window.location.protocol === 'https:' ? 'https' : 'http'),
     };
+    const placeholderReverbValues = new Set(['', 'change-me', 'your-domain.example', 'localhost', '127.0.0.1']);
+    const hasUsableSocketConfig = !placeholderReverbValues.has(String(config.key || '').trim())
+        && !placeholderReverbValues.has(String(config.host || '').trim());
     let initialized = false;
     let notificationsEnabled = true;
     let socket = null;
@@ -208,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const connect = () => {
-        if (!notificationsEnabled || !config.key || !config.userId || socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
+        if (!notificationsEnabled || !hasUsableSocketConfig || !config.userId || socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
         const secure = config.scheme === 'https';
         const defaultPort = secure ? '443' : '80';
         const port = config.port && String(config.port) !== defaultPort ? ':' + config.port : '';

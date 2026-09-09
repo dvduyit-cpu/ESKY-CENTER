@@ -28,7 +28,7 @@ class LanguageCollaboratorController extends Controller
             if (! empty($filters['year'])) $query->whereYear('received_at',$filters['year']);
             if (! empty($filters['month'])) $query->whereMonth('received_at',$filters['month']);
         };
-        $query=LanguageCollaborator::with(['user'])
+        $query=LanguageCollaborator::query()
             ->withCount(['leads as referred_students_count'=>$applyLeadPeriod])
             ->latest();
         if ($request->filled('q')) {
@@ -105,7 +105,9 @@ class LanguageCollaboratorController extends Controller
             ->keyBy('month');
 
         return view('language.collaborators.show',[
-            'item'=>$languageCollaborator->load('user'),
+            // Trang chi tiết không sử dụng quan hệ account. Không eager-load để vẫn
+            // xem được dữ liệu CTV trên hệ thống đang nâng cấp dở cột liên kết user.
+            'item'=>$languageCollaborator,
             'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'filters'=>$filters,
             'summary'=>$summary,
