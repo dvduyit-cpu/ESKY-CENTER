@@ -89,7 +89,12 @@ class LanguageCollaboratorController extends Controller
     {
         $filters=$this->referralFilters($request);
         $query=$this->referralQuery($languageCollaborator,$filters);
-        $summary=(clone $query)->selectRaw("COUNT(*) as referral_count, SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END) as registered_count, SUM(CASE WHEN converted_student_id IS NOT NULL THEN 1 ELSE 0 END) as converted_count")->first();
+        // Bỏ ORDER BY của danh sách trước khi chạy aggregate. MySQL strict mode
+        // (ONLY_FULL_GROUP_BY) không cho phép ORDER BY received_at/id trong truy vấn COUNT/SUM không GROUP BY.
+        $summary=(clone $query)
+            ->reorder()
+            ->selectRaw("COUNT(*) as referral_count, SUM(CASE WHEN status = 'registered' THEN 1 ELSE 0 END) as registered_count, SUM(CASE WHEN converted_student_id IS NOT NULL THEN 1 ELSE 0 END) as converted_count")
+            ->first();
         $monthlySummary=$languageCollaborator->leads()
             ->whereYear('received_at',$filters['year'])
             ->when($filters['status'],fn($query,$status)=>$query->where('status',$status))
