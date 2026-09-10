@@ -90,7 +90,7 @@ class LanguageTargetSubmissionController extends Controller
                 $course=$duplicateLead->course?->name ?? 'Chưa xác định';
                 $status=$duplicateLead->status==='registered' ? 'Đã đăng ký khóa học' : match($duplicateLead->status) {
                     'new'=>'Đang chờ tiếp nhận','contacted'=>'Đã liên hệ, đang chờ xử lý','consulting'=>'Đang tư vấn',
-                    'placement_test'=>'Đang chờ kiểm tra','waiting'=>'Đang chờ phản hồi','follow_up'=>'Đang chăm sóc lại',
+                    'placement_test'=>'Đang chờ kiểm tra','waiting'=>'Đang chờ phản hồi','waiting_class'=>'Đang chờ lớp','follow_up'=>'Đang chăm sóc lại',
                     default=>'Đang chờ xử lý',
                 };
             } else {

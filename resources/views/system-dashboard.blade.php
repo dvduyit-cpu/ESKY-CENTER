@@ -9,6 +9,7 @@
         'consulting' => 'Đang tư vấn',
         'placement_test' => 'Hẹn kiểm tra',
         'waiting' => 'Chờ phản hồi',
+        'waiting_class' => 'Chờ lớp',
         'registered' => 'Đã đăng ký',
         'not_interested' => 'Không quan tâm',
         'follow_up' => 'Chăm sóc lại',

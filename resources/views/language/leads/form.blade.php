@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title',$item->exists?'Sửa khách hàng':'Thêm khách hàng') @section('header','Tư vấn tuyển sinh')
 @section('content')
-@php($labels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'])
+@php($labels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','waiting_class'=>'Chờ lớp','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'])
 @php($selectedCollaborator=old('language_collaborator_id',session('selected_collaborator',$item->language_collaborator_id)))
 <div class="d-flex justify-content-between mb-4"><div><h1 class="page-title">{{$item->exists?'Cập nhật':'Thêm'}} khách hàng</h1><div class="page-subtitle">Mã khách hàng tự động. Các trường có dấu <span class="text-danger">*</span> là bắt buộc.</div></div><a class="btn btn-light" href="{{route('language-leads.index')}}">Quay lại</a></div>
 <div class="card card-soft form-card"><div class="card-header"><h5>Thông tin khách hàng</h5></div><div class="card-body p-4"><form method="POST" action="{{$item->exists?route('language-leads.update',$item):route('language-leads.store')}}">@csrf @if($item->exists)@method('PUT')@endif<div class="row g-3">

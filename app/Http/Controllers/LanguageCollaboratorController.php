@@ -125,7 +125,7 @@ class LanguageCollaboratorController extends Controller
     public function exportReferrals(Request $request, LanguageCollaborator $languageCollaborator)
     {
         $filters=$this->referralFilters($request);
-        $statusLabels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'];
+        $statusLabels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','waiting_class'=>'Chờ lớp','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'];
         $rows=$this->referralQuery($languageCollaborator,$filters)->get()->map(fn($lead)=>[
             $lead->code,
             $lead->name,
@@ -153,7 +153,7 @@ class LanguageCollaboratorController extends Controller
             'q'=>['nullable','string','max:255'],
             'month'=>['nullable','integer','between:1,12'],
             'year'=>['nullable','integer','between:2020,2100'],
-            'status'=>['nullable','in:new,contacted,consulting,placement_test,waiting,registered,not_interested,follow_up'],
+            'status'=>['nullable','in:new,contacted,consulting,placement_test,waiting,waiting_class,registered,not_interested,follow_up'],
             'course'=>['nullable','integer'],
         ]);
 

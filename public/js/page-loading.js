@@ -20,6 +20,13 @@
         const link=event.target.closest('a[href]');
         if(!link||event.defaultPrevented||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
         const url=new URL(link.href,location.href);
+        // Calling, messaging, and mail links can trigger beforeunload without
+        // navigating away from the page, which would otherwise leave the
+        // loading overlay visible indefinitely.
+        if(!['http:','https:'].includes(url.protocol)){
+            skipLoading();
+            return;
+        }
         if(link.hasAttribute('download')||link.hasAttribute('data-no-loading')||shouldSkipForUrl(url)){
             skipLoading();
             return;

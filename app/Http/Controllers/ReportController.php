@@ -436,7 +436,7 @@ class ReportController extends Controller
                     'lead_count' => $leadCount,
                     'consulted_count' => $consultedCount,
                     'registered_count' => $registeredCount,
-                    'waiting_count' => $group->whereIn('status', ['new', 'contacted', 'consulting', 'placement_test', 'waiting', 'follow_up'])->count(),
+                    'waiting_count' => $group->whereIn('status', ['new', 'contacted', 'consulting', 'placement_test', 'waiting', 'waiting_class', 'follow_up'])->count(),
                     'not_interested_count' => $group->where('status', 'not_interested')->count(),
                     'conversion_rate' => $leadCount > 0 ? round($registeredCount / $leadCount * 100, 1) : 0.0,
                     'last_received_at' => $group->max('created_at'),

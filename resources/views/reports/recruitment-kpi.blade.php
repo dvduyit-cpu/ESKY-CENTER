@@ -146,6 +146,7 @@
                     ['Đang tư vấn', $statusCounts['consulting'] ?? 0, 'primary'],
                     ['Hẹn kiểm tra', $statusCounts['placement_test'] ?? 0, 'warning'],
                     ['Chờ phản hồi', $statusCounts['waiting'] ?? 0, 'warning'],
+                    ['Chờ lớp', $statusCounts['waiting_class'] ?? 0, 'secondary'],
                     ['Đã đăng ký', $statusCounts['registered'] ?? 0, 'success'],
                     ['Không quan tâm', $statusCounts['not_interested'] ?? 0, 'danger'],
                     ['Chăm sóc lại', $statusCounts['follow_up'] ?? 0, 'info'],

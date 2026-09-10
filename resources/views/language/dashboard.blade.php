@@ -5,7 +5,7 @@
     $maxMonthly = max(1, $monthly->max(fn($row) => max($row['leads'], $row['students'])));
     $maxLeadStatus = max(1, (int) $leadStatuses->max());
     $maxStudentStatus = max(1, (int) $studentStatuses->max());
-    $leadColors = ['new'=>'info','contacted'=>'primary','consulting'=>'warning','placement_test'=>'primary','waiting'=>'gray','registered'=>'success','not_interested'=>'danger','follow_up'=>'warning'];
+    $leadColors = ['new'=>'info','contacted'=>'primary','consulting'=>'warning','placement_test'=>'primary','waiting'=>'gray','waiting_class'=>'gray','registered'=>'success','not_interested'=>'danger','follow_up'=>'warning'];
 @endphp
 <div class="d-flex flex-wrap justify-content-between gap-3 mb-4">
     <div><h1 class="page-title">{{$canViewAll?'Tổng quan trung tâm':'Tổng quan trung tâm cá nhân'}}</h1><div class="page-subtitle">{{$canViewAll?'Tình hình toàn trung tâm':'Dữ liệu tư vấn và lớp học được giao cho tài khoản này'}} trong {{$selectedPeriod}}.</div></div>

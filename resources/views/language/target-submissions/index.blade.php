@@ -2,7 +2,7 @@
 @section('title','Gửi chỉ tiêu')
 @section('header','Tư vấn tuyển sinh')
 @section('content')
-@php($statusLabels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'])
+@php($statusLabels=['new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn','placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','waiting_class'=>'Chờ lớp','registered'=>'Đã đăng ký','not_interested'=>'Không quan tâm','follow_up'=>'Chăm sóc lại'])
 @php($sourceIcons=['walk_in'=>'bi-person','fanpage'=>'bi-facebook','zalo'=>'bi-chat-dots-fill','zalo_oa'=>'bi-patch-check-fill','web'=>'bi-globe2','hotline'=>'bi-telephone-fill'])
 @php($consultedCount=$items->getCollection()->filter(fn($item)=>$item->lead&&($item->lead->last_consulted_at||$item->lead->status!=='new'))->count())
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">

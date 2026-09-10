@@ -271,6 +271,7 @@
                                     ['Đang tư vấn', $recruitmentOverview['status_counts']['consulting'] ?? 0, 'primary'],
                                     ['Hẹn kiểm tra', $recruitmentOverview['status_counts']['placement_test'] ?? 0, 'warning'],
                                     ['Chờ phản hồi', $recruitmentOverview['status_counts']['waiting'] ?? 0, 'warning'],
+                                    ['Chờ lớp', $recruitmentOverview['status_counts']['waiting_class'] ?? 0, 'secondary'],
                                     ['Đã đăng ký', $recruitmentOverview['status_counts']['registered'] ?? 0, 'success'],
                                     ['Không quan tâm', $recruitmentOverview['status_counts']['not_interested'] ?? 0, 'danger'],
                                     ['Chăm sóc lại', $recruitmentOverview['status_counts']['follow_up'] ?? 0, 'info'],

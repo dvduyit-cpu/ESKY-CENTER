@@ -115,7 +115,7 @@ class LanguageLeadController extends Controller
             'language_course_id' => ['required','exists:language_courses,id'],
             'language_collaborator_id' => ['required','exists:language_collaborators,id'],
             'consultant_user_id' => ['nullable','exists:users,id'], 'appointment_at' => ['nullable','date'],
-            'status' => ['required', Rule::in(['new','contacted','consulting','placement_test','waiting','registered','not_interested','follow_up'])],
+            'status' => ['required', Rule::in(['new','contacted','consulting','placement_test','waiting','waiting_class','registered','not_interested','follow_up'])],
             'consultation' => ['nullable'], 'note' => ['nullable'],
         ], [
             'name.required'=>'Vui lòng nhập họ tên khách hàng.', 'phone.required'=>'Vui lòng nhập số điện thoại.',
@@ -131,7 +131,7 @@ class LanguageLeadController extends Controller
         if ($duplicate) {
             $status=[
                 'new'=>'Mới tiếp nhận','contacted'=>'Đã liên hệ','consulting'=>'Đang tư vấn',
-                'placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','registered'=>'Đã đăng ký',
+                'placement_test'=>'Hẹn kiểm tra','waiting'=>'Chờ phản hồi','waiting_class'=>'Chờ lớp','registered'=>'Đã đăng ký',
                 'follow_up'=>'Chăm sóc lại',
             ][$duplicate->status]??$duplicate->status;
             $studentNote=$duplicate->converted_student_id?'Hồ sơ này đã chuyển thành học viên chính thức.':'Hồ sơ này hiện vẫn là học viên tiềm năng, chưa chuyển thành học viên chính thức.';

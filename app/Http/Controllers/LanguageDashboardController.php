@@ -124,7 +124,7 @@ class LanguageDashboardController extends Controller
 
         $leadStatusLabels = [
             'new'=>'Mới tiếp nhận', 'contacted'=>'Đã liên hệ', 'consulting'=>'Đang tư vấn',
-            'placement_test'=>'Hẹn kiểm tra', 'waiting'=>'Chờ phản hồi', 'registered'=>'Đã đăng ký',
+            'placement_test'=>'Hẹn kiểm tra', 'waiting'=>'Chờ phản hồi', 'waiting_class'=>'Chờ lớp', 'registered'=>'Đã đăng ký',
             'not_interested'=>'Không quan tâm', 'follow_up'=>'Chăm sóc lại',
         ];
         $studentStatusLabels = [
