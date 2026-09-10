@@ -646,6 +646,13 @@ class LanguageStudentController extends Controller
             return;
         }
 
+        // The edit form does not manage class assignments.  Do not let an
+        // existing multi-class enrollment prevent unrelated profile updates
+        // such as changing the student's name or contact information.
+        if (! $request->has('language_class_id')) {
+            return;
+        }
+
         $data = $request->validate(['language_class_id'=>'nullable|exists:language_classes,id']);
         $activeEnrollments = $student->enrollments()
             ->whereIn('status', ['studying', 'paused', 'reserved'])
