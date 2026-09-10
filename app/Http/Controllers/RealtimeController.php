@@ -15,7 +15,7 @@ class RealtimeController extends Controller
         if (! $user->notifications_enabled) return response()->json(['server_time'=>now()->utc()->toIso8601String(),'enabled'=>false,'changed'=>false,'total'=>0,'items'=>[],'reminders'=>[]]);
 
         $canViewAll = $user->isAdmin() || $user->allowed('language_dashboard_all');
-        $consulting = ($user->isAdmin() || $user->allowed('language_consulting')) ? LanguageLead::whereNotIn('status',['registered','not_interested'])->when(! $canViewAll,fn($q)=>$q->where('consultant_user_id',$user->id))->where(fn($q)=>$q->whereNull('last_consulted_at')->where('created_at','<=',now()->subDays(3))->orWhere('last_consulted_at','<=',now()->subDays(3)))->count() : 0;
+        $consulting = ($user->isAdmin() || $user->allowed('language_consulting')) ? LanguageLead::where('status', 'new')->when(! $canViewAll,fn($q)=>$q->where('consultant_user_id',$user->id))->where(fn($q)=>$q->whereNull('last_consulted_at')->where('created_at','<=',now()->subDays(3))->orWhere('last_consulted_at','<=',now()->subDays(3)))->count() : 0;
         $submissionUpdates = $since && ($user->isAdmin() || $user->allowed('language_target_submissions')) ? LanguageTargetSubmission::where('submitted_by',$user->id)->whereHas('lead',fn($q)=>$q->where('updated_at','>',$since))->count() : 0;
         $pendingReceipts = $user->isAdmin() || $user->allowed('language_tuition') ? LanguageTuitionPayment::where('receipt_status','pending')->count() : 0;
         $newTargets = $since && ($user->isAdmin() || $user->allowed('language_targets')) ? LanguageMonthlyTargetRecord::where('updated_at','>',$since)->count() : 0;
