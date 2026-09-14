@@ -84,6 +84,17 @@ class User extends Authenticatable
         return in_array($this->role?->code, ['admin', 'director', 'deputy_director', 'leader'], true);
     }
 
+    /**
+     * Quản lý báo cáo tuần không nên phụ thuộc vào tên/mã vai trò tự đặt
+     * (ví dụ: "admin2"). Quyền Xuất của phân hệ Hành chính được dành cho
+     * người quản lý có thể xem và lập báo cáo tổng hợp; các vai trò lãnh đạo
+     * hệ thống vẫn luôn giữ quyền này để tương thích với dữ liệu cũ.
+     */
+    public function canManageWeeklyReports(): bool
+    {
+        return $this->isLeader() || $this->allowed('administration', 'export');
+    }
+
     public function allowed(string $moduleCode, string $action = 'view'): bool
     {
         if ($this->isAdmin()) {

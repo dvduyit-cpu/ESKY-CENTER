@@ -58,7 +58,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function index(Request $request): View
     {
-        $canManage = $request->user()->isLeader();
+        $canManage = $request->user()->canManageWeeklyReports();
         $canSubmitReport = ! $request->user()->isAdmin();
         $periods = AdministrativeWeeklyPeriod::query()
             ->with('assignedUsers:id,name,email')
@@ -138,7 +138,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function storePeriod(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->isLeader(), 403);
+        abort_unless($request->user()->canManageWeeklyReports(), 403);
         $data = $request->validate([
             'period_id' => ['nullable', 'integer', 'exists:administrative_weekly_periods,id'],
             'week_start' => ['required', 'date'],
@@ -172,7 +172,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function updatePeriod(Request $request, AdministrativeWeeklyPeriod $period): RedirectResponse
     {
-        abort_unless($request->user()->isLeader(), 403);
+        abort_unless($request->user()->canManageWeeklyReports(), 403);
         $data = $request->validate([
             'title' => ['nullable', 'string', 'max:180'],
             'starts_at' => ['required', 'date'],
@@ -194,7 +194,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function destroyPeriod(Request $request, AdministrativeWeeklyPeriod $period): RedirectResponse
     {
-        abort_unless($request->user()->isLeader(), 403);
+        abort_unless($request->user()->canManageWeeklyReports(), 403);
         $reportQuery = AdministrativeWeeklyReport::query()->where('period_id', $period->id);
         $reportCount = (clone $reportQuery)->count();
         $hasReports = $reportCount > 0;
@@ -339,7 +339,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function updateWorkArea(Request $request, AdministrativeWeeklyReportItem $item): JsonResponse
     {
-        abort_unless($request->user()->isLeader(), 403);
+        abort_unless($request->user()->canManageWeeklyReports(), 403);
         $data = $request->validate([
             'work_area' => ['required', 'string', 'in:'.implode(',', array_keys(self::WORK_AREAS))],
         ]);
@@ -350,7 +350,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function destroyReport(Request $request, AdministrativeWeeklyReport $report): RedirectResponse
     {
-        abort_unless($request->user()->isLeader() || $report->user_id === $request->user()->id, 403);
+        abort_unless($request->user()->canManageWeeklyReports() || $report->user_id === $request->user()->id, 403);
         $period = AdministrativeWeeklyPeriod::query()->findOrFail($report->period_id);
         if ((int) $report->user_id === (int) $request->user()->id && ! $period->isSubmissionOpen()) {
             return back()->with('warning', 'Đã ngoài thời gian nhận báo cáo. Nội dung chỉ còn để xem, không thể xóa hoặc chỉnh sửa.');
@@ -364,7 +364,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function summary(Request $request): View
     {
-        abort_unless($request->user()->isLeader(), 403);
+        abort_unless($request->user()->canManageWeeklyReports(), 403);
         $weekStart = $this->weekStart($request->query('week'));
         $period = $this->resolvePeriod($request, $weekStart)?->load('assignedUsers:id,name,email');
         abort_unless($period, 404, 'Không tìm thấy kỳ báo cáo tuần.');
@@ -427,7 +427,7 @@ class AdministrativeWeeklyReportController extends Controller
 
     public function compile(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->isLeader(), 403);
+        abort_unless($request->user()->canManageWeeklyReports(), 403);
         $data = $request->validate([
             'period_id' => ['nullable', 'integer', 'exists:administrative_weekly_periods,id'],
             'week_start' => ['required', 'date'],
