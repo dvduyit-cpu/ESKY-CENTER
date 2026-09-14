@@ -533,7 +533,26 @@ class LanguageStudentController extends Controller
         return redirect()->route('language-students.index')->with('success','Đã cập nhật học viên.');
     }
 
-    public function destroy(LanguageStudent $languageStudent): RedirectResponse { $languageStudent->delete(); return back()->with('success','Đã xóa học viên.'); }
+    public function destroy(LanguageStudent $languageStudent): RedirectResponse
+    {
+        DB::transaction(function () use ($languageStudent): void {
+            // A soft-deleted student would otherwise leave the lead pointing to a
+            // profile that can no longer be opened. Restore the lead to the state
+            // from which it can be converted again.
+            \App\Models\LanguageLead::withTrashed()
+                ->where('converted_student_id', $languageStudent->id)
+                ->update([
+                    'converted_student_id' => null,
+                    'status' => 'registered',
+                ]);
+
+            $languageStudent->delete();
+        });
+
+        ActivityLogger::log('language_students', 'delete', 'Xóa học viên '.$languageStudent->name, $languageStudent);
+
+        return back()->with('success','Đã xóa học viên. Hồ sơ học viên tiềm năng liên quan đã trở lại trạng thái Đã đăng ký.');
+    }
 
     private function form(LanguageStudent $item): View
     {
