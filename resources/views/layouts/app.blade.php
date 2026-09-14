@@ -43,7 +43,7 @@
         </nav>
         @php
             $me = auth()->user();
-            $showWeeklyReportMenu = $me->isLeader() || \App\Models\AdministrativeWeeklyPeriod::query()
+            $showWeeklyReportMenu = $me->canManageWeeklyReports() || \App\Models\AdministrativeWeeklyPeriod::query()
                 ->whereHas('assignedUsers', fn ($users) => $users->whereKey($me->id))
                 ->exists();
         @endphp
