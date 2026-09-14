@@ -276,10 +276,16 @@ class LanguageEnrollmentManager
         $discount = LanguageDiscountResolver::highest($classDiscount, $studentDiscount);
         $percentage = (float) ($discount?->percentage ?? 0);
         $discountAmount = round($tuition * $percentage / 100, 2);
+        // Never fall back to another course's lead. A learner may have several
+        // registrations, each credited to a different CTV; only this course's
+        // registration is allowed to receive the class tuition target.
         $leadId = LanguageLead::query()
             ->where('converted_student_id', $student->id)
-            ->orderByRaw('language_course_id = ? desc', [$course->id])
-            ->latest('id')
+            ->where('language_course_id', $course->id)
+            ->where(fn ($query) => $query->where('language_class_id', $class->id)->orWhereNull('language_class_id'))
+            ->orderByRaw('language_class_id = ? desc', [$class->id])
+            ->orderBy('created_at')
+            ->orderBy('id')
             ->value('id');
 
         $payableAmount = max(0, $tuition - $discountAmount);

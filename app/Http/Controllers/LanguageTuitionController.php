@@ -630,7 +630,7 @@ class LanguageTuitionController extends Controller
         $data['language_course_id']=$class->language_course_id;
         $course=LanguageCourse::findOrFail($data['language_course_id']);
         $student=LanguageStudent::findOrFail($data['language_student_id']);
-        if (empty($data['language_lead_id'])) $data['language_lead_id']=$this->resolveLeadId((int)$data['language_student_id'],(int)$data['language_course_id']);
+        if (empty($data['language_lead_id'])) $data['language_lead_id']=$this->resolveLeadId((int)$data['language_student_id'],(int)$data['language_course_id'],(int)$data['language_class_id']);
         $personalDiscountId=$data['language_discount_policy_id']??$student->language_discount_policy_id;
         $studentDiscount=$personalDiscountId?LanguageDiscountPolicy::findOrFail($personalDiscountId):null;
         $classDiscount=$class->language_discount_policy_id?LanguageDiscountPolicy::find($class->language_discount_policy_id):null;
@@ -1163,12 +1163,17 @@ class LanguageTuitionController extends Controller
         return $query;
     }
 
-    private function resolveLeadId(int $studentId, int $courseId): ?int
+    private function resolveLeadId(int $studentId, int $courseId, ?int $classId = null): ?int
     {
-        return LanguageLead::where('converted_student_id', $studentId)
-            ->orderByRaw('language_course_id = ? desc', [$courseId])
-            ->latest('id')
-            ->value('id');
+        $query = LanguageLead::where('converted_student_id', $studentId)
+            ->where('language_course_id', $courseId)
+            ->when($classId, fn ($builder) => $builder
+                ->where(fn ($candidate) => $candidate->where('language_class_id', $classId)->orWhereNull('language_class_id'))
+                ->orderByRaw('language_class_id = ? desc', [$classId]), fn ($builder) => $builder->whereNull('language_class_id'))
+            ->orderBy('created_at')
+            ->orderBy('id');
+
+        return $query->value('id');
     }
 
     private function refreshCharge(LanguageTuitionCharge $charge, LanguageTuitionPayment $payment): void

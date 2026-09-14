@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{LanguageCollaborator,LanguageCourse,LanguageLead,LanguageTargetSubmission,User};
-use App\Support\CenterCode;
+use App\Models\{LanguageClass,LanguageCollaborator,LanguageCourse,LanguageLead,LanguageTargetSubmission,User};
+use App\Support\{CenterCode, TextNormalizer};
 use Illuminate\Http\{RedirectResponse,Request};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -35,6 +35,7 @@ class LanguageTargetSubmissionController extends Controller
         return view('language.target-submissions.index',[
             'items'=>$query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'courses'=>LanguageCourse::where('active',1)->orderBy('name')->get(),
+            'classes'=>LanguageClass::whereIn('status',['recruiting','upcoming','active'])->with('course')->orderBy('name')->get(),
             'sources'=>LanguageTargetSubmission::SOURCE_LABELS,
             'years'=>$years,
             'hasHistoryFilter'=>filled($filters['date']??null)||filled($filters['month']??null)||filled($filters['year']??null),
@@ -58,6 +59,7 @@ class LanguageTargetSubmissionController extends Controller
             'name'=>'required|string|max:255', 'phone'=>'required|string|max:30',
             'course_choice'=>['required',Rule::in(['existing','other'])],
             'language_course_id'=>'nullable|required_if:course_choice,existing|exists:language_courses,id',
+            'language_class_id'=>['nullable', Rule::exists('language_classes', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
             'other_course'=>'nullable|required_if:course_choice,other|string|max:255',
             'is_walk_in'=>['nullable','boolean'],
             'source'=>['nullable','required_if:is_walk_in,1',Rule::in(['fanpage','zalo','zalo_oa','web','hotline'])],
@@ -70,36 +72,20 @@ class LanguageTargetSubmissionController extends Controller
             'source.in'=>'Nguồn khách hàng không hợp lệ.',
             'note.max'=>'Ghi chú không được dài quá 2.000 ký tự.',
         ]);
+        $data['language_class_id'] ??= null;
         if ($data['course_choice']==='existing') $data['other_course']=null; else $data['language_course_id']=null;
-        $data['phone_normalized']=preg_replace('/\D+/', '', $data['phone']) ?: trim($data['phone']);
-        $data['course_key']=$data['language_course_id']
-            ? 'course:'.$data['language_course_id']
-            : 'other:'.Str::lower(Str::ascii(Str::squish($data['other_course'])));
-        $duplicateSubmission=LanguageTargetSubmission::with(['course','submitter.personnel'])
-            ->where('phone_normalized',$data['phone_normalized'])->where('course_key',$data['course_key'])->latest()->first();
-        $duplicateLead=null;
-        if ($data['language_course_id']) {
-            $duplicateLead=LanguageLead::with(['course','collaborator','consultant.personnel'])
-                ->where('language_course_id',$data['language_course_id'])->latest()->get()
-                ->first(fn($lead)=>(preg_replace('/\D+/', '', $lead->phone) ?: trim($lead->phone))===$data['phone_normalized']);
-        }
-        $allowNew=$duplicateLead?->status==='not_interested';
-        if (! $allowNew && ($duplicateLead || $duplicateSubmission)) {
-            if ($duplicateLead) {
-                $owner=$duplicateLead->collaborator?->name ?? $duplicateLead->consultant?->personnel?->name ?? $duplicateLead->consultant?->name ?? 'Chưa xác định';
-                $course=$duplicateLead->course?->name ?? 'Chưa xác định';
-                $status=$duplicateLead->status==='registered' ? 'Đã đăng ký khóa học' : match($duplicateLead->status) {
-                    'new'=>'Đang chờ tiếp nhận','contacted'=>'Đã liên hệ, đang chờ xử lý','consulting'=>'Đang tư vấn',
-                    'placement_test'=>'Đang chờ kiểm tra','waiting'=>'Đang chờ phản hồi','waiting_class'=>'Đang chờ lớp','follow_up'=>'Đang chăm sóc lại',
-                    default=>'Đang chờ xử lý',
-                };
-            } else {
-                $owner=$duplicateSubmission->submitter?->personnel?->name ?? $duplicateSubmission->submitter?->name ?? 'Chưa xác định';
-                $course=$duplicateSubmission->course?->name ?? $duplicateSubmission->other_course ?? 'Chưa xác định';
-                $status='Đang chờ tiếp nhận';
+        if (! empty($data['language_class_id'])) {
+            $class = LanguageClass::findOrFail($data['language_class_id']);
+            if ((int) $class->language_course_id !== (int) $data['language_course_id']) {
+                throw ValidationException::withMessages(['language_class_id' => 'Lớp được chọn không thuộc khóa học đã chọn.']);
             }
-            throw ValidationException::withMessages(['phone'=>"Số điện thoại này đã được ghi nhận cho {$owner}. Khóa học: {$course}. Trạng thái: {$status}. Hệ thống không thêm trùng."]);
         }
+        $data['phone_normalized']=TextNormalizer::phone($data['phone']) ?: trim($data['phone']);
+        $data['course_key']=$data['language_class_id']
+            ? 'class:'.$data['language_class_id']
+            : ($data['language_course_id']
+            ? 'course:'.$data['language_course_id']
+            : 'other:'.Str::lower(Str::ascii(Str::squish($data['other_course']))));
         $sender=$request->user()->loadMissing(['personnel','languageCollaborator']);
         $collaborator=$this->senderCollaborator($sender);
         $consultant=$sender->personnel?->is_consultant && $sender->personnel?->active && $sender->active
@@ -111,19 +97,52 @@ class LanguageTargetSubmissionController extends Controller
         unset($data['course_choice'],$data['is_walk_in']);
         $sourceLabel=$data['source'] ? LanguageTargetSubmission::SOURCE_LABELS[$data['source']] : null;
         DB::transaction(function () use ($data,$sender,$consultant,$collaborator,$sourceLabel) {
+            // The first CTV to submit this phone + course owns the attribution.
+            // Lock all registrations of the course to also protect concurrent A/B submissions.
+            $duplicateLead = $data['language_course_id']
+                ? LanguageLead::with(['course','collaborator','consultant.personnel'])
+                    ->where('language_course_id', $data['language_course_id'])
+                    ->orderBy('created_at')->orderBy('id')->lockForUpdate()->get()
+                    ->first(fn (LanguageLead $lead) => TextNormalizer::phone($lead->phone) === $data['phone_normalized']
+                        && ($data['language_class_id'] === null || $lead->language_class_id === null || (int) $lead->language_class_id === (int) $data['language_class_id']))
+                : null;
+            $duplicateSubmission = LanguageTargetSubmission::with(['course','submitter.personnel','submitter.languageCollaborator'])
+                ->when($data['language_course_id'], fn ($query) => $query->where('language_course_id', $data['language_course_id']), fn ($query) => $query->where('course_key', $data['course_key']))
+                ->orderBy('created_at')->orderBy('id')->lockForUpdate()->get()
+                ->first(fn (LanguageTargetSubmission $submission) => TextNormalizer::phone($submission->phone) === $data['phone_normalized']
+                    && ($data['language_class_id'] === null || $submission->language_class_id === null || (int) $submission->language_class_id === (int) $data['language_class_id']));
+
+            if ($duplicateLead || $duplicateSubmission) {
+                $owner = $duplicateLead?->collaborator?->name
+                    ?? $duplicateSubmission?->submitter?->languageCollaborator?->name
+                    ?? $duplicateSubmission?->submitter?->personnel?->name
+                    ?? $duplicateSubmission?->submitter?->name
+                    ?? $duplicateLead?->consultant?->personnel?->name
+                    ?? $duplicateLead?->consultant?->name
+                    ?? 'chưa xác định';
+                $course = $duplicateLead?->course?->name
+                    ?? $duplicateSubmission?->course?->name
+                    ?? $duplicateSubmission?->other_course
+                    ?? 'khóa/lớp này';
+                $firstAt = ($duplicateLead?->created_at ?? $duplicateSubmission?->created_at)?->format('d/m/Y H:i');
+
+                throw ValidationException::withMessages([
+                    'phone' => "SĐT này đã được ghi nhận trước cho {$owner}, khóa/lớp {$course}".($firstAt ? " lúc {$firstAt}" : '').'. Hệ thống không ghi trùng và không đổi người được nhận chỉ tiêu.',
+                ]);
+            }
+
             $submission=LanguageTargetSubmission::create($data+['submitted_by'=>$sender->id]);
             $lead=LanguageLead::create([
                 'code'=>CenterCode::next('language_leads','KH'), 'name'=>$data['name'], 'phone'=>$data['phone'],
                 'source'=>$sourceLabel, 'received_at'=>now()->toDateString(),
-                'language_course_id'=>$data['language_course_id'], 'consultant_user_id'=>$consultant->id,
+                'language_course_id'=>$data['language_course_id'], 'language_class_id'=>$data['language_class_id'], 'consultant_user_id'=>$consultant->id,
                 'language_collaborator_id'=>$collaborator?->id,
                 'status'=>'new', 'consultation'=>$data['other_course'] ? 'Khóa học quan tâm khác: '.$data['other_course'] : null,
                 'note'=>($data['note'] ?? null) ?: 'Tự động tạo từ trang Gửi chỉ tiêu bởi '.$sender->name.'.',
             ]);
             $submission->update(['language_lead_id'=>$lead->id]);
         });
-        $prefix=$allowNew?'Hồ sơ cũ có trạng thái Không quan tâm. Đã ghi nhận mới. ':'Đã gửi chỉ tiêu thành công. ';
-        return back()->with('success',$prefix.'Khách hàng đã được chuyển cho nhân viên tư vấn '.$consultant->name.'.');
+        return back()->with('success','Đã gửi chỉ tiêu thành công. Khách hàng đã được chuyển cho nhân viên tư vấn '.$consultant->name.'.');
     }
 
     private function senderCollaborator(User $sender): ?LanguageCollaborator

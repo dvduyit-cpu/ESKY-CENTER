@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{LanguageCollaborator, LanguageCourse, LanguageLead, LanguageProgram, LanguageStudent, User};
+use App\Models\{LanguageClass, LanguageCollaborator, LanguageCourse, LanguageLead, LanguageProgram, LanguageStudent, User};
 use App\Support\{ActivityLogger, CenterCode, ExcelExporter, TextNormalizer};
 use Illuminate\Http\{RedirectResponse, Request};
 use Illuminate\Support\Facades\DB;
@@ -29,7 +29,15 @@ class LanguageLeadController extends Controller
 
     public function create(): View { return $this->form(new LanguageLead); }
     public function edit(LanguageLead $languageLead): View { return $this->form($languageLead); }
-    public function show(LanguageLead $languageLead): View { return view('language.leads.show', ['item'=>$languageLead->load(['program','course','collaborator','consultant','convertedStudent'])]); }
+    public function show(LanguageLead $languageLead): View
+    {
+        $item = $languageLead->load(['program','course','collaborator','consultant','convertedStudent']);
+
+        return view('language.leads.show', [
+            'item' => $item,
+            'existingStudent' => $item->converted_student_id ? null : $this->findExistingStudentByPhone($item->phone),
+        ]);
+    }
 
     public function consulting(Request $request): View
     {
@@ -55,18 +63,53 @@ class LanguageLeadController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->data($request);
-        $existingContact = $this->findExistingContact($data['phone']);
+        $result = DB::transaction(function () use ($data): array {
+            // A lead is one registration for one course. Lock every existing
+            // registration of that course so two CTVs cannot claim the same
+            // phone/course at the same time.
+            $duplicate = $this->findExistingRegistration(
+                $data['phone'],
+                (int) $data['language_course_id'],
+                $data['language_class_id'] ? (int) $data['language_class_id'] : null,
+                true
+            );
+            if ($duplicate) {
+                return ['duplicate' => $duplicate];
+            }
 
-        if ($existingContact !== null) {
-            return $this->overwriteCourseForExistingContact($existingContact, $data);
+            $createData = $data;
+            $createData['code'] = CenterCode::next('language_leads', 'KH');
+            $createData['received_at'] ??= now()->toDateString();
+            if (filled($createData['consultation'] ?? null)) {
+                $createData['last_consulted_at'] = now();
+            }
+
+            return ['lead' => LanguageLead::create($createData)];
+        });
+
+        if (isset($result['duplicate'])) {
+            /** @var LanguageLead $duplicate */
+            $duplicate = $result['duplicate'];
+            $owner = $duplicate->collaborator?->name ?: 'chưa xác định';
+            $course = $duplicate->course?->name ?: 'khóa/lớp đã chọn';
+
+            return redirect()->route('language-leads.show', $duplicate)->with(
+                'warning',
+                "SĐT này đã được ghi nhận trước cho {$owner}, khóa/lớp {$course} (hồ sơ {$duplicate->code}). Hệ thống không tạo trùng và không đổi người được ghi nhận."
+            );
         }
 
-        $data['code'] = CenterCode::next('language_leads', 'KH');
-        $data['received_at'] ??= now()->toDateString();
-        if (filled($data['consultation'] ?? null)) $data['last_consulted_at'] = now();
-        $lead = LanguageLead::create($data);
+        /** @var LanguageLead $lead */
+        $lead = $result['lead'];
         ActivityLogger::log('language_leads', 'create', 'Tạo khách hàng '.$lead->name, $lead);
-        return redirect()->route('language-leads.index')->with('success', 'Đã thêm học viên tiềm năng.');
+        $knownStudent = $this->findExistingStudentByPhone($lead->phone);
+
+        return redirect()->route('language-leads.show', $lead)->with(
+            $knownStudent ? 'warning' : 'success',
+            $knownStudent
+                ? "Đã ghi nhận lượt đăng ký khóa/lớp mới. SĐT này đã thuộc học viên {$knownStudent->code} – {$knownStudent->name}; sau khi tư vấn xong, chọn “Chuyển thành học viên” để liên kết lượt đăng ký này với hồ sơ có sẵn."
+                : 'Đã thêm học viên tiềm năng.'
+        );
     }
 
     public function update(Request $request, LanguageLead $languageLead): RedirectResponse
@@ -91,88 +134,67 @@ class LanguageLeadController extends Controller
         if ($languageLead->status !== 'registered') {
             return back()->withErrors(['status'=>'Chỉ có thể chuyển thành học viên khi trạng thái tư vấn là “Đã đăng ký”.']);
         }
-        $student = LanguageStudent::create(['code'=>CenterCode::next('language_students','HV'),'name'=>$languageLead->name,'date_of_birth'=>$languageLead->date_of_birth,'phone'=>$languageLead->phone,'email'=>$languageLead->email,'registered_at'=>now()->toDateString(),'source'=>$languageLead->source,'status'=>'new','note'=>'Chuyển từ khách hàng '.$languageLead->name]);
-        $student->update(['language_course_id'=>$languageLead->language_course_id]);
+        $student = $this->findExistingStudentByPhone($languageLead->phone);
+        $wasExistingStudent = $student !== null;
+        if (! $student) {
+            $student = LanguageStudent::create(['code'=>CenterCode::next('language_students','HV'),'name'=>$languageLead->name,'date_of_birth'=>$languageLead->date_of_birth,'phone'=>$languageLead->phone,'email'=>$languageLead->email,'registered_at'=>now()->toDateString(),'source'=>$languageLead->source,'status'=>'new','note'=>'Chuyển từ khách hàng '.$languageLead->name]);
+            $student->update(['language_course_id'=>$languageLead->language_course_id]);
+        }
         $languageLead->update(['converted_student_id'=>$student->id,'status'=>'registered']);
-        return redirect()->route('language-students.show',$student)->with('success', 'Đã chuyển thành học viên và mở hồ sơ học viên.');
+        return redirect()->route('language-students.show',$student)->with(
+            'success',
+            $wasExistingStudent
+                ? 'Đã liên kết lượt đăng ký này với hồ sơ học viên có sẵn.'
+                : 'Đã chuyển thành học viên và mở hồ sơ học viên.'
+        );
     }
 
     /**
-     * Find an active learner or prospective learner by a normalized phone number.
-     * A guardian's phone is deliberately treated as the learner's contact too.
-     *
-     * @return array{type: 'student'|'guardian'|'lead', model: LanguageStudent|LanguageLead}|null
+     * A registration is unique by normalized phone and course. The oldest one
+     * owns the CTV attribution; later submissions must never overwrite it.
      */
-    private function findExistingContact(?string $phone): ?array
+    private function findExistingRegistration(?string $phone, int $courseId, ?int $classId = null, bool $lock = false): ?LanguageLead
     {
         $normalizedPhone = TextNormalizer::phone($phone);
         if ($normalizedPhone === null) {
             return null;
         }
 
-        $students = LanguageStudent::query()->with('guardians')->get();
-        foreach ($students as $student) {
-            if (TextNormalizer::phone($student->phone) === $normalizedPhone) {
-                return ['type' => 'student', 'model' => $student];
-            }
-
-            if ($student->guardians->contains(
-                fn ($guardian) => TextNormalizer::phone($guardian->phone) === $normalizedPhone
-            )) {
-                return ['type' => 'guardian', 'model' => $student];
-            }
+        $query = LanguageLead::query()
+            ->with(['collaborator', 'course'])
+            ->where('language_course_id', $courseId)
+            ->orderBy('created_at')
+            ->orderBy('id');
+        if ($lock) {
+            $query->lockForUpdate();
         }
 
-        $lead = LanguageLead::query()
-            ->orderByDesc('id')
+        return $query
             ->get()
-            ->first(fn (LanguageLead $item) => TextNormalizer::phone($item->phone) === $normalizedPhone);
-
-        return $lead ? ['type' => 'lead', 'model' => $lead] : null;
+            ->first(fn (LanguageLead $item) => TextNormalizer::phone($item->phone) === $normalizedPhone
+                && ($classId === null || $item->language_class_id === null || (int) $item->language_class_id === $classId));
     }
 
     /**
-     * Do not create a second contact record. The newly selected course replaces
-     * the course on the matched profile, while the rest of that profile is kept.
-     *
-     * @param array{type: 'student'|'guardian'|'lead', model: LanguageStudent|LanguageLead} $existingContact
+     * Match a student's own number and every guardian number. This lets a later
+     * registration link to the same learner without creating a second student.
      */
-    private function overwriteCourseForExistingContact(array $existingContact, array $data): RedirectResponse
+    private function findExistingStudentByPhone(?string $phone): ?LanguageStudent
     {
-        $course = LanguageCourse::findOrFail($data['language_course_id']);
-        $model = $existingContact['model'];
+        $normalizedPhone = TextNormalizer::phone($phone);
+        if ($normalizedPhone === null) {
+            return null;
+        }
 
-        DB::transaction(function () use ($existingContact, $model, $data): void {
-            if ($existingContact['type'] === 'lead') {
-                /** @var LanguageLead $model */
-                $model->update([
-                    'language_course_id' => $data['language_course_id'],
-                    'language_program_id' => $data['language_program_id'],
-                ]);
-                return;
-            }
-
-            /** @var LanguageStudent $model */
-            $model->update(['language_course_id' => $data['language_course_id']]);
-        });
-
-        $contactType = match ($existingContact['type']) {
-            'lead' => 'học viên tiềm năng',
-            'guardian' => 'người giám hộ của học viên',
-            default => 'học viên',
-        };
-        ActivityLogger::log(
-            'language_leads',
-            'overwrite_course_for_existing_contact',
-            "Không tạo mới học viên tiềm năng do trùng SĐT {$contactType}; đã cập nhật khóa học {$course->name} cho {$model->name}",
-            $model
-        );
-
-        $message = "Số điện thoại đã tồn tại ở {$contactType} {$model->code} – {$model->name}. Không tạo hồ sơ mới; đã cập nhật khóa học thành “{$course->name}”.";
-
-        return $existingContact['type'] === 'lead'
-            ? redirect()->route('language-leads.show', $model)->with('warning', $message)
-            : redirect()->route('language-students.show', $model)->with('warning', $message);
+        return LanguageStudent::query()
+            ->with('guardians')
+            ->get()
+            ->first(function (LanguageStudent $student) use ($normalizedPhone): bool {
+                return TextNormalizer::phone($student->phone) === $normalizedPhone
+                    || $student->guardians->contains(
+                        fn ($guardian) => TextNormalizer::phone($guardian->phone) === $normalizedPhone
+                    );
+            });
     }
 
     public function export()
@@ -187,7 +209,7 @@ class LanguageLeadController extends Controller
             $query->where('active',1);
             if ($item->language_collaborator_id) $query->orWhere('id',$item->language_collaborator_id);
         })->orderBy('name')->get();
-        return view('language.leads.form', compact('item','collaborators') + ['programs'=>LanguageProgram::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_program_id))->orderBy('name')->get(),'courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_course_id))->orderBy('name')->get(),'users'=>User::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->consultant_user_id))->orderBy('name')->get()]);
+        return view('language.leads.form', compact('item','collaborators') + ['programs'=>LanguageProgram::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_program_id))->orderBy('name')->get(),'courses'=>LanguageCourse::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->language_course_id))->orderBy('name')->get(),'classes'=>LanguageClass::where(fn($query)=>$query->whereIn('status',['recruiting','upcoming','active'])->orWhere('id',$item->language_class_id))->with('course')->orderBy('name')->get(),'users'=>User::where(fn($query)=>$query->where('active',1)->orWhere('id', $item->consultant_user_id))->orderBy('name')->get()]);
     }
 
     private function data(Request $request): array
@@ -198,6 +220,7 @@ class LanguageLeadController extends Controller
             'zalo' => ['nullable','max:100'], 'source' => ['nullable','max:255'], 'received_at'=>['required','date'],
             'language_program_id' => ['nullable','exists:language_programs,id'],
             'language_course_id' => ['required','exists:language_courses,id'],
+            'language_class_id' => ['nullable', Rule::exists('language_classes', 'id')->where(fn ($query) => $query->whereNull('deleted_at'))],
             'language_collaborator_id' => ['required','exists:language_collaborators,id'],
             'consultant_user_id' => ['nullable','exists:users,id'], 'appointment_at' => ['nullable','date'],
             'status' => ['required', Rule::in(['new','contacted','consulting','placement_test','waiting','waiting_class','registered','not_interested','follow_up'])],
@@ -208,6 +231,15 @@ class LanguageLeadController extends Controller
             'language_collaborator_id.required'=>'Vui lòng chọn cộng tác viên giới thiệu.',
             'status.required'=>'Vui lòng chọn trạng thái.',
         ]);
+        $data['language_class_id'] ??= null;
+        if (! empty($data['language_class_id'])) {
+            $class = LanguageClass::findOrFail($data['language_class_id']);
+            if ((int) $class->language_course_id !== (int) $data['language_course_id']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'language_class_id' => 'Lớp được chọn không thuộc khóa học đã chọn.',
+                ]);
+            }
+        }
         return $data;
     }
 
