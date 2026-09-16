@@ -31,14 +31,18 @@ document.addEventListener('DOMContentLoaded',()=>{
         <div class="d-flex flex-wrap justify-content-between gap-3">
             <div>
                 <h5><i class="bi bi-clipboard-check me-2"></i>Hoàn thành và đóng lớp</h5>
-                @if($languageClass->completion_requested_at)
+                @if($languageClass->status==='completed')
+                    <p class="mb-0 text-success"><i class="bi bi-check-circle-fill me-1"></i><strong>Đã được giáo vụ xác nhận hoàn thành và đóng lớp</strong>@if($languageClass->completed_at) lúc <strong>{{$languageClass->completed_at->format('H:i d/m/Y')}}</strong>@endif@if($languageClass->completer) bởi <strong>{{$languageClass->completer->name}}</strong>@endif.</p>
+                @elseif($languageClass->completion_requested_at)
                     <p class="mb-0">Giáo viên đã gửi đề nghị lúc <strong>{{$languageClass->completion_requested_at->format('H:i d/m/Y')}}</strong>. {{$languageClass->completion_note}}</p>
                 @else
                     <p class="mb-0 text-muted">Giáo viên gửi đề nghị khi đủ số buổi hoặc đến ngày kết thúc; giáo vụ kiểm tra học phí rồi mới đóng lớp.</p>
                 @endif
             </div>
             <div>
-                @if($languageClass->status!=='completed'&&!$languageClass->completion_requested_at)
+                @if($languageClass->status==='completed')
+                    <span class="badge-soft badge-success"><i class="bi bi-check-circle-fill me-1"></i>Đã đóng lớp</span>
+                @elseif(!$languageClass->completion_requested_at)
                     <form method="POST" action="{{route('teacher-classes.completion.request',$languageClass)}}">
                         @csrf
                         @method('PATCH')
@@ -55,7 +59,7 @@ document.addEventListener('DOMContentLoaded',()=>{
                 @endif
             </div>
         </div>
-        @if($languageClass->completion_requested_at&&!$tuitionCheck['ready'])
+        @if($languageClass->status!=='completed'&&$languageClass->completion_requested_at&&!$tuitionCheck['ready'])
             <div class="alert alert-warning mt-3 mb-0">
                 <strong>Chưa thể đóng lớp vì học phí:</strong>
                 <ul class="mb-0 mt-2">
@@ -64,7 +68,7 @@ document.addEventListener('DOMContentLoaded',()=>{
                     @endforeach
                 </ul>
             </div>
-        @elseif($languageClass->completion_requested_at&&$tuitionCheck['ready'])
+        @elseif($languageClass->status!=='completed'&&$languageClass->completion_requested_at&&$tuitionCheck['ready'])
             <div class="alert alert-success mt-3 mb-0">Đã kiểm tra {{$tuitionCheck['total']}} học viên: học phí đầy đủ, có thể đóng lớp.</div>
         @endif
     </div>

@@ -163,7 +163,7 @@ class LanguageClassController extends Controller
     {
         $this->authorizeTeachingClass($request,$languageClass);
         $month=$request->date('month')?->startOfMonth()?:now()->startOfMonth();
-        $languageClass->load(['program','level','teacher','enrollments'=>fn($q)=>$q->where('status','!=','dropped')->with(['student','monthlyProgress'=>fn($p)=>$p->whereDate('month',$month),'scores'=>fn($s)=>$s->whereYear('test_date',$month->year)->whereMonth('test_date',$month->month)->orderBy('test_date')])->orderBy('enrolled_at')]);
+        $languageClass->load(['program','level','teacher','completer','enrollments'=>fn($q)=>$q->where('status','!=','dropped')->with(['student','monthlyProgress'=>fn($p)=>$p->whereDate('month',$month),'scores'=>fn($s)=>$s->whereYear('test_date',$month->year)->whereMonth('test_date',$month->month)->orderBy('test_date')])->orderBy('enrolled_at')]);
         $lessons=$languageClass->lessons()->with(['teacher','attendances.enrollment.student'])->orderByDesc('lesson_date')->orderByDesc('start_time')->get();
         $selectedLesson=$request->filled('lesson')?$languageClass->lessons()->with('attendances')->findOrFail($request->integer('lesson')):null;
         $availableStudents=LanguageStudent::with('guardians')->whereIn('status',['new','waiting_class','studying','dropped'])->whereDoesntHave('enrollments',fn($q)=>$q->where('language_class_id',$languageClass->id)->where('status','!=','dropped'))->orderBy('name')->get();
@@ -341,6 +341,7 @@ class LanguageClassController extends Controller
     {
         $user=$request->user();
         abort_unless($user->isRegistrar(),403,'Chỉ giáo vụ hoặc quản trị viên được đóng lớp.');
+        if($languageClass->status==='completed') return back()->with('info','Lớp này đã được giáo vụ xác nhận hoàn thành và đóng trước đó.');
         if(! $languageClass->completion_requested_at) throw ValidationException::withMessages(['completion'=>'Giáo viên chưa gửi đề nghị hoàn thành lớp.']);
         $check=$this->tuitionCompletionCheck($languageClass);
         if($check['blockers']) throw ValidationException::withMessages(['completion'=>'Không thể đóng lớp: '.implode('; ',array_map(fn($item)=>$item['student'].' — '.$item['reason'],$check['blockers']))]);
