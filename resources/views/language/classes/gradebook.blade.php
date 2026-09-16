@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <div>
                 <h5><i class="bi bi-clipboard-check me-2"></i>Hoàn thành và đóng lớp</h5>
                 @if($languageClass->status==='completed')
-                    <p class="mb-0 text-success"><i class="bi bi-check-circle-fill me-1"></i><strong>Đã được giáo vụ xác nhận hoàn thành và đóng lớp</strong>@if($languageClass->completed_at) lúc <strong>{{$languageClass->completed_at->format('H:i d/m/Y')}}</strong>@endif@if($languageClass->completer) bởi <strong>{{$languageClass->completer->name}}</strong>@endif.</p>
+                    <p class="mb-0 text-success"><i class="bi bi-check-circle-fill me-1"></i><strong>Đã được giáo vụ xác nhận hoàn thành và đóng lớp</strong>@if($languageClass->completed_at) lúc <strong>{{$languageClass->completed_at->format('H:i d/m/Y')}}</strong>@endif.</p>
                 @elseif($languageClass->completion_requested_at)
                     <p class="mb-0">Giáo viên đã gửi đề nghị lúc <strong>{{$languageClass->completion_requested_at->format('H:i d/m/Y')}}</strong>. {{$languageClass->completion_note}}</p>
                 @else
