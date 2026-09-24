@@ -56,7 +56,7 @@
                 </a>
             </div>
             <div class="card-body p-4">
-                <form method="POST" enctype="multipart/form-data" action="{{ route('tools.tuition.preview') }}">
+                <form method="POST" enctype="multipart/form-data" action="{{ route('tools.tuition.preview') }}" data-tuition-qr-form autocomplete="off">
                     @csrf
                     <div class="row g-3">
                         <div class="col-12">
@@ -64,8 +64,76 @@
                             <input class="form-control" type="file" name="file" accept=".xlsx,.xls,.csv" required>
                             <div class="form-text">Cột bắt buộc: `HỌ TÊN`, `MÃ LỚP`, `SỐ TIỀN`. Lời nhắn ngân hàng chỉ gồm họ tên và mã lớp; có thể thêm `GHI CHÚ`.</div>
                         </div>
+                        <div class="col-12">
+                            <label class="form-label d-block">Tài khoản nhận học phí</label>
+                            <div class="d-flex flex-wrap gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="recipient_account" value="configured" id="recipientConfigured" data-tuition-recipient-choice @checked(old('recipient_account', $bank['enabled'] ? 'configured' : 'custom') === 'configured')>
+                                    <label class="form-check-label" for="recipientConfigured">Dùng tài khoản có sẵn</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="recipient_account" value="custom" id="recipientCustom" data-tuition-recipient-choice @checked(old('recipient_account', $bank['enabled'] ? 'configured' : 'custom') === 'custom')>
+                                    <label class="form-check-label" for="recipientCustom">Tài khoản khác</label>
+                                </div>
+                            </div>
+                            @error('recipient_account')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                        </div>
+                        <div class="col-12 d-none" data-custom-recipient>
+                            <div class="border rounded-3 p-3 bg-light">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label class="form-label">Ngân hàng</label>
+                                        <select class="form-select" name="custom_bank_option" data-custom-bank-select data-selected-bank="{{ old('custom_bank_option') }}">
+                                            <option value="">Chọn ngân hàng</option>
+                                            <option value="970436|Vietcombank">Vietcombank</option>
+                                            <option value="970415|VietinBank">VietinBank</option>
+                                            <option value="970418|BIDV">BIDV</option>
+                                            <option value="970405|Agribank">Agribank</option>
+                                            <option value="970407|Techcombank">Techcombank</option>
+                                            <option value="970422|MB Bank">MB Bank</option>
+                                            <option value="970416|ACB">ACB</option>
+                                            <option value="970432|VPBank">VPBank</option>
+                                            <option value="970423|TPBank">TPBank</option>
+                                            <option value="970403|Sacombank">Sacombank</option>
+                                            <option value="970437|HDBank">HDBank</option>
+                                            <option value="970441|VIB">VIB</option>
+                                            <option value="970448|OCB">OCB</option>
+                                            <option value="970443|SHB">SHB</option>
+                                            <option value="970440|SeABank">SeABank</option>
+                                            <option value="970426|MSB">MSB</option>
+                                            <option value="970431|Eximbank">Eximbank</option>
+                                            <option value="970425|ABBank">ABBank</option>
+                                            <option value="970449|LPBank">LPBank</option>
+                                            <option value="970428|Nam A Bank">Nam A Bank</option>
+                                            <option value="970412|PVcomBank">PVcomBank</option>
+                                            <option value="970409|Bac A Bank">Bac A Bank</option>
+                                            <option value="970419|NCB">NCB</option>
+                                            <option value="970430|PGBank">PGBank</option>
+                                            <option value="970429|SCB">SCB</option>
+                                            <option value="other">Ngân hàng khác</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6" data-custom-bank-detail>
+                                        <label class="form-label">Mã BIN ngân hàng</label>
+                                        <input class="form-control @error('custom_bank_bin') is-invalid @enderror" name="custom_bank_bin" value="{{ old('custom_bank_bin') }}" inputmode="numeric" placeholder="Ví dụ: 970436" data-custom-recipient-input>
+                                        <div class="form-text">Mã 6 chữ số của ngân hàng trên VietQR.</div>
+                                        @error('custom_bank_bin')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Số tài khoản</label>
+                                        <input class="form-control @error('custom_account_number') is-invalid @enderror" name="custom_account_number" value="{{ old('custom_account_number') }}" inputmode="numeric" placeholder="Nhập số tài khoản nhận" data-custom-recipient-input>
+                                        @error('custom_account_number')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Tên chủ tài khoản</label>
+                                        <input class="form-control @error('custom_account_name') is-invalid @enderror" name="custom_account_name" value="{{ old('custom_account_name') }}" placeholder="Nhập tên chủ tài khoản" data-custom-recipient-input>
+                                        @error('custom_account_name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         @if($bank['enabled'])
-                            <div class="col-12">
+                            <div class="col-12" data-configured-recipient>
                                 <div class="alert alert-light border mb-0">
                                     <strong>Tài khoản nhận học phí:</strong> {{ $bank['name'] }} - {{ $bank['account_number'] }} - {{ $bank['account_name'] }}
                                 </div>
@@ -80,7 +148,7 @@
                     </div>
 
                     <div class="form-actions">
-                        <button class="btn btn-primary" @disabled(! $bank['enabled'])>
+                        <button class="btn btn-primary">
                             <i class="bi bi-file-earmark-spreadsheet me-2"></i>Tạo danh sách QR
                         </button>
                     </div>
@@ -100,6 +168,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const placeholder = document.querySelector('[data-link-qr-placeholder]');
     const generateButton = document.querySelector('[data-link-qr-generate]');
     const openLink = document.querySelector('[data-link-qr-open]');
+    const tuitionForm = document.querySelector('[data-tuition-qr-form]');
+    const recipientChoices = document.querySelectorAll('[data-tuition-recipient-choice]');
+    const configuredRecipient = document.querySelector('[data-configured-recipient]');
+    const customRecipient = document.querySelector('[data-custom-recipient]');
+    const customRecipientInputs = document.querySelectorAll('[data-custom-recipient-input]');
+    const customBankSelect = document.querySelector('[data-custom-bank-select]');
+    const customBankDetails = document.querySelectorAll('[data-custom-bank-detail]');
+    const customBankBin = document.querySelector('[name="custom_bank_bin"]');
 
     if (!linkInput || !sizeInput || !image || !placeholder || !generateButton || !openLink) {
         return;
@@ -135,6 +211,47 @@ document.addEventListener('DOMContentLoaded', function () {
             event.preventDefault();
             renderQr();
         }
+    });
+
+    const toggleRecipient = function () {
+        const custom = document.querySelector('[data-tuition-recipient-choice]:checked')?.value === 'custom';
+        configuredRecipient?.classList.toggle('d-none', custom);
+        customRecipient?.classList.toggle('d-none', !custom);
+        customRecipientInputs.forEach(function (input) {
+            input.required = custom;
+            input.disabled = !custom;
+        });
+    };
+
+    recipientChoices.forEach(function (choice) {
+        choice.addEventListener('change', toggleRecipient);
+    });
+
+    const fillSelectedBank = function () {
+        const [bin, name] = (customBankSelect?.value || '').split('|');
+        const selectedPreset = Boolean(bin && name);
+
+        customBankDetails.forEach(function (detail) {
+            detail.classList.toggle('d-none', selectedPreset);
+        });
+
+        if (selectedPreset) {
+            customBankBin.value = bin;
+        }
+    };
+
+    if (customBankSelect?.dataset.selectedBank) {
+        customBankSelect.value = customBankSelect.dataset.selectedBank;
+    }
+    customBankSelect?.addEventListener('change', fillSelectedBank);
+    toggleRecipient();
+    fillSelectedBank();
+
+    tuitionForm?.addEventListener('submit', function () {
+        window.setTimeout(function () {
+            tuitionForm.reset();
+            toggleRecipient();
+        }, 0);
     });
 });
 </script>

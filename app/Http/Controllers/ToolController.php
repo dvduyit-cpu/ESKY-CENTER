@@ -74,7 +74,7 @@ class ToolController extends Controller
     public function previewTuitionQrs(Request $request): View|RedirectResponse
     {
         $bank = LanguageTuitionController::bankSettings();
-        if (! $bank['enabled']) {
+        if (! $bank['enabled'] && $request->input('recipient_account', 'configured') === 'configured') {
             throw ValidationException::withMessages([
                 'file' => 'Chưa cấu hình tài khoản ngân hàng nhận học phí nên chưa thể tạo QR hàng loạt.',
             ]);
@@ -82,7 +82,36 @@ class ToolController extends Controller
 
         $data = $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480'],
+            'recipient_account' => ['required', 'in:configured,custom'],
+            'custom_bank_option' => ['nullable', 'string', 'max:120'],
+            'custom_bank_bin' => ['required_if:recipient_account,custom', 'nullable', 'regex:/^[0-9\\s-]{6,20}$/'],
+            'custom_account_number' => ['required_if:recipient_account,custom', 'nullable', 'regex:/^[0-9\\s-]{6,40}$/'],
+            'custom_account_name' => ['required_if:recipient_account,custom', 'nullable', 'string', 'max:150'],
         ]);
+
+        if ($data['recipient_account'] === 'custom') {
+            $bin = preg_replace('/\\D/', '', (string) $data['custom_bank_bin']);
+            $accountNumber = preg_replace('/\\D/', '', (string) $data['custom_account_number']);
+            $selectedBank = (string) ($data['custom_bank_option'] ?? '');
+            $bankName = preg_match('/^\\d{6}\\|(.{1,100})$/u', $selectedBank, $matches)
+                ? trim($matches[1])
+                : 'Ngân hàng khác';
+
+            if (strlen($bin) !== 6 || strlen($accountNumber) < 6 || strlen($accountNumber) > 30) {
+                throw ValidationException::withMessages([
+                    'custom_bank_bin' => 'Mã BIN phải gồm 6 chữ số và số tài khoản phải gồm 6–30 chữ số.',
+                ]);
+            }
+
+            $bank = [
+                'enabled' => true,
+                'name' => $bankName,
+                'bin' => $bin,
+                'account_number' => $accountNumber,
+                'account_name' => trim((string) $data['custom_account_name']),
+                'branch' => '',
+            ];
+        }
 
         $file = $request->file('file');
         if (! SpreadsheetSupport::canReadUpload($file)) {
