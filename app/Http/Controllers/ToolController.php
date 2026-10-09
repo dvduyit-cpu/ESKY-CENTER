@@ -81,7 +81,11 @@ class ToolController extends Controller
         }
 
         $data = $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:20480'],
+            'entry_mode' => ['nullable', 'in:single,excel'],
+            'student_name' => ['required_if:entry_mode,single', 'nullable', 'string', 'max:150'],
+            'class_code' => ['required_if:entry_mode,single', 'nullable', 'string', 'max:50'],
+            'amount' => ['required_if:entry_mode,single', 'nullable', 'integer', 'min:1', 'max:999999999'],
+            'file' => ['required_unless:entry_mode,single', 'file', 'mimes:xlsx,xls,csv', 'max:20480'],
             'recipient_account' => ['required', 'in:configured,custom'],
             'custom_bank_option' => ['nullable', 'string', 'max:120'],
             'custom_bank_bin' => ['required_if:recipient_account,custom', 'nullable', 'regex:/^[0-9\\s-]{6,20}$/'],
@@ -111,6 +115,40 @@ class ToolController extends Controller
                 'account_name' => trim((string) $data['custom_account_name']),
                 'branch' => '',
             ];
+        }
+
+        if (($data['entry_mode'] ?? 'excel') === 'single') {
+            $name = trim($data['student_name']);
+            $classCode = trim($data['class_code']);
+            if ($name === '' || $classCode === '') {
+                throw ValidationException::withMessages([
+                    'student_name' => 'Vui lòng nhập họ tên học viên và mã lớp.',
+                ]);
+            }
+            $amount = (float) $data['amount'];
+            $content = $this->tuitionQrContent($name, $classCode);
+            $items = [[
+                'name' => $name,
+                'class_code' => $classCode,
+                'amount' => $amount,
+                'content' => $content,
+                'note' => '',
+                'qr_url' => $this->tuitionQrImageUrl($bank, $amount, $content),
+            ]];
+            $sourceName = 'Nhập từng học viên - '.$name;
+            $request->session()->put('tools.tuition_qr_preview', [
+                'source_name' => $sourceName,
+                'items' => $items,
+            ]);
+
+            return view('tools.tuition-qr-preview', [
+                'bank' => $bank,
+                'items' => $items,
+                'errors' => [],
+                'sourceName' => $sourceName,
+                'backRoute' => route('tools.tuition.index'),
+                'backLabel' => 'Quay lại nhóm QR & học phí',
+            ]);
         }
 
         $file = $request->file('file');

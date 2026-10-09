@@ -47,7 +47,7 @@
     <main class="page">
         <section class="intro">
             <h1>Danh sách QR học phí</h1>
-            <p>File nguồn: <strong>{{ $sourceName }}</strong> · Tài khoản nhận: {{ $bank['name'] }} - {{ $bank['account_number'] }} - {{ $bank['account_name'] }}</p>
+            <p>Nguồn: <strong>{{ $sourceName }}</strong> · Tài khoản nhận: {{ $bank['name'] }} - {{ $bank['account_number'] }} - {{ $bank['account_name'] }}</p>
         </section>
 
         @if($errors !== [])
