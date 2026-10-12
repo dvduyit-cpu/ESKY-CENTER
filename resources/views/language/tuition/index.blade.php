@@ -23,7 +23,9 @@
 @php($targetPaidDate = session('tuition_target_paid_date', now()->format('Y-m-d')))
 @php($isAdmin = auth()->user()?->isAdmin())
 @if($isAdmin)
-<div class="card card-soft mb-4">
+<details class="mb-4" @if($monthlySyncReport || $errors->has('sync_date') || $errors->has('target_paid_date')) open @endif>
+    <summary class="btn btn-outline-secondary" style="width:fit-content"><i class="bi bi-tools me-2"></i>Công cụ học phí</summary>
+<div class="card card-soft mt-3">
     <div class="card-body p-4">
         <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
             <div class="me-lg-auto">
@@ -134,6 +136,7 @@
         </div>
     </div>
 </div>
+</details>
 @endif
 
 <div class="d-flex flex-column flex-lg-row align-items-start gap-3 mb-4">
@@ -236,7 +239,9 @@
 </div>
 @endif
 
-<form class="filter-panel row g-3 mb-4">
+<details class="mb-4">
+    <summary class="btn btn-outline-primary" style="width:fit-content"><i class="bi bi-funnel me-2"></i>Lọc học phí @if(request()->anyFilled(['q', 'class', 'status', 'debt', 'quarter', 'month']) || $filterYear !== now()->year)<span class="badge bg-primary ms-2">Đang lọc</span>@endif</summary>
+<form class="filter-panel row g-3 mt-3 mb-0">
     <div class="col-12">
         <label class="form-label" for="tuition-debt-filter">Công nợ</label>
         <select class="form-select" name="debt" id="tuition-debt-filter">
@@ -293,6 +298,7 @@
     </div>
 </form>
 
+</details>
 <form id="bulk-tuition" method="POST" action="{{ route('language-tuition.discount.bulk-highest') }}" data-bulk-form="tuition" data-bulk-confirm="Áp dụng mức miễn giảm cao nhất cho các khoản thu đã chọn?" class="mb-3 d-flex flex-wrap align-items-center gap-2">
     @csrf
     @method('PATCH')
