@@ -797,6 +797,33 @@ class LanguageTuitionController extends Controller
         return back()->with('success','Đã so sánh miễn giảm của lớp và học viên, chỉ áp dụng mức cao hơn để tính lại học phí.');
     }
 
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['required', 'integer', 'distinct', 'exists:language_tuition_charges,id'],
+        ]);
+        $deleted = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use ($data, &$deleted, &$skipped) {
+            $charges = LanguageTuitionCharge::whereIn('id', $data['ids'])->lockForUpdate()->get();
+            foreach ($charges as $charge) {
+                if ((float) $charge->paid_amount > 0 || (float) $charge->credit_amount > 0
+                    || $charge->payments()->exists() || $charge->incomingTransfers()->exists()
+                    || $charge->outgoingTransfers()->exists()) {
+                    $skipped++;
+                    continue;
+                }
+                $charge->delete();
+                $deleted++;
+            }
+        });
+
+        return back()->with('success', "Đã xóa {$deleted} khoản học phí."
+            . ($skipped > 0 ? " Giữ lại {$skipped} khoản đã có phiếu thu hoặc chuyển học phí." : ''));
+    }
+
     public function bulkApplyHighest(Request $request): RedirectResponse
     {
         $data = $request->validate([

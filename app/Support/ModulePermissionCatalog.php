@@ -27,7 +27,7 @@ class ModulePermissionCatalog
         'language_discounts' => ['view', 'create', 'update', 'delete', 'export'],
         'language_tuition_overview' => ['view'],
         'language_tuition_by_class' => ['view'],
-        'language_tuition' => ['view', 'create', 'update', 'export'],
+        'language_tuition' => ['view', 'create', 'update', 'delete', 'export'],
         'language_targets' => ['view', 'export'],
         'roles' => ['view', 'create', 'update', 'delete'],
         'teacher_classes' => ['view', 'update'],

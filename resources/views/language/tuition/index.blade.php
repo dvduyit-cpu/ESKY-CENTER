@@ -304,7 +304,19 @@
             <i class="bi bi-percent me-1"></i>Áp dụng mức cao nhất (<span data-bulk-count>0</span>)
         </button>
     @endif
+    @if(auth()->user()->allowed('language_tuition', 'delete'))
+        <button class="btn btn-sm btn-outline-danger" type="button" data-tuition-delete data-keep-label disabled>
+            <i class="bi bi-trash me-1"></i>Xóa học phí (<span data-tuition-delete-count>0</span>)
+        </button>
+    @endif
 </form>
+@if(auth()->user()->allowed('language_tuition', 'delete'))
+    <form id="delete-tuition" method="POST" action="{{ route('language-tuition.bulk-destroy') }}" data-confirm="Xóa các khoản học phí đã chọn? Khoản có phiếu thu hoặc chuyển học phí sẽ được giữ lại.">
+        @csrf
+        @method('DELETE')
+        <div data-tuition-delete-ids></div>
+    </form>
+@endif
 
 <div class="card card-soft">
     <div class="table-responsive">
@@ -378,4 +390,31 @@
 
 @push('scripts')
 <script src="{{asset('js/tuition-import.js')}}?v={{filemtime(public_path('js/tuition-import.js'))}}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const button = document.querySelector('[data-tuition-delete]');
+    const form = document.getElementById('delete-tuition');
+    if (!button || !form) return;
+    const selected = () => [...document.querySelectorAll('[data-bulk-item="tuition"]:checked')];
+    const update = () => {
+        const count = selected().length;
+        button.disabled = count === 0;
+        button.querySelector('[data-tuition-delete-count]').textContent = count;
+    };
+    document.addEventListener('change', event => {
+        if (event.target.matches('[data-bulk-item="tuition"], [data-bulk-all="tuition"]')) update();
+    });
+    button.addEventListener('click', () => {
+        const ids = selected();
+        if (!ids.length) return;
+        form.querySelector('[data-tuition-delete-ids]').replaceChildren(...ids.map(box => {
+            const input = document.createElement('input');
+            input.type = 'hidden'; input.name = 'ids[]'; input.value = box.value;
+            return input;
+        }));
+        form.requestSubmit();
+    });
+    update();
+});
+</script>
 @endpush

@@ -174,6 +174,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/language-tuition-by-class',[LanguageTuitionController::class,'byClass'])->middleware('permission:language_tuition_by_class,view')->name('language-tuition.by-class.index');
         Route::get('/language-tuition-by-class/{languageClass}',[LanguageTuitionController::class,'showByClass'])->middleware('permission:language_tuition_by_class,view')->name('language-tuition.by-class.show');
         Route::get('/language-tuition',[LanguageTuitionController::class,'index'])->middleware('permission:language_tuition,view')->name('language-tuition.index');
+        Route::delete('/language-tuition', [LanguageTuitionController::class, 'bulkDestroy'])->middleware('permission:language_tuition,delete')->name('language-tuition.bulk-destroy');
         Route::get('/language-tuition-monthly',[LanguageTuitionController::class,'monthly'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly');
         Route::get('/language-tuition-monthly/pdf',[LanguageTuitionController::class,'monthlyPdf'])->middleware('permission:language_tuition,view')->name('language-tuition.monthly.pdf');
         Route::post('/language-tuition-monthly/shift-paid-date',[LanguageTuitionController::class,'bulkShiftMonthlyPaidAtDate'])->middleware('permission:language_tuition,update')->name('language-tuition.monthly.shift-paid-date');
