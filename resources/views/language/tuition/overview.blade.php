@@ -9,6 +9,7 @@
     $paid = (float) $summary->paid_amount;
     $credit = (float) $summary->credit_amount;
     $remaining = (float) $summary->remaining_amount;
+    $debtPeriod = array_filter(['year' => $year, 'month' => $month, 'quarter' => $quarter], fn ($value) => $value !== null);
     $collectionRate = $payable > 0 ? min(100, round((($paid + $credit) / $payable) * 100, 1)) : 0;
     $statusLabels = ['unpaid' => 'Chưa đóng', 'partial' => 'Đóng một phần', 'pending_receipt' => 'Chờ bổ sung phiếu thu', 'paid' => 'Đã đóng đủ', 'transferred' => 'Đã quyết toán chuyển lớp'];
     $maxCollection = max(1, $monthlyCollections->max(fn ($month) => $month['tuition'] + $month['books']));
@@ -30,7 +31,16 @@
     <div class="col-sm-6 col-xl-3"><div class="card card-soft h-100"><div class="card-body p-4"><div class="small text-muted">Tổng phải thu</div><div class="fs-4 fw-bold mt-1">{{ number_format($payable) }}đ</div><div class="small text-muted mt-2">{{ number_format($summary->charge_count) }} khoản thu</div></div></div></div>
     <div class="col-sm-6 col-xl-3"><div class="card card-soft h-100 border-success-subtle"><div class="card-body p-4"><div class="small text-muted">Đã thu</div><div class="fs-4 fw-bold text-success mt-1">{{ number_format($paid) }}đ</div><div class="small text-muted mt-2">Tỷ lệ hoàn thành {{ number_format($collectionRate, 1) }}%</div></div></div></div>
     <div class="col-sm-6 col-xl-3"><div class="card card-soft h-100 border-primary-subtle"><div class="card-body p-4"><div class="small text-muted">Học phí chuyển sang</div><div class="fs-4 fw-bold text-primary mt-1">{{ number_format($credit) }}đ</div><div class="small text-muted mt-2">Đã quyết toán khi chuyển lớp</div></div></div></div>
-    <div class="col-sm-6 col-xl-3"><div class="card card-soft h-100 border-danger-subtle"><div class="card-body p-4"><div class="small text-muted">Còn phải thu</div><div class="fs-4 fw-bold text-danger mt-1">{{ number_format($remaining) }}đ</div><div class="small text-muted mt-2">Quá hạn: {{ number_format($overdue->total) }} khoản · {{ number_format($overdue->amount) }}đ</div></div></div></div>
+    <div class="col-sm-6 col-xl-3"><div class="card card-soft h-100 border-danger-subtle"><div class="card-body p-4">
+        <div class="small text-muted">Còn phải thu</div>
+        @if(auth()->user()->allowed('language_tuition'))
+            <a class="d-block fs-4 fw-bold text-danger mt-1" href="{{ route('language-tuition.index', $debtPeriod + ['debt' => 'outstanding']) }}" title="Xem các khoản còn phải thu">{{ number_format($remaining) }}đ</a>
+            <a class="d-block small text-danger mt-2" href="{{ route('language-tuition.index', $debtPeriod + ['debt' => 'overdue']) }}" title="Xem các khoản quá hạn">Quá hạn: {{ number_format($overdue->total) }} khoản · {{ number_format($overdue->amount) }}đ <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        @else
+            <div class="fs-4 fw-bold text-danger mt-1">{{ number_format($remaining) }}đ</div>
+            <div class="small text-muted mt-2">Quá hạn: {{ number_format($overdue->total) }} khoản · {{ number_format($overdue->amount) }}đ</div>
+        @endif
+    </div></div></div>
 </div>
 
 <div class="row g-4 mb-4">

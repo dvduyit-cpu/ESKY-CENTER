@@ -237,6 +237,17 @@
 @endif
 
 <form class="filter-panel row g-3 mb-4">
+    <div class="col-12">
+        <label class="form-label" for="tuition-debt-filter">Công nợ</label>
+        <select class="form-select" name="debt" id="tuition-debt-filter">
+            <option value="">Tất cả khoản thu</option>
+            <option value="outstanding" @selected(request('debt') === 'outstanding')>Còn phải thu</option>
+            <option value="overdue" @selected(request('debt') === 'overdue')>Quá hạn thanh toán</option>
+        </select>
+        @if(in_array(request('debt'), ['outstanding', 'overdue'], true))
+            <div class="form-text">Các khoản còn công nợ trong kỳ đã chọn, bao gồm khoản của lớp đã lưu trữ. Nhấn vào từng khoản thu để xem chi tiết và xử lý.</div>
+        @endif
+    </div>
     <div class="col-lg-3">
         <input class="form-control" name="q" value="{{ request('q') }}" placeholder="Mã lớp, khoản thu hoặc học viên">
     </div>

@@ -1136,12 +1136,22 @@ class LanguageTuitionController extends Controller
 
     private function filteredTuitionQuery(Request $request, array $with): Builder
     {
+        $debt = in_array($request->input('debt'), ['outstanding', 'overdue'], true)
+            ? $request->input('debt') : null;
         $query = LanguageTuitionCharge::query()
             ->with($with)
-            ->where(fn ($builder) => $builder
+            ->when($debt === null, fn ($query) => $query->where(fn ($builder) => $builder
                 ->whereNull('language_class_id')
-                ->orWhereHas('languageClass', fn ($class) => $class->whereNull('language_classes.deleted_at')))
+                ->orWhereHas('languageClass', fn ($class) => $class->whereNull('language_classes.deleted_at'))))
             ->latest();
+
+        // Overview includes all charges, including those belonging to archived classes.
+        if ($debt !== null) {
+            $query->whereRaw('payable_amount - paid_amount - credit_amount > 0');
+            if ($debt === 'overdue') {
+                $query->whereDate('due_date', '<', today());
+            }
+        }
 
         if ($request->filled('q')) {
             $search = $request->string('q');
