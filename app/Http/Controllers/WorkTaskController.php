@@ -232,7 +232,7 @@ class WorkTaskController extends Controller
         $isCreator = $task->created_by_id === $request->user()->id;
         $canParticipate = $isCreator || $task->assignees->contains('user_id', $request->user()->id);
         $canEdit = $isCreator && $request->user()->allowed('work_tasks', 'update');
-        $canClose = $canEdit;
+        $canClose = $canEdit || $request->user()->isAdmin();
         $canDelete = $isCreator && $request->user()->allowed('work_tasks', 'delete');
         $canPin = $isCreator || $task->assignees->contains('user_id', $request->user()->id);
         $isPinned = $task->pinnedByUsers->isNotEmpty();
@@ -397,6 +397,38 @@ class WorkTaskController extends Controller
             $acknowledged ? 'đã xác nhận nhận việc.' : 'đã bỏ xác nhận nhận việc.'
         );
         return back()->with('success','Đã cập nhật xác nhận.');
+    }
+
+    public function updateAssigneeStatus(Request $request, WorkTask $task): RedirectResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403);
+        $data = $request->validate([
+            'user_id' => ['required', 'integer'],
+            'status' => ['required', 'in:acknowledged,completed,reopen'],
+        ]);
+        $changed = DB::transaction(function () use ($request, $task, $data): bool {
+            $lockedTask = WorkTask::whereKey($task->id)->lockForUpdate()->firstOrFail();
+            if ($lockedTask->closed_at) return false;
+            $assignment = WorkTaskAssignee::where('work_task_id', $lockedTask->id)
+                ->where('user_id', $data['user_id'])->lockForUpdate()->firstOrFail();
+            $values = match ($data['status']) {
+                'completed' => ['acknowledged_at' => $assignment->acknowledged_at ?? now(), 'completed_at' => $assignment->completed_at ?? now()],
+                'acknowledged' => ['acknowledged_at' => $assignment->acknowledged_at ?? now()],
+                'reopen' => ['completed_at' => null],
+            };
+            $assignment->fill($values);
+            if (!$assignment->isDirty()) return true;
+            $assignment->save();
+            $label = match ($data['status']) {
+                'completed' => 'xác nhận hoàn thành',
+                'acknowledged' => 'xác nhận nhận việc',
+                'reopen' => 'mở lại công việc',
+            };
+            $this->log($lockedTask, $request, 'Admin đã '.$label.' thay '.$assignment->user->name.'.', 'status');
+            return true;
+        });
+        return back()->with($changed ? 'success' : 'warning', $changed
+            ? 'Đã cập nhật trạng thái người thực hiện.' : 'Task đã đóng. Hãy mở lại task trước khi cập nhật.');
     }
 
     public function complete(Request $request, WorkTask $task): RedirectResponse
@@ -784,7 +816,7 @@ class WorkTaskController extends Controller
     public function close(Request $request, WorkTask $task): RedirectResponse
     {
         abort_unless(
-            $task->created_by_id === $request->user()->id,
+            $task->created_by_id === $request->user()->id || $request->user()->isAdmin(),
             403,
             'Chỉ người giao công việc mới được đóng hoặc mở lại task.'
         );
@@ -804,7 +836,7 @@ class WorkTaskController extends Controller
                     ->where('work_task_id', $lockedTask->id)
                     ->lockForUpdate()
                     ->get(['id', 'completed_at']);
-                if ($assignments->contains(fn (WorkTaskAssignee $assignment) => $assignment->completed_at === null)) {
+                if (!$request->user()->isAdmin() && $assignments->contains(fn (WorkTaskAssignee $assignment) => $assignment->completed_at === null)) {
                     return ['changed'=>false, 'level'=>'warning', 'message'=>'Chỉ có thể đóng khi tất cả người nhận đã hoàn thành.'];
                 }
             }

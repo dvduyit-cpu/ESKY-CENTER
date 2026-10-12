@@ -69,6 +69,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/tasks/{task}', [WorkTaskController::class, 'update'])->middleware('permission:work_tasks,update')->name('tasks.update');
         Route::patch('/tasks/{task}/acknowledge', [WorkTaskController::class, 'acknowledge'])->middleware('permission:work_tasks,view')->name('tasks.acknowledge');
         Route::patch('/tasks/{task}/complete', [WorkTaskController::class, 'complete'])->middleware('permission:work_tasks,view')->name('tasks.complete');
+        Route::patch('/tasks/{task}/assignee-status', [WorkTaskController::class, 'updateAssigneeStatus'])->middleware('permission:work_tasks,view')->name('tasks.assignee-status');
         Route::patch('/tasks/{task}/close', [WorkTaskController::class, 'close'])->middleware('permission:work_tasks,update')->name('tasks.close');
         Route::post('/tasks/{task}/comments', [WorkTaskController::class, 'comment'])->middleware('permission:work_tasks,view')->name('tasks.comments.store');
         Route::delete('/tasks/{task}/comments/{comment}', [WorkTaskController::class, 'retractComment'])->middleware('permission:work_tasks,view')->name('tasks.comments.retract');
