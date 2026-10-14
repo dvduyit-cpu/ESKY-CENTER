@@ -20,7 +20,7 @@
         <input type="hidden" name="history" value="1">
     @endif
     <div class="{{ $canFilterByStatus ? 'col-lg-4' : 'col-lg-10' }}">
-        <input class="form-control" name="q" value="{{request('q')}}" placeholder="Tìm mã lớp hoặc tên lớp">
+        <input class="form-control" name="q" value="{{request('q')}}" placeholder="Tìm tên giáo viên, mã lớp hoặc tên lớp" aria-label="Tìm tên giáo viên, mã lớp hoặc tên lớp">
     </div>
     @if($canFilterByStatus)
     <div class="col-lg-3">

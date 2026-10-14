@@ -89,8 +89,11 @@ class LanguageClassController extends Controller
         $query=LanguageClass::with(['program','level','teacher'])->withCount(['enrollments as enrollments_count'=>fn($q)=>$q->where('status','studying')]);
         if($user->canTeach()&&!$this->hasExplicitLanguageClassUpdate($user))$query->where('teacher_user_id',$user->id);
         if($request->filled('q')){
-            $search=$request->string('q');
-            $query->where(fn($builder)=>$builder->where('name','like',"%{$search}%")->orWhere('code','like',"%{$search}%"));
+            $search=trim($request->string('q')->toString());
+            $query->where(fn($builder)=>$builder
+                ->where('name','like',"%{$search}%")
+                ->orWhere('code','like',"%{$search}%")
+                ->orWhereHas('teacher',fn($teacher)=>$teacher->where('name','like',"%{$search}%")));
         }
         $history?$query->whereIn('status',['completed','cancelled']):$query->whereNotIn('status',['completed','cancelled']);
         if($user->isRegistrar()&&$status!=='')$query->where('status',$status);
