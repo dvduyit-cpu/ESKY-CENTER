@@ -247,7 +247,8 @@ class ImportController extends Controller
 
         try {
             $sheet = IOFactory::load($file->getRealPath())->getActiveSheet();
-            $rows = $sheet->toArray(null, true, true, false);
+            // Read Excel dates as serial values rather than locale-dependent display strings.
+            $rows = $sheet->toArray(null, true, false, false);
             if (count($rows) < 2) throw new \RuntimeException('File không có dữ liệu.');
 
             $headers = [];
@@ -402,10 +403,18 @@ class ImportController extends Controller
         if ($value instanceof \DateTimeInterface) return Carbon::instance($value);
         if (is_numeric($value) && (float) $value > 1000) return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $value));
         if (is_string($value) && trim($value) !== '') {
-            foreach (['d/m/Y','Y-m-d','m/d/Y','d-m-Y'] as $format) {
-                try { return Carbon::createFromFormat($format, trim($value))->startOfDay(); } catch (\Throwable) {}
+            $text = trim($value);
+            if (preg_match('/^(\d{1,2})([\/.-])(\d{1,2})\2(\d{4})$/', $text, $parts)) {
+                [$day, $month, $year] = [(int) $parts[1], (int) $parts[3], (int) $parts[4]];
+            } elseif (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $text, $parts)) {
+                [$day, $month, $year] = [(int) $parts[3], (int) $parts[2], (int) $parts[1]];
+            } else {
+                throw new \RuntimeException('Ngày ghi nhận không hợp lệ: '.$text.'. Vui lòng nhập ngày/tháng/năm, ví dụ 14/10/2026.');
             }
-            try { return Carbon::parse($value)->startOfDay(); } catch (\Throwable) {}
+            if (! checkdate($month, $day, $year)) {
+                throw new \RuntimeException('Ngày ghi nhận không hợp lệ: '.$text.'. Vui lòng kiểm tra ngày/tháng/năm.');
+            }
+            return Carbon::create($year, $month, $day)->startOfDay();
         }
         $month = $period['period_type'] === 'month' ? (int) $period['month'] : (((int) $period['quarter'] - 1) * 3 + 1);
         return Carbon::create((int) $period['year'], $month, 1);
