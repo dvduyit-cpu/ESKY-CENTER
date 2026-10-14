@@ -3,16 +3,18 @@
 @section('header','Dữ liệu chỉ tiêu đã nhập')
 @section('content')
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-    <div><h1 class="page-title">Tổng dữ liệu chỉ tiêu đã nhập</h1><div class="page-subtitle">Danh sách chi tiết tất cả kết quả đã ghi nhận vào hệ thống.</div></div>
+    <div><h1 class="page-title">{{ $batch ? 'Dữ liệu đang sử dụng từ lần nhập' : 'Tổng dữ liệu chỉ tiêu đã nhập' }}</h1><div class="page-subtitle">{{ $batch ? $batch->original_name : 'Danh sách chi tiết tất cả kết quả đã ghi nhận vào hệ thống.' }}</div></div>
     <div class="d-flex gap-2"><a class="btn btn-light" href="{{ route('imports.index') }}"><i class="bi bi-arrow-left me-2"></i>Các lần nhập</a>@if(auth()->user()->allowed('imports','create'))<a class="btn btn-primary" href="{{ route('imports.records.create') }}"><i class="bi bi-plus-circle me-2"></i>Nhập thủ công</a>@endif</div>
 </div>
+@if($batch)<div class="alert alert-info">Chỉ hiển thị các dòng hiện còn thuộc lần nhập này. Dòng đã bị ghi đè bởi lần nhập khác hoặc đã xóa không xuất hiện. <a href="{{ route('imports.show',$batch) }}">Xem lại toàn bộ file gốc</a>.</div>@endif
 <form class="filter-panel row g-3 mb-4">
+    @if($batch)<input type="hidden" name="batch_id" value="{{ $batch->id }}">@endif
     <div class="col-xl-3"><input class="form-control" name="q" value="{{ request('q') }}" placeholder="Học viên, lớp hoặc số phiếu thu..."></div>
     <div class="col-6 col-xl-2"><input class="form-control" type="number" name="year" min="2020" max="2100" value="{{ request('year') }}" placeholder="Năm"></div>
     <div class="col-6 col-xl-1"><select class="form-select" name="month"><option value="">Tháng</option>@for($month=1;$month<=12;$month++)<option value="{{ $month }}" @selected((string)request('month')===(string)$month)>T{{ $month }}</option>@endfor</select></div>
     <div class="col-xl-2"><select class="form-select" name="personnel_id"><option value="">Mọi nhân sự</option>@foreach($personnels as $personnel)<option value="{{ $personnel->id }}" @selected((string)request('personnel_id')===(string)$personnel->id)>{{ $personnel->name }}</option>@endforeach</select></div>
     <div class="col-xl-2"><select class="form-select" name="course_id"><option value="">Mọi khóa học</option>@foreach($courses as $course)<option value="{{ $course->id }}" @selected((string)request('course_id')===(string)$course->id)>{{ $course->name }}</option>@endforeach</select></div>
-    <div class="col-xl-2 d-flex gap-2"><button class="btn btn-dark flex-grow-1"><i class="bi bi-search me-1"></i>Lọc</button><a class="btn btn-light" href="{{ route('imports.records') }}" title="Xóa bộ lọc"><i class="bi bi-x-lg"></i></a></div>
+    <div class="col-xl-2 d-flex gap-2"><button class="btn btn-dark flex-grow-1"><i class="bi bi-search me-1"></i>Lọc</button><a class="btn btn-light" href="{{ route('imports.records',$batch ? ['batch_id'=>$batch->id] : []) }}" title="Xóa bộ lọc"><i class="bi bi-x-lg"></i></a></div>
 </form>
 @if(auth()->user()->allowed('imports','delete'))
 <form id="bulk-kpi-records" method="POST" action="{{ route('imports.records.bulk-destroy') }}" data-bulk-form="kpi-records" data-bulk-confirm="Xóa các dòng dữ liệu KPI đã chọn?" class="mb-3 d-flex flex-wrap align-items-center gap-2">

@@ -14,6 +14,8 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -35,9 +37,12 @@ class ImportController extends Controller
 
     public function records(Request $request): View
     {
+        $batch = $request->filled('batch_id')
+            ? ImportBatch::where('import_type', 'result')->findOrFail($request->integer('batch_id')) : null;
         $query = KpiRecord::with(['personnel', 'collaborator', 'course'])
             ->orderByDesc('record_date')
             ->orderByDesc('id');
+        if ($batch) $query->where('import_batch_id', $batch->id);
 
         if ($request->filled('q')) {
             $keyword = $request->string('q')->toString();
@@ -52,10 +57,48 @@ class ImportController extends Controller
         if ($request->filled('course_id')) $query->where('course_id', $request->integer('course_id'));
 
         return view('imports.records', [
+            'batch' => $batch,
             'records' => $query->paginate(\App\Support\Pagination::perPage())->withQueryString(),
             'personnels' => Personnel::where('type', '!=', 'collaborator')->orderBy('name')->get(),
             'courses' => Course::orderBy('name')->get(),
         ]);
+    }
+
+    public function show(Request $request, ImportBatch $batch): View
+    {
+        abort_unless($batch->import_type === 'result', 404);
+        $headers = []; $rows = []; $fileError = null;
+        try {
+            if (! Storage::exists($batch->stored_path)) {
+                throw new \RuntimeException('File gốc không còn trên máy chủ. Bạn vẫn có thể xem dữ liệu hiện đang sử dụng bên dưới.');
+            }
+            $spreadsheet = IOFactory::load(Storage::path($batch->stored_path));
+            $contents = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+            $headers = array_shift($contents) ?? [];
+            foreach ($contents as $offset => $values) {
+                if (collect($values)->every(fn ($value) => trim((string) $value) === '')) continue;
+                $rows[] = ['number' => $offset + 2, 'values' => $values];
+            }
+            $spreadsheet->disconnectWorksheets();
+        } catch (\Throwable $e) {
+            report($e);
+            $fileError = 'Không thể mở file gốc. '.$e->getMessage();
+        }
+        $perPage = \App\Support\Pagination::perPage();
+        $page = max(1, $request->integer('page', 1));
+        return view('imports.show', [
+            'batch' => $batch->load('user'), 'headers' => $headers, 'fileError' => $fileError,
+            'rows' => new LengthAwarePaginator(array_slice($rows, ($page - 1) * $perPage, $perPage), count($rows), $perPage, $page, [
+                'path' => $request->url(), 'query' => $request->query(),
+            ]),
+            'currentCount' => $batch->records()->count(),
+        ]);
+    }
+
+    public function download(ImportBatch $batch)
+    {
+        abort_unless($batch->import_type === 'result' && Storage::exists($batch->stored_path), 404);
+        return Storage::download($batch->stored_path, $batch->original_name);
     }
 
     public function createRecord(): View
@@ -186,11 +229,8 @@ class ImportController extends Controller
         }
 
         $hash = hash_file('sha256', $file->getRealPath());
-        if (ImportBatch::where('file_hash', $hash)->where('status', 'completed')->exists()) {
-            return back()->withErrors(['file' => 'File này đã được nhập trước đó.']);
-        }
 
-        $storedName = now()->format('Ymd_His').'_'.$file->getClientOriginalName();
+        $storedName = (string) \Illuminate\Support\Str::uuid().'.'.$file->getClientOriginalExtension();
         $storedPath = $file->storeAs('imports', $storedName);
         $batch = ImportBatch::create([
             'import_type' => 'result',
@@ -216,8 +256,8 @@ class ImportController extends Controller
                 if (! array_key_exists($required, $headers)) throw new \RuntimeException('Thiếu cột '.$required.'.');
             }
 
-            $success = 0; $errors = []; $totalRevenue = 0.0; $totalRows = 0;
-            DB::transaction(function () use ($rows, $headers, $batch, $data, $request, &$success, &$errors, &$totalRevenue, &$totalRows): void {
+            $success = 0; $updated = 0; $errors = []; $totalRevenue = 0.0; $totalRows = 0;
+            DB::transaction(function () use ($rows, $headers, $batch, $data, $request, &$success, &$updated, &$errors, &$totalRevenue, &$totalRows): void {
                 foreach (array_slice($rows, 1) as $offset => $row) {
                     $rowNo = $offset + 2;
                     $student = trim((string) ($row[$headers['HO TEN HOC VIEN']] ?? ''));
@@ -240,7 +280,7 @@ class ImportController extends Controller
 
                         $revenue = $this->number($row[$headers['THUC THU']] ?? 0);
                         $quantity = max($this->number($row[$headers['SO LUONG'] ?? -1] ?? 1), 0);
-                        KpiRecord::create([
+                        $attributes = [
                             'import_batch_id' => $batch->id,
                             'source_row_no' => $rowNo,
                             'personnel_id' => $personnel->id,
@@ -260,7 +300,23 @@ class ImportController extends Controller
                             'conversion_mode' => $course->conversion_mode,
                             'note' => trim((string) ($row[$headers['GHI CHU'] ?? -1] ?? '')),
                             'created_by' => $request->user()->id,
-                        ]);
+                        ];
+                        $matches = KpiRecord::where('personnel_id', $personnel->id)
+                            ->where('course_id', $course->id)
+                            ->whereDate('record_date', $recordDate->toDateString())
+                            ->lockForUpdate()->get()->filter(fn (KpiRecord $record) =>
+                                TextNormalizer::exactName($record->student_name) === TextNormalizer::exactName($student)
+                                && TextNormalizer::exactName($record->class_name) === TextNormalizer::exactName($attributes['class_name'])
+                                && mb_strtolower(trim((string) $record->receipt_no)) === mb_strtolower($attributes['receipt_no'])
+                            );
+                        if ($existing = $matches->first()) {
+                            $existing->update($attributes);
+                            // Older imports may already contain several copies of the same result.
+                            foreach ($matches->skip(1) as $duplicate) $duplicate->delete();
+                            $updated++;
+                        } else {
+                            KpiRecord::create($attributes);
+                        }
                         $success++;
                         $totalRevenue += $revenue;
                     } catch (\Throwable $e) {
@@ -281,7 +337,7 @@ class ImportController extends Controller
             ]);
             ActivityLogger::log('imports', 'import_results', "Nhập {$success} dòng kết quả", $batch);
             $redirect = redirect()->route('imports.index')
-                ->with('success', "Đã nhập {$success}/{$totalRows} dòng. Có ".count($errors).' dòng lỗi.');
+                ->with('success', "Đã nhập {$success}/{$totalRows} dòng: ".($success - $updated)." dòng mới, {$updated} dòng trùng đã gộp và ghi đè bằng dữ liệu mới. Có ".count($errors).' dòng lỗi.');
             if ($errors) $redirect->with('import_errors', $errors);
 
             return $redirect;

@@ -271,6 +271,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/imports/create', [ImportController::class, 'create'])->middleware('permission:imports,create')->name('imports.create');
         Route::post('/imports', [ImportController::class, 'store'])->middleware('permission:imports,create')->name('imports.store');
         Route::get('/imports-template', [ImportController::class, 'template'])->middleware('permission:imports,view')->name('imports.template');
+        Route::get('/imports/batches/{batch}', [ImportController::class, 'show'])->middleware('permission:imports,view')->name('imports.show');
+        Route::get('/imports/batches/{batch}/download', [ImportController::class, 'download'])->middleware('permission:imports,view')->name('imports.download');
 
         Route::get('/reports', [ReportController::class, 'index'])->middleware('permission:reports,view')->name('reports.index');
         Route::get('/reports/recruitment-kpi', [ReportController::class, 'recruitmentKpi'])->middleware('permission:reports,view')->name('reports.recruitment-kpi');
