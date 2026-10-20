@@ -64,7 +64,8 @@
         <section class="grid">
             @foreach($items as $item)
                 <article class="card">
-                    <img src="{{ route('tools.tuition.image', ['index' => $loop->index]) }}" alt="QR học phí {{ $item['name'] }}">
+                    <img src="{{ route('tools.tuition.image', ['index' => $loop->index]) }}" alt="QR học phí {{ $item['name'] }}" data-qr-image data-fallback-src="{{ $item['qr_url'] }}">
+                    <div class="alert" data-qr-error hidden>Không tải được ảnh QR. Vui lòng tải lại trang hoặc thử lại sau.</div>
                     <h2>{{ $item['name'] }}</h2>
                     <div class="meta"><strong>Mã lớp:</strong> {{ $item['class_code'] !== '' ? $item['class_code'] : 'Chưa có' }}</div>
                     <div class="meta"><strong>Số tiền:</strong> {{ number_format($item['amount']) }}đ</div>
@@ -82,5 +83,22 @@
             @endforeach
         </section>
     </main>
+<script>
+    document.querySelectorAll('[data-qr-image]').forEach(function (image) {
+        const handleError = function () {
+            if (!image.dataset.fallbackAttempted) {
+                image.dataset.fallbackAttempted = '1';
+                image.src = image.dataset.fallbackSrc;
+                return;
+            }
+            image.style.display = 'none';
+            image.nextElementSibling.hidden = false;
+        };
+        image.addEventListener('error', handleError);
+        if (image.complete && image.naturalWidth === 0) {
+            handleError();
+        }
+    });
+</script>
 </body>
 </html>

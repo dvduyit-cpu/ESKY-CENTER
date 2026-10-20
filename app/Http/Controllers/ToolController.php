@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Support\ExcelExporter;
 use App\Support\SpreadsheetSupport;
 use App\Support\TextNormalizer;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -263,9 +264,17 @@ class ToolController extends Controller
 
     public function previewTuitionQrImage(Request $request, int $index)
     {
-        $item = $this->previewTuitionQrItem($request, $index);
+        try {
+            $item = $this->previewTuitionQrItem($request, $index);
+            $image = $this->downloadTuitionQrImage($item);
+        } catch (ValidationException $exception) {
+            return response('Không thể tải ảnh QR. Vui lòng thử lại.', 502, [
+                'Content-Type' => 'text/plain; charset=UTF-8',
+                'Cache-Control' => 'private, no-store',
+            ]);
+        }
 
-        return response($this->downloadTuitionQrImage($item), 200, [
+        return response($image, 200, [
             'Content-Type' => 'image/png',
             'Cache-Control' => 'private, no-store',
         ]);
@@ -359,7 +368,14 @@ class ToolController extends Controller
 
     private function downloadTuitionQrImage(array $item): string
     {
-        $response = Http::timeout(20)->retry(2, 250)->get((string) ($item['qr_url'] ?? ''));
+        try {
+            $response = Http::connectTimeout(5)->timeout(15)->retry(2, 250, throw: false)
+                ->get((string) ($item['qr_url'] ?? ''));
+        } catch (ConnectionException $exception) {
+            throw ValidationException::withMessages([
+                'file' => 'Không thể kết nối VietQR. Vui lòng thử lại sau.',
+            ]);
+        }
 
         if (! $response->successful() || $response->body() === '') {
             $name = trim((string) ($item['name'] ?? 'QR'));
@@ -369,17 +385,25 @@ class ToolController extends Controller
             ]);
         }
 
-        return $this->addTuitionQrDetails($response->body(), $item);
+        $image = $response->body();
+        $dimensions = @getimagesizefromstring($image);
+        if ($dimensions === false || $dimensions[2] !== IMAGETYPE_PNG) {
+            throw ValidationException::withMessages([
+                'file' => 'VietQR chưa trả về ảnh PNG hợp lệ. Vui lòng thử lại sau.',
+            ]);
+        }
+
+        return $this->addTuitionQrDetails($image, $item);
     }
 
     private function addTuitionQrDetails(string $qrImage, array $item): string
     {
         $fontPath = base_path('vendor/dompdf/dompdf/lib/fonts/DejaVuSans-Bold.ttf');
 
-        if (! function_exists('imagecreatefromstring') || ! function_exists('imagettftext') || ! is_file($fontPath)) {
-            throw ValidationException::withMessages([
-                'file' => 'Máy chủ chưa có đủ thư viện để thêm thông tin vào ảnh QR.',
-            ]);
+        if (! function_exists('imagecreatefromstring') || ! function_exists('imagettftext')
+            || ! function_exists('imagettfbbox') || ! function_exists('imagepng') || ! is_file($fontPath)) {
+            // Annotation is optional; keep the original payment QR usable on shared hosting.
+            return $qrImage;
         }
 
         $source = @imagecreatefromstring($qrImage);
