@@ -292,6 +292,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/tools/tuition-qr/download-all', [ToolController::class, 'downloadAllPreviewTuitionQrs'])->middleware('permission:tools,view')->name('tools.tuition.download-all');
         Route::get('/tools/tuition-qr/download/{index}', [ToolController::class, 'downloadPreviewTuitionQr'])->whereNumber('index')->middleware('permission:tools,view')->name('tools.tuition.download');
         Route::get('/tools/tuition-qr/template', [ToolController::class, 'tuitionQrTemplate'])->middleware('permission:tools,view')->name('tools.tuition.template');
+        Route::get('/tools/tuition-qr/preview', [ToolController::class, 'showTuitionQrPreview'])->middleware('permission:tools,view')->name('tools.tuition.preview.show');
         Route::post('/tools/tuition-qr/preview', [ToolController::class, 'previewTuitionQrs'])->middleware('permission:tools,create')->name('tools.tuition.preview');
 
         Route::get('/logs', [LogController::class, 'index'])->middleware('permission:logs,view')->name('logs.index');

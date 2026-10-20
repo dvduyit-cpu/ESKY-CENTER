@@ -138,17 +138,12 @@ class ToolController extends Controller
             $sourceName = 'Nhập từng học viên - '.$name;
             $request->session()->put('tools.tuition_qr_preview', [
                 'source_name' => $sourceName,
+                'bank' => $bank,
+                'errors' => [],
                 'items' => $items,
             ]);
 
-            return view('tools.tuition-qr-preview', [
-                'bank' => $bank,
-                'items' => $items,
-                'errors' => [],
-                'sourceName' => $sourceName,
-                'backRoute' => route('tools.tuition.index'),
-                'backLabel' => 'Quay lại nhóm QR & học phí',
-            ]);
+            return redirect()->route('tools.tuition.preview.show');
         }
 
         $file = $request->file('file');
@@ -230,16 +225,27 @@ class ToolController extends Controller
 
         $request->session()->put('tools.tuition_qr_preview', [
             'source_name' => $file->getClientOriginalName(),
+            'bank' => $bank,
+            'errors' => $errors,
             'items' => $items,
         ]);
 
+        return redirect()->route('tools.tuition.preview.show');
+    }
+
+    public function showTuitionQrPreview(Request $request): View|RedirectResponse
+    {
+        $preview = $request->session()->get('tools.tuition_qr_preview');
+        if (! is_array($preview) || empty($preview['items']) || ! is_array($preview['items'])) {
+            return redirect()->route('tools.tuition.index');
+        }
+
         return view('tools.tuition-qr-preview', [
-            'bank' => $bank,
-            'items' => $items,
-            'errors' => $errors,
-            'sourceName' => $file->getClientOriginalName(),
+            'bank' => $preview['bank'] ?? LanguageTuitionController::bankSettings(),
+            'items' => $preview['items'],
+            'errors' => $preview['errors'] ?? [],
+            'sourceName' => $preview['source_name'] ?? '',
             'backRoute' => route('tools.tuition.index'),
-            'backLabel' => 'Quay lại nhóm QR & học phí',
         ]);
     }
 
