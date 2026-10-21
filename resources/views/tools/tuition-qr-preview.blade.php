@@ -39,7 +39,7 @@
     <div class="toolbar">
         <a href="{{ $backRoute ?? route('tools.tuition.index') }}">{{ $backLabel ?? 'Quay lại nhóm QR & học phí' }}</a>
         <div class="toolbar-actions">
-            <a href="{{ route('tools.tuition.download-all') }}">Tải tất cả ảnh QR</a>
+            <button type="button" data-qr-download-all>Tải tất cả ảnh QR</button>
             <button type="button" onclick="window.print()">In danh sách QR</button>
         </div>
     </div>
@@ -60,6 +60,8 @@
                 </ul>
             </div>
         @endif
+
+        <div class="alert" data-qr-batch-status role="status" aria-live="polite" hidden></div>
 
         <section class="grid">
             @foreach($items as $item)
@@ -132,76 +134,176 @@
         }
     }
 
+    async function fetchQrBlob(link) {
+        const card = link.closest('.card');
+        const image = card.querySelector('[data-qr-image]');
+        // The browser may reach VietQR even when the application's server cannot.
+        const urls = image.dataset.fallbackAttempted
+            ? [image.dataset.fallbackSrc, link.href]
+            : [link.href, image.dataset.fallbackSrc];
+        let blob;
+        for (const url of urls) {
+            const controller = new AbortController();
+            // Works over LAN HTTP too; allow the server's VietQR retry to finish.
+            const timeout = setTimeout(function () { controller.abort(); }, 40000);
+            try {
+                const response = await fetch(url, {
+                    signal: controller.signal,
+                    headers: { Accept: 'image/png, image/svg+xml, application/json' },
+                });
+                if (!response.ok) throw new Error('Download failed');
+                let candidate = await response.blob();
+                const signature = new Uint8Array(await candidate.slice(0, 8).arrayBuffer());
+                if (signature.join(',') !== '137,80,78,71,13,10,26,10') {
+                    const source = await candidate.text();
+                    const svg = new DOMParser().parseFromString(source, 'image/svg+xml');
+                    if (svg.documentElement.localName !== 'svg' || svg.querySelector('parsererror')) {
+                        throw new Error('Invalid image');
+                    }
+                    const svgUrl = URL.createObjectURL(new Blob([source], { type: 'image/svg+xml' }));
+                    try {
+                        const picture = new Image();
+                        picture.src = svgUrl;
+                        await picture.decode();
+                        const canvas = document.createElement('canvas');
+                        canvas.width = picture.naturalWidth;
+                        canvas.height = picture.naturalHeight;
+                        canvas.getContext('2d').drawImage(picture, 0, 0);
+                        candidate = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                        if (!candidate) throw new Error('PNG conversion failed');
+                    } finally {
+                        URL.revokeObjectURL(svgUrl);
+                    }
+                }
+                const hasDetails = url === link.href && response.headers.get('X-Tuition-Qr-Details') === '1';
+                blob = hasDetails ? new Blob([candidate], { type: 'image/png' }) : await addQrDetails(candidate, card);
+                break;
+            } catch (exception) {
+                // Try the other source before reporting the failure.
+            } finally {
+                clearTimeout(timeout);
+            }
+        }
+        if (!blob) throw new Error('No image available');
+        return blob;
+    }
+
+    function saveQrFile(blob, filename) {
+        const objectUrl = URL.createObjectURL(blob);
+        const download = document.createElement('a');
+        download.href = objectUrl;
+        download.download = filename;
+        document.body.appendChild(download);
+        download.click();
+        download.remove();
+        setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
+    }
+
+    // Store PNGs without compression: PNG data is already compressed. ZIP headers
+    // are written here so bulk downloads work without PHP ZIP or a CDN library.
+    async function createQrZip(files) {
+        if (files.length > 65535) throw new Error('Too many ZIP entries');
+        const parts = [];
+        const directory = [];
+        let offset = 0;
+        for (const file of files) {
+            const name = new TextEncoder().encode(file.name);
+            const bytes = new Uint8Array(await file.blob.arrayBuffer());
+            let crc = 0xffffffff;
+            for (const byte of bytes) {
+                crc ^= byte;
+                for (let bit = 0; bit < 8; bit++) {
+                    crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+                }
+            }
+            crc = (crc ^ 0xffffffff) >>> 0;
+            if (offset + 30 + name.length + bytes.length > 0xffffffff) throw new Error('ZIP too large');
+            const local = new Uint8Array(30 + name.length);
+            const header = new DataView(local.buffer);
+            header.setUint32(0, 0x04034b50, true);
+            header.setUint16(4, 20, true);
+            header.setUint16(6, 0x0800, true);
+            header.setUint16(12, 33, true); // 1980-01-01
+            header.setUint32(14, crc, true);
+            header.setUint32(18, bytes.length, true);
+            header.setUint32(22, bytes.length, true);
+            header.setUint16(26, name.length, true);
+            local.set(name, 30);
+            parts.push(local, bytes);
+            const central = new Uint8Array(46 + name.length);
+            const entry = new DataView(central.buffer);
+            entry.setUint32(0, 0x02014b50, true);
+            entry.setUint16(4, 20, true);
+            entry.setUint16(6, 20, true);
+            entry.setUint16(8, 0x0800, true);
+            entry.setUint16(14, 33, true);
+            entry.setUint32(16, crc, true);
+            entry.setUint32(20, bytes.length, true);
+            entry.setUint32(24, bytes.length, true);
+            entry.setUint16(28, name.length, true);
+            entry.setUint32(42, offset, true);
+            central.set(name, 46);
+            directory.push(central);
+            offset += local.length + bytes.length;
+        }
+        const end = new Uint8Array(22);
+        const footer = new DataView(end.buffer);
+        footer.setUint32(0, 0x06054b50, true);
+        footer.setUint16(8, files.length, true);
+        footer.setUint16(10, files.length, true);
+        footer.setUint32(12, directory.reduce((size, entry) => size + entry.length, 0), true);
+        footer.setUint32(16, offset, true);
+        return new Blob([...parts, ...directory, end], { type: 'application/zip' });
+    }
+
+    document.querySelectorAll('[data-qr-download-all]').forEach(function (button) {
+        button.addEventListener('click', async function () {
+            if (button.disabled) return;
+            const status = document.querySelector('[data-qr-batch-status]');
+            const links = Array.from(document.querySelectorAll('[data-qr-download]'));
+            const label = button.textContent;
+            button.disabled = true;
+            status.hidden = false;
+            try {
+                const files = [];
+                const failed = [];
+                for (const [index, link] of links.entries()) {
+                    button.textContent = 'Đang tải ' + (index + 1) + '/' + links.length + '…';
+                    status.textContent = button.textContent;
+                    try {
+                        files.push({ name: link.dataset.filename, blob: await fetchQrBlob(link) });
+                    } catch (exception) {
+                        failed.push(link.closest('.card').dataset.name);
+                    }
+                }
+                if (!files.length) throw new Error('No images');
+                saveQrFile(await createQrZip(files), 'danh-sach-qr-hoc-phi.zip');
+                status.textContent = 'Đã tải ' + files.length + '/' + links.length + ' ảnh QR trong file ZIP.';
+                if (failed.length) status.textContent += ' Chưa tải được: ' + failed.join(', ') + '. Vui lòng thử tải riêng các QR này.';
+            } catch (exception) {
+                status.textContent = 'Không tải được file ZIP. Vui lòng kiểm tra kết nối và thử lại hoặc tải từng ảnh QR.';
+            } finally {
+                button.disabled = false;
+                button.textContent = label;
+            }
+        });
+    });
+
     document.querySelectorAll('[data-qr-download]').forEach(function (link) {
         link.addEventListener('click', async function (event) {
             event.preventDefault();
             if (link.dataset.busy) return;
 
             const card = link.closest('.card');
-            const image = card.querySelector('[data-qr-image]');
             const error = card.querySelector('[data-qr-error]');
             const label = link.textContent;
             link.dataset.busy = '1';
             link.textContent = 'Đang tải…';
             error.hidden = true;
 
-            // The browser may reach VietQR even when the application's server cannot.
-            const urls = image.dataset.fallbackAttempted
-                ? [image.dataset.fallbackSrc, link.href]
-                : [link.href, image.dataset.fallbackSrc];
             try {
-                let blob;
-                for (const url of urls) {
-                    const controller = new AbortController();
-                    // Works over LAN HTTP too; allow the server's VietQR retry to finish.
-                    const timeout = setTimeout(function () { controller.abort(); }, 40000);
-                    try {
-                        const response = await fetch(url, {
-                            signal: controller.signal,
-                            headers: { Accept: 'image/png, image/svg+xml, application/json' },
-                        });
-                        if (!response.ok) throw new Error('Download failed');
-                        let candidate = await response.blob();
-                        const signature = new Uint8Array(await candidate.slice(0, 8).arrayBuffer());
-                        if (signature.join(',') !== '137,80,78,71,13,10,26,10') {
-                            const source = await candidate.text();
-                            const svg = new DOMParser().parseFromString(source, 'image/svg+xml');
-                            if (svg.documentElement.localName !== 'svg' || svg.querySelector('parsererror')) {
-                                throw new Error('Invalid image');
-                            }
-                            const svgUrl = URL.createObjectURL(new Blob([source], { type: 'image/svg+xml' }));
-                            try {
-                                const picture = new Image();
-                                picture.src = svgUrl;
-                                await picture.decode();
-                                const canvas = document.createElement('canvas');
-                                canvas.width = picture.naturalWidth;
-                                canvas.height = picture.naturalHeight;
-                                canvas.getContext('2d').drawImage(picture, 0, 0);
-                                candidate = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-                                if (!candidate) throw new Error('PNG conversion failed');
-                            } finally {
-                                URL.revokeObjectURL(svgUrl);
-                            }
-                        }
-                        const hasDetails = url === link.href && response.headers.get('X-Tuition-Qr-Details') === '1';
-                        blob = hasDetails ? new Blob([candidate], { type: 'image/png' }) : await addQrDetails(candidate, card);
-                        break;
-                    } catch (exception) {
-                        // Try the other source before reporting the failure.
-                    } finally {
-                        clearTimeout(timeout);
-                    }
-                }
-                if (!blob) throw new Error('No image available');
-                const objectUrl = URL.createObjectURL(blob);
-                const download = document.createElement('a');
-                download.href = objectUrl;
-                download.download = link.dataset.filename;
-                document.body.appendChild(download);
-                download.click();
-                download.remove();
-                setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
+                const blob = await fetchQrBlob(link);
+                saveQrFile(blob, link.dataset.filename);
             } catch (exception) {
                 error.textContent = 'Không tải được ảnh QR. Vui lòng kiểm tra kết nối và thử lại.';
                 error.hidden = false;

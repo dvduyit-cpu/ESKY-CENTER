@@ -7,11 +7,15 @@ const path = require('node:path');
 const view = fs.readFileSync(path.join(__dirname, '../../resources/views/tools/tuition-qr-preview.blade.php'), 'utf8');
 const script = view.match(/<script>([\s\S]*?)<\/script>/)[1];
 
-async function download(responses) {
+async function download(responses, batch = false, count = 1) {
     const requests = [];
     const timers = new Set();
     const saved = [];
     const drawnText = [];
+    const blobs = [];
+    const status = { hidden: true };
+    const button = { textContent: 'Download all', disabled: false, addEventListener: (event, handler) => { batchClick = handler; } };
+    let batchClick;
     const error = { hidden: true };
     const image = { dataset: { fallbackSrc: 'https://img.vietqr.io/example.png' } };
     let click;
@@ -26,7 +30,8 @@ async function download(responses) {
         addEventListener: (event, handler) => { click = handler; },
     };
     const document = {
-        querySelectorAll: selector => selector === '[data-qr-download]' ? [link] : [],
+        querySelector: () => status,
+        querySelectorAll: selector => selector === '[data-qr-download]' ? Array(count).fill(link) : selector === '[data-qr-download-all]' ? [button] : [],
         body: { appendChild() {} },
         createElement: tag => tag === 'canvas' ? {
             getContext: () => ({
@@ -38,7 +43,7 @@ async function download(responses) {
         } : { click() { saved.push(this.download); }, remove() {} },
     };
     vm.runInNewContext(script, {
-        document, Blob, Uint8Array, AbortController,
+        document, Blob, Uint8Array, DataView, TextEncoder, AbortController,
         Image: class {
             naturalWidth = 400;
             naturalHeight = 500;
@@ -46,7 +51,7 @@ async function download(responses) {
         },
         // Simulate browsers/HTTP contexts where AbortSignal.timeout is unavailable.
         AbortSignal: {},
-        URL: { createObjectURL: () => 'blob:qr', revokeObjectURL() {} },
+        URL: { createObjectURL: blob => { blobs.push(blob); return 'blob:qr'; }, revokeObjectURL() {} },
         setTimeout: (callback, delay) => { const timer = { delay }; timers.add(timer); return timer; },
         clearTimeout: timer => timers.delete(timer),
         fetch: async (url, options) => {
@@ -56,8 +61,8 @@ async function download(responses) {
             return response;
         },
     });
-    await click({ preventDefault() {} });
-    return { requests, timers, saved, error, link, drawnText };
+    await (batch ? batchClick() : click({ preventDefault() {} }));
+    return { requests, timers, saved, error, link, drawnText, blobs, status, button };
 }
 
 const png = () => ({
@@ -100,4 +105,40 @@ test('reports failure and restores the button when both sources fail', async () 
     assert.equal(result.link.dataset.busy, undefined);
     assert.equal(result.link.textContent, 'Tải ảnh QR');
     assert.equal(result.timers.size, 0);
+});
+
+test('bulk download packages fallback PNG in a valid ZIP directory', async () => {
+    const result = await download([{ ok: false }, png()], true);
+    assert.deepEqual(result.saved, ['danh-sach-qr-hoc-phi.zip']);
+    const zip = result.blobs.at(-1);
+    assert.equal(zip.type, 'application/zip');
+    const bytes = new Uint8Array(await zip.arrayBuffer());
+    const header = new DataView(bytes.buffer);
+    assert.equal(header.getUint32(0, true), 0x04034b50);
+    const nameLength = header.getUint16(26, true);
+    assert.equal(new TextDecoder().decode(bytes.slice(30, 30 + nameLength)), 'qr-hoc-phi-01.png');
+    assert.equal(header.getUint32(14, true), 0x83180390); // CRC32 of "png"
+    const centralOffset = 30 + nameLength + header.getUint32(18, true);
+    assert.equal(header.getUint32(centralOffset, true), 0x02014b50);
+    assert.equal(header.getUint32(bytes.length - 22, true), 0x06054b50);
+    assert.equal(header.getUint16(bytes.length - 14, true), 1);
+    assert.equal(header.getUint32(bytes.length - 6, true), centralOffset);
+    assert.equal(result.button.disabled, false);
+    assert.match(result.status.textContent, /1\/1/);
+});
+
+test('bulk failure shows an error and enables retry without saving an empty ZIP', async () => {
+    const result = await download([{ ok: false }, { ok: false }], true);
+    assert.deepEqual(result.saved, []);
+    assert.equal(result.status.hidden, false);
+    assert.equal(result.button.disabled, false);
+    assert.equal(result.button.textContent, 'Download all');
+});
+
+test('bulk download keeps successful QR images and reports failed students', async () => {
+    const result = await download([png(), { ok: false }, { ok: false }], true, 2);
+    assert.deepEqual(result.saved, ['danh-sach-qr-hoc-phi.zip']);
+    assert.match(result.status.textContent, /1\/2/);
+    assert.ok(result.status.textContent.includes('Nguyễn Văn An'));
+    assert.equal(result.button.disabled, false);
 });
