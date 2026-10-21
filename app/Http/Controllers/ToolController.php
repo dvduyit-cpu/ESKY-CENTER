@@ -253,12 +253,17 @@ class ToolController extends Controller
     public function downloadPreviewTuitionQr(Request $request, int $index): StreamedResponse|RedirectResponse
     {
         $item = $this->previewTuitionQrItem($request, $index);
-        $binary = $this->downloadTuitionQrImage($item);
+        $binary = $this->downloadTuitionQrImage($item, allowSvg: true);
+        $isSvg = str_starts_with(ltrim($binary), '<');
+        $filename = $this->tuitionQrFilename($item, $index);
 
         return response()->streamDownload(
             fn () => print($binary),
-            $this->tuitionQrFilename($item, $index),
-            ['Content-Type' => 'image/png']
+            $isSvg ? preg_replace('/\.png$/', '.svg', $filename) : $filename,
+            [
+                'Content-Type' => $isSvg ? 'image/svg+xml' : 'image/png',
+                'X-Tuition-Qr-Details' => ! $isSvg && $this->canAnnotateTuitionQr() ? '1' : '0',
+            ]
         );
     }
 
@@ -366,7 +371,7 @@ class ToolController extends Controller
         return $preview['items'][$index];
     }
 
-    private function downloadTuitionQrImage(array $item): string
+    private function downloadTuitionQrImage(array $item, bool $allowSvg = false): string
     {
         try {
             $response = Http::connectTimeout(5)->timeout(15)->retry(2, 250, throw: false)
@@ -386,6 +391,14 @@ class ToolController extends Controller
         }
 
         $image = $response->body();
+        if ($allowSvg && str_starts_with(ltrim($image), '<') && ! str_contains(strtoupper($image), '<!DOCTYPE')) {
+            $document = new \DOMDocument();
+            if (@$document->loadXML($image, LIBXML_NONET)
+                && $document->documentElement?->localName === 'svg'
+                && $document->documentElement?->namespaceURI === 'http://www.w3.org/2000/svg') {
+                return $image;
+            }
+        }
         $dimensions = @getimagesizefromstring($image);
         if ($dimensions === false || $dimensions[2] !== IMAGETYPE_PNG) {
             throw ValidationException::withMessages([
@@ -396,12 +409,18 @@ class ToolController extends Controller
         return $this->addTuitionQrDetails($image, $item);
     }
 
+    private function canAnnotateTuitionQr(): bool
+    {
+        return function_exists('imagecreatefromstring') && function_exists('imagettftext')
+            && function_exists('imagettfbbox') && function_exists('imagepng')
+            && is_file(base_path('vendor/dompdf/dompdf/lib/fonts/DejaVuSans-Bold.ttf'));
+    }
+
     private function addTuitionQrDetails(string $qrImage, array $item): string
     {
         $fontPath = base_path('vendor/dompdf/dompdf/lib/fonts/DejaVuSans-Bold.ttf');
 
-        if (! function_exists('imagecreatefromstring') || ! function_exists('imagettftext')
-            || ! function_exists('imagettfbbox') || ! function_exists('imagepng') || ! is_file($fontPath)) {
+        if (! $this->canAnnotateTuitionQr()) {
             // Annotation is optional; keep the original payment QR usable on shared hosting.
             return $qrImage;
         }

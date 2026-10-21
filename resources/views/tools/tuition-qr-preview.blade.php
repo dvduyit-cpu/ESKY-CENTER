@@ -63,7 +63,7 @@
 
         <section class="grid">
             @foreach($items as $item)
-                <article class="card">
+                <article class="card" data-name="{{ $item['name'] }}" data-class-code="{{ $item['class_code'] }}" data-amount="{{ number_format($item['amount'], 0, ',', '.') }}đ">
                     <img src="{{ route('tools.tuition.image', ['index' => $loop->index]) }}" alt="QR học phí {{ $item['name'] }}" data-qr-image data-fallback-src="{{ $item['qr_url'] }}">
                     <div class="alert" data-qr-error hidden>Không tải được ảnh QR. Vui lòng tải lại trang hoặc thử lại sau.</div>
                     <h2>{{ $item['name'] }}</h2>
@@ -77,13 +77,140 @@
                         <strong>{{ $item['content'] }}</strong>
                     </div>
                     <div class="card-actions">
-                        <a href="{{ route('tools.tuition.download', ['index' => $loop->index]) }}">Tải ảnh QR</a>
+                        <a href="{{ route('tools.tuition.download', ['index' => $loop->index]) }}" data-qr-download data-filename="qr-hoc-phi-{{ str_pad((string) ($loop->index + 1), 2, '0', STR_PAD_LEFT) }}-{{ \Illuminate\Support\Str::slug($item['name']) ?: 'hoc-vien' }}.png">Tải ảnh QR</a>
                     </div>
                 </article>
             @endforeach
         </section>
     </main>
 <script>
+    async function addQrDetails(blob, card) {
+        const sourceUrl = URL.createObjectURL(blob);
+        try {
+            const picture = new Image();
+            picture.src = sourceUrl;
+            await picture.decode();
+            const canvas = document.createElement('canvas');
+            const width = Math.max(400, picture.naturalWidth);
+            const height = Math.round(picture.naturalHeight * width / picture.naturalWidth);
+            const padding = 18;
+            const fontSize = Math.max(14, Math.min(20, Math.floor(width / 26)));
+            const lineHeight = fontSize + 10;
+            const context = canvas.getContext('2d');
+            context.font = 'bold ' + fontSize + 'px Arial, sans-serif';
+            const lines = [];
+            [
+                'Họ và tên: ' + card.dataset.name,
+                'Mã lớp: ' + (card.dataset.classCode || 'Chưa có'),
+                'Số tiền: ' + card.dataset.amount,
+            ].forEach(function (text) {
+                let line = '';
+                for (const character of text) {
+                    if (line && context.measureText(line + character).width > width - padding * 2) {
+                        lines.push(line);
+                        line = '';
+                    }
+                    line += character;
+                }
+                if (line) lines.push(line);
+            });
+            canvas.width = width;
+            canvas.height = height + padding * 2 + lines.length * lineHeight;
+            context.fillStyle = '#fff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(picture, 0, 0, width, height);
+            context.font = 'bold ' + fontSize + 'px Arial, sans-serif';
+            context.fillStyle = '#111827';
+            lines.forEach(function (line, index) {
+                context.fillText(line, padding, height + padding + fontSize + index * lineHeight);
+            });
+            const result = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            if (!result) throw new Error('PNG conversion failed');
+            return result;
+        } finally {
+            URL.revokeObjectURL(sourceUrl);
+        }
+    }
+
+    document.querySelectorAll('[data-qr-download]').forEach(function (link) {
+        link.addEventListener('click', async function (event) {
+            event.preventDefault();
+            if (link.dataset.busy) return;
+
+            const card = link.closest('.card');
+            const image = card.querySelector('[data-qr-image]');
+            const error = card.querySelector('[data-qr-error]');
+            const label = link.textContent;
+            link.dataset.busy = '1';
+            link.textContent = 'Đang tải…';
+            error.hidden = true;
+
+            // The browser may reach VietQR even when the application's server cannot.
+            const urls = image.dataset.fallbackAttempted
+                ? [image.dataset.fallbackSrc, link.href]
+                : [link.href, image.dataset.fallbackSrc];
+            try {
+                let blob;
+                for (const url of urls) {
+                    const controller = new AbortController();
+                    // Works over LAN HTTP too; allow the server's VietQR retry to finish.
+                    const timeout = setTimeout(function () { controller.abort(); }, 40000);
+                    try {
+                        const response = await fetch(url, {
+                            signal: controller.signal,
+                            headers: { Accept: 'image/png, image/svg+xml, application/json' },
+                        });
+                        if (!response.ok) throw new Error('Download failed');
+                        let candidate = await response.blob();
+                        const signature = new Uint8Array(await candidate.slice(0, 8).arrayBuffer());
+                        if (signature.join(',') !== '137,80,78,71,13,10,26,10') {
+                            const source = await candidate.text();
+                            const svg = new DOMParser().parseFromString(source, 'image/svg+xml');
+                            if (svg.documentElement.localName !== 'svg' || svg.querySelector('parsererror')) {
+                                throw new Error('Invalid image');
+                            }
+                            const svgUrl = URL.createObjectURL(new Blob([source], { type: 'image/svg+xml' }));
+                            try {
+                                const picture = new Image();
+                                picture.src = svgUrl;
+                                await picture.decode();
+                                const canvas = document.createElement('canvas');
+                                canvas.width = picture.naturalWidth;
+                                canvas.height = picture.naturalHeight;
+                                canvas.getContext('2d').drawImage(picture, 0, 0);
+                                candidate = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                                if (!candidate) throw new Error('PNG conversion failed');
+                            } finally {
+                                URL.revokeObjectURL(svgUrl);
+                            }
+                        }
+                        const hasDetails = url === link.href && response.headers.get('X-Tuition-Qr-Details') === '1';
+                        blob = hasDetails ? new Blob([candidate], { type: 'image/png' }) : await addQrDetails(candidate, card);
+                        break;
+                    } catch (exception) {
+                        // Try the other source before reporting the failure.
+                    } finally {
+                        clearTimeout(timeout);
+                    }
+                }
+                if (!blob) throw new Error('No image available');
+                const objectUrl = URL.createObjectURL(blob);
+                const download = document.createElement('a');
+                download.href = objectUrl;
+                download.download = link.dataset.filename;
+                document.body.appendChild(download);
+                download.click();
+                download.remove();
+                setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
+            } catch (exception) {
+                error.textContent = 'Không tải được ảnh QR. Vui lòng kiểm tra kết nối và thử lại.';
+                error.hidden = false;
+            } finally {
+                delete link.dataset.busy;
+                link.textContent = label;
+            }
+        });
+    });
     document.querySelectorAll('[data-qr-image]').forEach(function (image) {
         const handleError = function () {
             if (!image.dataset.fallbackAttempted) {
