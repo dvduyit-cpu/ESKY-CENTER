@@ -583,17 +583,20 @@ class TeacherTeachingLoadController extends Controller
 
         $monthLabel = str_pad((string) $data['report_month'], 2, '0', STR_PAD_LEFT);
 
-        return response(view('kpis.teaching-report-word', [
+        $path = \App\Support\TeachingReportWord::create(view('kpis.teaching-report-word', [
             'personnel' => $personnel,
             'detailRows' => $detailRows,
             'reportedTeachingLoad' => $reportedTeachingLoad,
             'year' => (int) $data['year'],
             'reportMonth' => (int) $data['report_month'],
             'scope' => $scope,
-        ])->render(), 200, [
-            'Content-Type' => 'application/msword; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="lich-day-'.($scope === 'training' ? 'dao-tao' : 'trung-tam').'-'.$data['year'].'-'.$monthLabel.'.doc"',
-        ]);
+        ])->render());
+
+        return response()->download(
+            $path,
+            'lich-day-'.($scope === 'training' ? 'dao-tao' : 'trung-tam').'-'.$data['year'].'-'.$monthLabel.'.docx',
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+        )->deleteFileAfterSend(true);
     }
 
     private function reportSourceTotals(?KpiTeachingReport $report): array

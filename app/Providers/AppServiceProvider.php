@@ -23,6 +23,27 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
+            $email = mb_strtolower(trim((string) $request->input('email')));
+            if ($email !== '' && ! str_contains($email, '@')) {
+                $email .= '@'.config('auth.login_email_domain');
+            }
+
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute(5)
+                ->by(hash('sha256', $email.'|'.$request->ip()))
+                ->response(function (\Illuminate\Http\Request $request, array $headers) {
+                    $seconds = max(1, (int) ($headers['Retry-After'] ?? 60));
+                    $message = 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng chờ '.$seconds.' giây rồi thử lại.';
+                    if ($request->expectsJson()) {
+                        return response()->json(['message' => $message], 429, $headers);
+                    }
+
+                    return redirect()->route('login')
+                        ->withInput($request->only('email', 'remember'))
+                        ->with('warning', $message);
+                });
+        });
+
         Paginator::useBootstrapFive();
         Paginator::defaultView('pagination.app');
 

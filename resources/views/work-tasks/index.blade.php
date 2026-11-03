@@ -1,11 +1,22 @@
 @extends('layouts.app')
 @section('title','Công việc') @section('header','Công việc')
 @section('content')
-<div class="mb-4"><h1 class="page-title">Quản lý công việc</h1><div class="page-subtitle">Giao việc, quản lý kế hoạch và theo dõi tiến độ tập trung.</div></div>
-<div class="d-flex flex-wrap gap-2 mb-4"><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#personalPlanModal"><i class="bi bi-calendar-plus me-1"></i>Công việc cá nhân & nhắc hẹn</button>@if($canCreateTasks)<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#assignTaskModal"><i class="bi bi-send-check me-1"></i>Giao công việc mới</button>@endif<a class="btn btn-outline-primary" href="{{route('plans.index')}}"><i class="bi bi-calendar3 me-1"></i>Mở lịch tháng</a></div>
+<div class="task-page-heading mb-3"><h1 class="page-title">Quản lý công việc</h1><div class="page-subtitle">Giao việc, quản lý kế hoạch và theo dõi tiến độ tập trung.</div></div>
+<div class="task-page-actions d-flex flex-wrap gap-2 mb-3"><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#personalPlanModal"><i class="bi bi-calendar-plus me-1"></i>Công việc cá nhân & nhắc hẹn</button>@if($canCreateTasks)<button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#assignTaskModal"><i class="bi bi-send-check me-1"></i>Giao công việc mới</button>@endif<a class="btn btn-outline-primary" href="{{route('plans.index')}}"><i class="bi bi-calendar3 me-1"></i>Mở lịch tháng</a></div>
 
-<section class="mb-4"><h5 class="mb-3">Tổng quan công việc</h5><div class="row g-3">
-@if($canCreateTasks)<div class="col-6 col-xl"><button class="card card-soft stat-card h-100 w-100 border-0 text-start bg-white" type="button" data-bs-toggle="modal" data-bs-target="#memberTaskStatsModal"><span class="card-body p-4"><span class="d-flex justify-content-between"><span><span class="stat-label d-block">Tổng công việc đã giao</span><span class="stat-value text-info d-block">{{number_format($taskStats['assigned'])}}</span></span><span class="stat-icon bg-info-subtle text-info"><i class="bi bi-send-check"></i></span></span><small class="text-primary fw-semibold">Xem theo thành viên <i class="bi bi-arrow-right-short"></i></small></span></button></div>@endif
+<section class="task-overview mb-3" aria-labelledby="taskOverviewTitle">
+    <div class="task-overview-heading">
+        <h2 id="taskOverviewTitle">Tổng quan công việc</h2>
+        @if($canCreateTasks)<button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#memberTaskStatsModal"><i class="bi bi-people me-1" aria-hidden="true"></i>Theo thành viên</button>@endif
+    </div>
+    <div class="task-overview-grid">
+        @if($canCreateTasks)
+        <button class="task-overview-card" type="button" data-bs-toggle="modal" data-bs-target="#memberTaskStatsModal">
+            <span class="task-overview-icon text-info bg-info-subtle"><i class="bi bi-send-check" aria-hidden="true"></i></span>
+            <span class="task-overview-copy"><span class="task-overview-label">Công việc đã giao</span><strong class="task-overview-value text-info">{{number_format($taskStats['assigned'])}}</strong></span>
+            <i class="bi bi-chevron-right task-overview-arrow" aria-hidden="true"></i>
+        </button>
+        @endif
 @php
     $overviewCards=$showPersonalAssignmentStats
         ? [
@@ -26,8 +37,14 @@
             ['Đã đóng',$taskStats['closed'],'secondary','bi-archive','closed'],
         ];
 @endphp
-@foreach($overviewCards as [$label,$value,$color,$icon,$status])<div class="col-6 col-xl"><a class="text-decoration-none text-reset" href="{{route('tasks.index',array_filter(['status'=>$status,'year'=>$filterYear,'quarter'=>$filterQuarter,'month'=>$filterMonth]))}}"><div class="card card-soft stat-card h-100"><div class="card-body p-4"><div class="d-flex justify-content-between"><div><div class="stat-label">{{$label}}</div><div class="stat-value text-{{$color}}">{{number_format($value)}}</div></div><div class="stat-icon bg-{{$color}}-subtle text-{{$color}}"><i class="bi {{$icon}}"></i></div></div></div></div></a></div>@endforeach
-</div></section>
+@foreach($overviewCards as [$label,$value,$color,$icon,$status])
+        <a class="task-overview-card {{request('status','')===$status?'is-active':''}}" href="{{route('tasks.index',array_filter(['q'=>request('q'),'status'=>$status,'year'=>$filterYear,'quarter'=>$filterQuarter,'month'=>$filterMonth]))}}" @if(request('status','')===$status) aria-current="true" @endif>
+            <span class="task-overview-icon text-{{$color}} bg-{{$color}}-subtle"><i class="bi {{$icon}}" aria-hidden="true"></i></span>
+            <span class="task-overview-copy"><span class="task-overview-label">{{$label}}</span><strong class="task-overview-value text-{{$color}}">{{number_format($value)}}</strong></span>
+        </a>
+@endforeach
+    </div>
+</section>
 
 @if($canCreateTasks)
 <div class="modal fade" id="memberTaskStatsModal" tabindex="-1" aria-labelledby="memberTaskStatsTitle" aria-hidden="true">
@@ -56,7 +73,7 @@
 </div>
 @endif
 
-<section class="filter-panel mb-4">
+<section class="task-filter-panel filter-panel mb-3">
     <form method="GET" class="row g-3 align-items-end">
         <div class="col-md-6 col-xl-3"><label class="form-label">Tìm kiếm</label><input class="form-control" name="q" value="{{request('q')}}" placeholder="Tên hoặc nội dung công việc"></div>
         <div class="col-md-6 col-xl-2"><label class="form-label">Trạng thái</label><select class="form-select" name="status"><option value="">Tất cả</option>@foreach(['pinned'=>'Đã ghim','unread'=>'Chưa xác nhận','acknowledged'=>'Đã nhận việc','pending'=>'Chưa hoàn thành','overdue'=>'Đến hạn / quá hạn','personal_completed'=>'Tôi đã hoàn thành','completed'=>'Tất cả đã hoàn thành','closed'=>'Đã đóng'] as $value=>$label)<option value="{{$value}}" @selected(request('status')===$value)>{{$label}}</option>@endforeach</select></div>
@@ -67,7 +84,7 @@
     </form>
 </section>
 
-<div class="row g-3">
+<div class="task-results row g-3">
 @forelse($tasks as $task)
     @php($done=$task->assignees->every(fn($a)=>$a->completed_at))
     @php($completedCount=$task->assignees->whereNotNull('completed_at')->count())

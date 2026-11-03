@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const sidebar = document.querySelector('.sidebar');
+    const sidebar = document.querySelector('.sidebar-menu-scroll');
     if (!sidebar) return;
 
     const storageKey = 'esky-center.sidebar-scroll';
@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (Number.isFinite(savedPosition)) {
         sidebar.scrollTop = savedPosition;
     } else {
-        sidebar.querySelector('.nav-link.active')?.scrollIntoView({ block: 'center' });
+        const activeLink = sidebar.querySelector('.nav-link.active');
+        if (activeLink) sidebar.scrollTop = Math.max(0, activeLink.getBoundingClientRect().top - sidebar.getBoundingClientRect().top + sidebar.scrollTop - sidebar.clientHeight / 2);
     }
 
     let frame;

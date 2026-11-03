@@ -15,7 +15,6 @@
     <link href="{{ asset('assets/vendor/bootstrap-icons/bootstrap-icons.min.css') }}" rel="stylesheet">
     <link href="{{ asset('css/theme.css') }}?v={{ filemtime(public_path('css/theme.css')) }}" rel="stylesheet">
     <link href="{{ asset('css/login.css') }}?v={{ filemtime(public_path('css/login.css')) }}" rel="stylesheet">
-    <style>.field-control.email-field{grid-template-columns:45px minmax(80px,1fr) auto}.email-domain{padding:0 14px 0 8px;color:#64748b;font-size:14px;font-weight:700;white-space:nowrap}.email-field input{padding-right:4px}</style>
 </head>
 <body data-theme="{{ $systemTheme }}" data-loading-style="{{ $systemLoadingStyle }}">
 <main class="login-shell">
@@ -26,9 +25,9 @@
                 <span><strong>{{ $systemName }}</strong><small>Hệ thống quản lý trung tâm</small></span>
             </div>
             <div class="intro-content">
-                <span class="intro-badge"><i class="bi bi-stars"></i> Quản lý tập trung, vận hành hiệu quả</span>
-                <h1>Mọi hoạt động của trung tâm trong một hệ thống.</h1>
-                <p>Quản lý tuyển sinh, học viên, lớp học, học phí và chỉ tiêu trên một nền tảng thống nhất.</p>
+                <span class="intro-badge"><span class="intro-status-dot"></span> Không gian làm việc của bạn</span>
+                <h1>Kết nối công việc.<br>Đồng hành phát triển.</h1>
+                <p>Từ kế hoạch mỗi ngày đến hoạt động của trung tâm, mọi thông tin luôn trong tầm tay.</p>
                 <div class="intro-modules"><span><i class="bi bi-person-plus-fill"></i>Tuyển sinh</span><span><i class="bi bi-mortarboard-fill"></i>Đào tạo</span><span><i class="bi bi-cash-coin"></i>Học phí</span><span><i class="bi bi-bullseye"></i>KPI & Báo cáo</span></div>
                 <div class="intro-features">
                     <div><i class="bi bi-people-fill"></i><span><strong>Quản lý học viên</strong><small>Thông tin rõ ràng, dễ tra cứu</small></span></div>
@@ -41,16 +40,18 @@
 
         <div class="login-form-panel">
             <div class="login-form-wrap">
-                <header class="form-heading"><span>Chào mừng trở lại</span><h2 id="login-title">Đăng nhập hệ thống</h2><p>Nhập thông tin tài khoản được quản trị viên cấp.</p></header>
-                @if($errors->any())<div class="login-alert" role="alert" data-auto-dismiss="5000"><i class="bi bi-exclamation-circle-fill"></i><span>{{ $errors->first() }}</span></div>@endif
-                @if(session('warning'))<div class="login-alert" role="alert" data-auto-dismiss="5000"><i class="bi bi-exclamation-triangle-fill"></i><span>{{session('warning')}}</span></div>@endif
+                <div class="login-mobile-brand"><img src="{{ asset($faviconPath) }}" alt="Logo {{ $systemName }}"><strong>{{ $systemName }}</strong></div>
+                <div class="login-form-symbol" aria-hidden="true"><i class="bi bi-box-arrow-in-right"></i></div>
+                <header class="form-heading"><span>Chào mừng trở lại</span><h2 id="login-title">Đăng nhập</h2><p>Tiếp tục công việc của bạn tại {{ $systemName }}.</p></header>
+                @if($errors->any())<div class="login-alert" role="alert"><i class="bi bi-exclamation-circle-fill"></i><span>{{ $errors->first() }}</span></div>@endif
+                @if(session('warning'))<div class="login-alert" role="alert"><i class="bi bi-exclamation-triangle-fill"></i><span>{{session('warning')}}</span></div>@endif
                 <form method="POST" action="{{ route('login.submit') }}" class="login-form">@csrf
-                    <div class="form-field"><label for="email">Địa chỉ email</label><div class="field-control email-field @error('email') is-invalid @enderror"><i class="bi bi-envelope"></i><input id="email" type="text" name="email" value="{{ old('email') }}" placeholder="tên tài khoản" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" required><span class="email-domain">{{ '@'.config('auth.login_email_domain') }}</span></div></div>
+                    <div class="form-field"><label for="email">Tài khoản</label><div class="field-control email-field @error('email') is-invalid @enderror"><i class="bi bi-person"></i><input id="email" type="text" name="email" value="{{ old('email') }}" placeholder="Tên tài khoản hoặc email" autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" aria-describedby="emailHint" @error('email') aria-invalid="true" @enderror required></div><small id="emailHint" class="field-hint">Có thể bỏ phần {{ '@'.config('auth.login_email_domain') }} khi nhập tài khoản.</small></div>
                     <div class="form-field"><label for="password">Mật khẩu</label><div class="field-control password-field"><i class="bi bi-lock"></i><input id="password" type="password" name="password" placeholder="Nhập mật khẩu" autocomplete="current-password" required><button type="button" class="password-toggle" data-password-toggle aria-controls="password" aria-pressed="false" aria-label="Hiện mật khẩu" title="Hiện mật khẩu"><i class="bi bi-eye" aria-hidden="true"></i></button></div></div>
                     <label class="remember-option" for="remember"><input id="remember" type="checkbox" name="remember" value="1" @checked(old('remember'))><span>Ghi nhớ đăng nhập trên thiết bị này</span></label>
                     <button class="login-submit" type="submit"><span>Đăng nhập</span><i class="bi bi-arrow-right"></i></button>
                 </form>
-                <p class="login-help"><i class="bi bi-info-circle"></i> Liên hệ quản trị viên nếu bạn không thể đăng nhập.</p>
+                <p class="login-help"><i class="bi bi-headset"></i><span>Cần hỗ trợ đăng nhập?<br>Vui lòng liên hệ quản trị viên.</span></p>
                 <p class="mobile-copyright">{!! $systemCopyright !!}</p>
             </div>
         </div>

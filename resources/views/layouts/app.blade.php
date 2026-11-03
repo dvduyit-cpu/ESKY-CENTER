@@ -35,6 +35,7 @@
             <div class="brand-mark @if($displayLogo) has-logo @endif">@if($displayLogo)<img src="{{ asset($displayLogo) }}?v={{ filemtime(public_path($displayLogo)) }}" alt="Logo">@else<i class="bi bi-graph-up-arrow"></i>@endif</div>
             <div><strong>{{ $systemName }}</strong><small>HỆ THỐNG QUẢN LÝ</small></div>
         </div>
+        <div class="sidebar-menu-scroll">
         <div class="sidebar-label">Tổng quan</div>
         <nav class="sidebar-nav nav flex-column">
             <a class="nav-link {{ request()->routeIs('welcome') ? 'active' : '' }}" href="{{ route('welcome') }}"><i class="bi bi-house-door-fill"></i> Trang chủ</a>
@@ -126,6 +127,7 @@
         <nav class="sidebar-nav nav flex-column pb-4 sidebar-help">
             <a class="nav-link {{ request()->routeIs('guide') ? 'active' : '' }}" href="{{ route('guide') }}"><i class="bi bi-question-circle-fill"></i> Hướng dẫn sử dụng</a>
         </nav>
+        </div>
     </aside>
     <div class="main-wrap">
         @php
@@ -289,7 +291,7 @@
 <script src="{{ asset('js/app.js') }}"></script>
 <script src="{{ asset('js/list-selection.js') }}?v={{ filemtime(public_path('js/list-selection.js')) }}"></script>
 <script src="{{ asset('js/page-loading.js') }}?v={{ filemtime(public_path('js/page-loading.js')) }}"></script>
-<script src="{{ asset('js/sidebar-scroll.js') }}"></script>
+<script src="{{ asset('js/sidebar-scroll.js') }}?v={{ filemtime(public_path('js/sidebar-scroll.js')) }}"></script>
 <script src="{{ asset('js/sidebar-mobile.js') }}"></script>
 <script src="{{ asset('js/realtime.js') }}?v={{ filemtime(public_path('js/realtime.js')) }}"></script>
 <script src="{{ asset('js/auto-dismiss-alerts.js') }}"></script>

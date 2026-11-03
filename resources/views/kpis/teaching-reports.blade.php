@@ -3,9 +3,9 @@
 @section('header','Báo cáo tiết dạy')
 @section('content')
 <style>
-    .teaching-report-month-card { position: relative; z-index: 1; }
-    .teaching-report-month-card:has(.dropdown-menu.show) { z-index: 1051; }
-    .teaching-report-month-card .dropdown-menu { z-index: 1052; }
+    .content .teaching-report-month-card { position: relative; z-index: 1; overflow: visible; }
+    .content .teaching-report-month-card:has(.dropdown-menu.show) { z-index: 2; }
+    .teaching-report-month-card .dropdown-menu { z-index: 1000; }
 </style>
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
