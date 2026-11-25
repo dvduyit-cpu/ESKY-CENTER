@@ -35,6 +35,7 @@ class WelcomeController extends Controller
         $calendarEnd = $current->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY);
         $personalOnly = $request->boolean('personal');
         $visiblePlans = UpcomingPlan::query()
+            ->where(fn ($query) => $query->where('is_private', false)->orWhere('user_id', $request->user()->id))
             ->when($personalOnly, fn ($query) => $query->where('user_id', $request->user()->id));
         $plans = (clone $visiblePlans)->with(['assignedBy', 'user'])
             ->whereBetween('scheduled_for', [$calendarStart->copy()->startOfDay(), $calendarEnd->copy()->endOfDay()])
@@ -108,6 +109,7 @@ class WelcomeController extends Controller
         [$repeatType, $repeatCount] = $this->recurrence($data);
         $data['assigned_by_id'] = $request->user()->id;
         $data['kind'] = 'personal';
+        $data['is_private'] = $request->boolean('is_private');
         $firstDate = Carbon::parse($data['scheduled_for']);
 
         DB::transaction(function () use ($request, $data, $repeatType, $repeatCount, $firstDate): void {
@@ -132,6 +134,7 @@ public function storeTask(Request $request): RedirectResponse
         [$repeatType, $repeatCount] = $this->recurrence($data);
         $data['assigned_by_id'] = $request->user()->id;
         $data['kind'] = 'task';
+        $data['is_private'] = false;
         $firstDate = Carbon::parse($data['scheduled_for']);
 
         $createFor = function (User $account) use ($data, $repeatType, $repeatCount, $firstDate): void {
@@ -166,6 +169,11 @@ public function storeTask(Request $request): RedirectResponse
         $data = $this->validatedPlan($request);
         [$repeatType, $repeatCount] = $this->recurrence($data);
         $firstDate = Carbon::parse($data['scheduled_for']);
+        if ($plan->user_id === $request->user()->id && $request->has('is_private')) {
+            $data['is_private'] = $request->boolean('is_private');
+        } else {
+            $data['is_private'] = $plan->is_private;
+        }
         DB::transaction(function () use ($plan, $data, $repeatType, $repeatCount, $firstDate): void {
             $plan->update($data);
             for ($index = 1; $index < $repeatCount; $index++) {
@@ -194,6 +202,7 @@ public function storeTask(Request $request): RedirectResponse
             'title' => 'required|string|max:180', 'note' => 'nullable|string|max:2000',
             'scheduled_for' => 'required|date', 'reminder_days' => 'required|integer|min:0|max:30',
             'priority' => 'required|in:low,normal,high',
+            'is_private' => 'sometimes|boolean',
             'repeat_weeks' => 'nullable|integer|in:1,4,8,12,24,52',
             'repeat_type' => 'nullable|in:none,weekly,monthly',
             'repeat_count' => 'nullable|integer|min:1|max:60',
@@ -220,6 +229,7 @@ public function storeTask(Request $request): RedirectResponse
 
     private function ensureCanManage(Request $request, UpcomingPlan $plan): void
     {
+        abort_if($plan->is_private && $plan->user_id !== $request->user()->id, 403);
         abort_unless($plan->user_id === $request->user()->id || $plan->assigned_by_id === $request->user()->id || $request->user()->isAdmin(), 403);
     }
 }

@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UpcomingPlan extends Model
 {
-    protected $fillable = ['user_id', 'assigned_by_id', 'title', 'note', 'scheduled_for', 'reminder_days', 'priority', 'kind', 'completed_at'];
+    protected $fillable = ['user_id', 'assigned_by_id', 'title', 'note', 'scheduled_for', 'reminder_days', 'priority', 'kind', 'completed_at', 'is_private'];
 
     protected function casts(): array
     {
-        return ['scheduled_for' => 'datetime', 'completed_at' => 'datetime', 'reminder_days' => 'integer'];
+        return ['scheduled_for' => 'datetime', 'completed_at' => 'datetime', 'reminder_days' => 'integer', 'is_private' => 'boolean'];
     }
 
     public function user(): BelongsTo
