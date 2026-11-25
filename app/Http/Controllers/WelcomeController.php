@@ -33,21 +33,23 @@ class WelcomeController extends Controller
         }
         $calendarStart = $current->copy()->startOfWeek(Carbon::MONDAY);
         $calendarEnd = $current->copy()->endOfMonth()->endOfWeek(Carbon::SUNDAY);
-        $plans = UpcomingPlan::query()->with('assignedBy')
-            ->where('user_id', $request->user()->id)
+        $personalOnly = $request->boolean('personal');
+        $visiblePlans = UpcomingPlan::query()
+            ->when($personalOnly, fn ($query) => $query->where('user_id', $request->user()->id));
+        $plans = (clone $visiblePlans)->with(['assignedBy', 'user'])
             ->whereBetween('scheduled_for', [$calendarStart->copy()->startOfDay(), $calendarEnd->copy()->endOfDay()])
             ->orderBy('scheduled_for')->get();
         $plansByDate = $plans->groupBy(fn (UpcomingPlan $plan) => $plan->scheduled_for->format('Y-m-d'));
         $calendarDays = collect();
         for ($day = $calendarStart->copy(); $day->lte($calendarEnd); $day->addDay()) $calendarDays->push($day->copy());
-        $allPlans = UpcomingPlan::query()->where('user_id', $request->user()->id);
+        $allPlans = clone $visiblePlans;
         $planStats = [
             'total' => (clone $allPlans)->count(),
             'completed' => (clone $allPlans)->whereNotNull('completed_at')->count(),
             'upcoming' => (clone $allPlans)->whereNull('completed_at')->where('scheduled_for', '>=', now())->count(),
             'overdue' => (clone $allPlans)->whereNull('completed_at')->where('scheduled_for', '<', now())->count(),
         ];
-        $historyQuery = (clone $allPlans)->with('assignedBy');
+        $historyQuery = (clone $allPlans)->with(['assignedBy', 'user']);
         if ($request->filled('q')) {
             $keyword = $request->string('q')->toString();
             $historyQuery->where(fn ($query) => $query->where('title', 'like', "%{$keyword}%")->orWhere('note', 'like', "%{$keyword}%"));
@@ -62,10 +64,10 @@ class WelcomeController extends Controller
             default => null,
         };
         $historyPlans = $historyQuery->latest('scheduled_for')->paginate(10, ['*'], 'history_page')->withQueryString();
-        $todayPlans = UpcomingPlan::query()->where('user_id', $request->user()->id)
+        $todayPlans = (clone $visiblePlans)->with(['assignedBy', 'user'])
             ->whereBetween('scheduled_for', [now()->startOfDay(), now()->endOfDay()])->orderBy('scheduled_for')->get();
         $modalPlans = $plans->concat($historyPlans->getCollection())->concat($todayPlans)->unique('id');
-        return view('plans.index', compact('current', 'calendarDays', 'plansByDate', 'planStats', 'historyPlans', 'modalPlans', 'todayPlans'));
+        return view('plans.index', compact('current', 'calendarDays', 'plansByDate', 'planStats', 'historyPlans', 'modalPlans', 'todayPlans', 'personalOnly'));
     }
 
     public function tasks(Request $request): View

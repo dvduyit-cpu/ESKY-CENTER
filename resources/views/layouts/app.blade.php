@@ -50,7 +50,7 @@
         @endphp
         <div class="sidebar-label">Công việc</div>
         <nav class="sidebar-nav nav flex-column">
-            <a class="nav-link {{ request()->routeIs('plans.*') ? 'active' : '' }}" href="{{ route('plans.index') }}"><i class="bi bi-calendar2-week-fill"></i> Kế hoạch & lịch cá nhân</a>
+            <a class="nav-link {{ request()->routeIs('plans.*') ? 'active' : '' }}" href="{{ route('plans.index') }}"><i class="bi bi-calendar2-week-fill"></i> Kế hoạch & lịch làm việc</a>
             @if($me->allowed('work_tasks'))<a class="nav-link {{ request()->routeIs('tasks.*') ? 'active' : '' }}" href="{{ route('tasks.index') }}"><i class="bi bi-list-check"></i> Giao & theo dõi công việc</a>@endif
             @if($me->allowed('administration') && $showWeeklyReportMenu)<a class="nav-link {{ request()->routeIs('administration.weekly.*') ? 'active' : '' }}" href="{{ route('administration.weekly.index') }}"><i class="bi bi-calendar2-check"></i> Báo cáo tuần</a>@endif
             @if($me->allowed('administration'))<a class="nav-link {{ request()->routeIs('administration.documents.*') ? 'active' : '' }}" href="{{ route('administration.documents.index') }}"><i class="bi bi-archive"></i> Lưu trữ văn thư</a>@endif
@@ -166,7 +166,7 @@
             };
             $pageAction = match (true) {
                 $routeName === 'welcome' => 'Trang chủ',
-                $routeName === 'plans.index' => 'Lịch cá nhân',
+                $routeName === 'plans.index' => 'Lịch làm việc tháng',
                 $routeName === 'tasks.index' => 'Lịch sử & bộ lọc',
                 $routeName === 'guide' => 'Nội dung hướng dẫn',
                 str_ends_with($routeName, '.export') => 'Xuất dữ liệu',
